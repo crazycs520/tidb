@@ -14,17 +14,16 @@
 package ddl
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
 	"sync"
 	"time"
 
-	"encoding/json"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/owner"
 	"github.com/pingcap/tidb/util/hack"
@@ -89,6 +88,10 @@ type SchemaSyncer interface {
 	// the latest schema version. If the result is false, wait for a while and check again util the processing time reach 2 * lease.
 	// It returns until all servers' versions are equal to the latest version or the ctx is done.
 	OwnerCheckAllVersions(ctx context.Context, latestVer int64) error
+
+	GetDDLServerInfoFromPD(ctx context.Context, ddlID string) ([]byte, error)
+
+	UpdateSelfServerInfo(ctx context.Context, infoMap map[string]interface{}) error
 }
 
 type schemaVersionSyncer struct {
@@ -158,27 +161,27 @@ func (s *schemaVersionSyncer) Init(ctx context.Context) error {
 
 	err = s.putKV(ctx, keyOpDefaultRetryCnt, s.selfSchemaVerPath, InitialVersion,
 		clientv3.WithLease(s.session.Lease()))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	infoStr, err := getServerInfo()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = s.putKV(ctx, keyOpDefaultRetryCnt, s.selfServerInfoPath, infoStr)
 	return errors.Trace(err)
 }
 
-func getServerInfo() (string, error) {
-	m := make(map[string]string)
-	cfg := config.GetGlobalConfig()
-	m["ip"] = cfg.Host
-	m["status_port"] = fmt.Sprintf("%v", cfg.Status.StatusPort)
-	jsonStr, err := json.Marshal(m)
-	if err != nil {
-		return "", errors.Trace(err)
+func (s *schemaVersionSyncer) GetDDLServerInfoFromPD(ctx context.Context, ddlID string) ([]byte, error) {
+	var err error
+	var resp *clientv3.GetResponse
+	ddlPath := fmt.Sprintf("%s/%s", DDLServerInformation, ddlID)
+	for {
+		if isContextDone(ctx) {
+			err = errors.Trace(ctx.Err())
+			return nil, err
+		}
+
+		resp, err = s.etcdCli.Get(ctx, ddlPath)
+		if err != nil {
+			continue
+		}
+		if err == nil && len(resp.Kvs) > 0 {
+			return resp.Kvs[0].Value, nil
+		}
 	}
-	return hack.String(jsonStr), nil
 }
 
 // Done implements SchemaSyncer.Done interface.
@@ -246,6 +249,15 @@ func (s *schemaVersionSyncer) UpdateSelfVersion(ctx context.Context, version int
 		clientv3.WithLease(s.session.Lease()))
 
 	metrics.UpdateSelfVersionHistogram.WithLabelValues(metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+	return errors.Trace(err)
+}
+
+func (s *schemaVersionSyncer) UpdateSelfServerInfo(ctx context.Context, infoMap map[string]interface{}) error {
+	infoBuf, err := json.Marshal(infoMap)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = s.putKV(ctx, keyOpDefaultRetryCnt, s.selfServerInfoPath, hack.String(infoBuf))
 	return errors.Trace(err)
 }
 

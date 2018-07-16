@@ -26,6 +26,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/pools"
 	"github.com/pingcap/tidb/ast"
+	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl/util"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
@@ -207,6 +208,10 @@ type DDL interface {
 
 	// SetBinlogClient sets the binlog client for DDL worker. It's exported for testing.
 	SetBinlogClient(interface{})
+
+	GetServerInfo() map[string]interface{}
+	StoreServerInfoToPD() error
+	GetOwnerServerInfo() (map[string]interface{}, error)
 }
 
 // ddl is used to handle the statements that define the structure or schema of the database.
@@ -321,7 +326,6 @@ func newDDL(ctx context.Context, etcdCli *clientv3.Client, store kv.Storage,
 
 	d.start(ctx, ctxPool)
 	variable.RegisterStatistics(d)
-
 	metrics.DDLCounter.WithLabelValues(metrics.CreateDDLInstance).Inc()
 	return d
 }
@@ -508,6 +512,39 @@ func (d *ddl) callHookOnChanged(err error) error {
 // SetBinlogClient implements DDL.SetBinlogClient interface.
 func (d *ddl) SetBinlogClient(binlogCli interface{}) {
 	d.binlogCli = binlogCli
+}
+
+func (d *ddl) GetServerInfo() map[string]interface{} {
+	m := make(map[string]interface{})
+	cfg := config.GetGlobalConfig()
+	m["ip"] = cfg.Host
+	m["status_port"] = cfg.Status.StatusPort
+	m["ddl_id"] = d.uuid
+	isOwer := d.isOwner()
+	m["is_owner"] = isOwer
+	return m
+}
+
+func (d *ddl) GetOwnerServerInfo() (map[string]interface{}, error) {
+	m := make(map[string]interface{})
+	ctx := context.Background()
+	ddlOwnerID, err := d.ownerManager.GetOwnerID(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	m["owner_id"] = ddlOwnerID
+	ownerInfo, err := d.schemaSyncer.GetDDLServerInfoFromPD(ctx, ddlOwnerID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	m["owner_info"] = ownerInfo
+	return m, nil
+}
+
+func (d *ddl) StoreServerInfoToPD() error {
+	info := d.GetServerInfo()
+	ctx := context.Background()
+	return d.schemaSyncer.UpdateSelfServerInfo(ctx, info)
 }
 
 // DDL error codes.

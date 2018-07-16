@@ -334,6 +334,10 @@ type ddlHistoryJobHandler struct {
 	*tikvHandlerTool
 }
 
+type ddlServerInfoHandler struct {
+	*tikvHandlerTool
+}
+
 // valueHandle is the handler for get value.
 type valueHandler struct {
 }
@@ -1237,4 +1241,26 @@ func (h *mvccTxnHandler) handleMvccGetByTxn(params map[string]string) (interface
 		endKey = tablecodec.EncodeRowKeyWithHandle(tableID, math.MaxInt64)
 	}
 	return h.getMvccByStartTs(uint64(startTS), startKey, endKey)
+}
+
+// ServeHTTP handles request of ddl server info.
+func (h ddlServerInfoHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	session, err := session.CreateSession(h.store.(kv.Storage))
+	if err != nil {
+		writeError(w, errors.New("create session error"))
+		return
+	}
+	ddl := domain.GetDomain(session.(sessionctx.Context)).DDL()
+	infoMap := ddl.GetServerInfo()
+	if isOwner, ok := infoMap["is_owner"]; !ok || !(isOwner).(bool) {
+		ownerInfo, err := ddl.GetOwnerServerInfo()
+		if err != nil {
+			writeError(w, errors.New("ddl server information not found"))
+			return
+		}
+		for k, v := range ownerInfo {
+			infoMap[k] = v
+		}
+	}
+	writeData(w, infoMap)
 }

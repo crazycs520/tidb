@@ -14,6 +14,7 @@
 package ddl
 
 import (
+	"encoding/json"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +33,7 @@ const mockCheckVersInterval = 2 * time.Millisecond
 type mockSchemaSyncer struct {
 	selfSchemaVersion int64
 	globalVerCh       chan clientv3.WatchResponse
+	infoMap           map[string]interface{}
 }
 
 // NewMockSchemaSyncer creates a new mock SchemaSyncer.
@@ -100,6 +102,19 @@ func (s *mockSchemaSyncer) OwnerCheckAllVersions(ctx context.Context, latestVer 
 			}
 		}
 	}
+}
+
+func (s *mockSchemaSyncer) GetDDLServerInfoFromPD(ctx context.Context, ddlID string) ([]byte, error) {
+	buf, err := json.Marshal(s.infoMap)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return buf, nil
+}
+
+func (s *mockSchemaSyncer) UpdateSelfServerInfo(ctx context.Context, infoMap map[string]interface{}) error {
+	s.infoMap = infoMap
+	return nil
 }
 
 type mockDelRange struct {
