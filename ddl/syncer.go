@@ -20,11 +20,14 @@ import (
 	"sync"
 	"time"
 
+	"encoding/json"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/owner"
+	"github.com/pingcap/tidb/util/hack"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
@@ -33,6 +36,9 @@ const (
 	// DDLAllSchemaVersions is the path on etcd that is used to store all servers current schema versions.
 	// It's exported for testing.
 	DDLAllSchemaVersions = "/tidb/ddl/all_schema_versions"
+
+	//DDLServerInformation store DDL server information such as IP,port and so on
+	DDLServerInformation = "/tidb/ddl/info"
 	// DDLGlobalSchemaVersion is the path on etcd that is used to store the latest schema versions.
 	// It's exported for testing.
 	DDLGlobalSchemaVersion = "/tidb/ddl/global_schema_version"
@@ -86,10 +92,11 @@ type SchemaSyncer interface {
 }
 
 type schemaVersionSyncer struct {
-	selfSchemaVerPath string
-	etcdCli           *clientv3.Client
-	session           *concurrency.Session
-	mu                struct {
+	selfSchemaVerPath  string
+	selfServerInfoPath string
+	etcdCli            *clientv3.Client
+	session            *concurrency.Session
+	mu                 struct {
 		sync.RWMutex
 		globalVerCh clientv3.WatchChan
 	}
@@ -98,8 +105,9 @@ type schemaVersionSyncer struct {
 // NewSchemaSyncer creates a new SchemaSyncer.
 func NewSchemaSyncer(etcdCli *clientv3.Client, id string) SchemaSyncer {
 	return &schemaVersionSyncer{
-		etcdCli:           etcdCli,
-		selfSchemaVerPath: fmt.Sprintf("%s/%s", DDLAllSchemaVersions, id),
+		etcdCli:            etcdCli,
+		selfSchemaVerPath:  fmt.Sprintf("%s/%s", DDLAllSchemaVersions, id),
+		selfServerInfoPath: fmt.Sprintf("%s/%s", DDLServerInformation, id),
 	}
 }
 
@@ -150,7 +158,27 @@ func (s *schemaVersionSyncer) Init(ctx context.Context) error {
 
 	err = s.putKV(ctx, keyOpDefaultRetryCnt, s.selfSchemaVerPath, InitialVersion,
 		clientv3.WithLease(s.session.Lease()))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	infoStr, err := getServerInfo()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = s.putKV(ctx, keyOpDefaultRetryCnt, s.selfServerInfoPath, infoStr)
 	return errors.Trace(err)
+}
+
+func getServerInfo() (string, error) {
+	m := make(map[string]string)
+	cfg := config.GetGlobalConfig()
+	m["ip"] = cfg.Host
+	m["status_port"] = fmt.Sprintf("%v", cfg.Status.StatusPort)
+	jsonStr, err := json.Marshal(m)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return hack.String(jsonStr), nil
 }
 
 // Done implements SchemaSyncer.Done interface.
