@@ -339,6 +339,10 @@ type ddlServerInfoHandler struct {
 	*tikvHandlerTool
 }
 
+type ddlAllServerInfoHandler struct {
+	*tikvHandlerTool
+}
+
 // valueHandle is the handler for get value.
 type valueHandler struct {
 }
@@ -1255,11 +1259,6 @@ func (h *mvccTxnHandler) handleMvccGetByTxn(params map[string]string) (interface
 	return h.getMvccByStartTs(uint64(startTS), startKey, endKey)
 }
 
-type ClusterInfo struct {
-	SelfInfo  *util.DDLServerInfo
-	OwnerInfo *util.DDLServerInfo `json:"owner_info,omitempty"`
-}
-
 // ServeHTTP handles request of ddl server info.
 func (h ddlServerInfoHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	session, err := session.CreateSession(h.store.(kv.Storage))
@@ -1268,7 +1267,7 @@ func (h ddlServerInfoHandler) ServeHTTP(w http.ResponseWriter, req *http.Request
 		return
 	}
 	ddl := domain.GetDomain(session.(sessionctx.Context)).DDL()
-	info := &ClusterInfo{}
+	clusterInfo := make(map[string]*util.DDLServerInfo)
 	selfInfo := ddl.GetServerInfo()
 	if !selfInfo.IsOwner {
 		ownerInfo, err := ddl.GetOwnerServerInfo()
@@ -1276,8 +1275,26 @@ func (h ddlServerInfoHandler) ServeHTTP(w http.ResponseWriter, req *http.Request
 			writeError(w, errors.New("ddl server information not found"))
 			return
 		}
-		info.OwnerInfo = ownerInfo
+		// ownerInfo.IsOwner is false because the server may no the owner when store the info to PD,
+		ownerInfo.IsOwner = true
+		clusterInfo[ownerInfo.ID] = ownerInfo
 	}
-	info.SelfInfo = selfInfo
-	writeData(w, info)
+	clusterInfo[selfInfo.ID] = selfInfo
+	writeData(w, clusterInfo)
+}
+
+// ServeHTTP handles request of all ddl servers info.
+func (h ddlAllServerInfoHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	session, err := session.CreateSession(h.store.(kv.Storage))
+	if err != nil {
+		writeError(w, errors.New("create session error"))
+		return
+	}
+	ddl := domain.GetDomain(session.(sessionctx.Context)).DDL()
+	clusterInfo, err := ddl.GetAllServerInfo()
+	if err != nil {
+		writeError(w, errors.New("ddl server information not found"))
+		return
+	}
+	writeData(w, clusterInfo)
 }

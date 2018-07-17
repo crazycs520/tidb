@@ -92,6 +92,8 @@ type SchemaSyncer interface {
 
 	GetDDLServerInfoFromPD(ctx context.Context, ddlID string) (*util.DDLServerInfo, error)
 
+	GetAllDDLServerInfoFromPD(ctx context.Context, ddlID string) (map[string]*util.DDLServerInfo, error)
+
 	UpdateSelfServerInfo(ctx context.Context, info *util.DDLServerInfo) error
 }
 
@@ -181,12 +183,43 @@ func (s *schemaVersionSyncer) GetDDLServerInfoFromPD(ctx context.Context, ddlID 
 		}
 		if err == nil && len(resp.Kvs) > 0 {
 			info := &util.DDLServerInfo{}
-			err := json.Unmarshal(resp.Kvs[0].Value, &info)
+			err := json.Unmarshal(resp.Kvs[0].Value, info)
 			if err != nil {
 				return nil, err
 			}
 			return info, nil
 		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+func (s *schemaVersionSyncer) GetAllDDLServerInfoFromPD(ctx context.Context, ddlID string) (map[string]*util.DDLServerInfo, error) {
+	var err error
+	allDDLInfo := make(map[string]*util.DDLServerInfo)
+	for {
+		if isContextDone(ctx) {
+			// ctx is canceled or timeout.
+			err = errors.Trace(ctx.Err())
+			return nil, err
+		}
+
+		resp, err := s.etcdCli.Get(ctx, DDLServerInformation, clientv3.WithPrefix())
+		if err != nil {
+			log.Infof("[syncer] get all ddl server info failed %v, continue checking.", err)
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+
+		for _, kv := range resp.Kvs {
+			info := &util.DDLServerInfo{}
+			err := json.Unmarshal(resp.Kvs[0].Value, info)
+			if err != nil {
+				log.Infof("[syncer] get all ddl server info, ddl %s json.Unmarshal %v failed %v, continue checking.", kv.Key, kv.Value, err)
+				return nil, err
+			}
+			allDDLInfo[info.ID] = info
+		}
+		return allDDLInfo, nil
 	}
 }
 

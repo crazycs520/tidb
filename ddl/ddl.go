@@ -212,6 +212,7 @@ type DDL interface {
 	GetServerInfo() *util.DDLServerInfo
 	StoreServerInfoToPD() error
 	GetOwnerServerInfo() (*util.DDLServerInfo, error)
+	GetAllServerInfo() (map[string]*util.DDLServerInfo, error)
 }
 
 // ddl is used to handle the statements that define the structure or schema of the database.
@@ -530,7 +531,6 @@ func (d *ddl) GetOwnerServerInfo() (*util.DDLServerInfo, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	//m["owner_id"] = ddlOwnerID
 	ownerInfo, err := d.schemaSyncer.GetDDLServerInfoFromPD(ctx, ddlOwnerID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -538,9 +538,27 @@ func (d *ddl) GetOwnerServerInfo() (*util.DDLServerInfo, error) {
 	return ownerInfo, nil
 }
 
+func (d *ddl) GetAllServerInfo() (map[string]*util.DDLServerInfo, error) {
+	ctx := context.Background()
+	ddlOwnerID, err := d.ownerManager.GetOwnerID(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	AllDDLServerInfo, err := d.schemaSyncer.GetAllDDLServerInfoFromPD(ctx, ddlOwnerID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if _, ok := AllDDLServerInfo[ddlOwnerID]; ok {
+		AllDDLServerInfo[ddlOwnerID].IsOwner = true
+	}
+	return AllDDLServerInfo, nil
+}
+
 func (d *ddl) StoreServerInfoToPD() error {
 	info := d.GetServerInfo()
 	ctx := context.Background()
+	// Owner will change , we will check ownerID to confirm which server is owner
+	info.IsOwner = false
 	return d.schemaSyncer.UpdateSelfServerInfo(ctx, info)
 }
 

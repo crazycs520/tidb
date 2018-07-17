@@ -108,6 +108,12 @@ func (s *mockSchemaSyncer) GetDDLServerInfoFromPD(ctx context.Context, ddlID str
 	return s.selfServerInfo, nil
 }
 
+func (s *mockSchemaSyncer) GetAllDDLServerInfoFromPD(ctx context.Context, ddlID string) (map[string]*util.DDLServerInfo, error) {
+	allDDLInfo := make(map[string]*util.DDLServerInfo)
+	allDDLInfo[s.selfServerInfo.ID] = s.selfServerInfo
+	return allDDLInfo, nil
+}
+
 func (s *mockSchemaSyncer) UpdateSelfServerInfo(ctx context.Context, info *util.DDLServerInfo) error {
 	s.selfServerInfo = info
 	return nil
