@@ -1252,15 +1252,15 @@ func (h ddlServerInfoHandler) ServeHTTP(w http.ResponseWriter, req *http.Request
 	}
 	ddl := domain.GetDomain(session.(sessionctx.Context)).DDL()
 	infoMap := ddl.GetServerInfo()
-	//if isOwner, ok := infoMap["is_owner"]; !ok || !(isOwner).(bool) {
-	ownerInfo, err := ddl.GetOwnerServerInfo()
-	if err != nil {
-		writeError(w, errors.New("ddl server information not found"))
-		return
+	if isOwner, ok := infoMap["is_owner"]; !ok || !(isOwner).(bool) {
+		ownerInfo, err := ddl.GetOwnerServerInfo()
+		if err != nil {
+			writeError(w, errors.New("ddl server information not found"))
+			return
+		}
+		for k, v := range ownerInfo {
+			infoMap[k] = v
+		}
 	}
-	for k, v := range ownerInfo {
-		infoMap[k] = v
-	}
-	//}
 	writeData(w, infoMap)
 }
