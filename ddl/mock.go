@@ -20,6 +20,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
+	"github.com/pingcap/tidb/ddl/util"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/sessionctx"
 	"golang.org/x/net/context"
@@ -32,7 +33,7 @@ const mockCheckVersInterval = 2 * time.Millisecond
 type mockSchemaSyncer struct {
 	selfSchemaVersion int64
 	globalVerCh       chan clientv3.WatchResponse
-	infoMap           map[string]interface{}
+	selfServerInfo    *util.DDLServerInfo
 }
 
 // NewMockSchemaSyncer creates a new mock SchemaSyncer.
@@ -103,12 +104,12 @@ func (s *mockSchemaSyncer) OwnerCheckAllVersions(ctx context.Context, latestVer 
 	}
 }
 
-func (s *mockSchemaSyncer) GetDDLServerInfoFromPD(ctx context.Context, ddlID string) (map[string]interface{}, error) {
-	return s.infoMap, nil
+func (s *mockSchemaSyncer) GetDDLServerInfoFromPD(ctx context.Context, ddlID string) (*util.DDLServerInfo, error) {
+	return s.selfServerInfo, nil
 }
 
-func (s *mockSchemaSyncer) UpdateSelfServerInfo(ctx context.Context, infoMap map[string]interface{}) error {
-	s.infoMap = infoMap
+func (s *mockSchemaSyncer) UpdateSelfServerInfo(ctx context.Context, info *util.DDLServerInfo) error {
+	s.selfServerInfo = info
 	return nil
 }
 

@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/ddl/util"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
@@ -1254,6 +1255,11 @@ func (h *mvccTxnHandler) handleMvccGetByTxn(params map[string]string) (interface
 	return h.getMvccByStartTs(uint64(startTS), startKey, endKey)
 }
 
+type ClusterInfo struct {
+	SelfInfo  *util.DDLServerInfo
+	OwnerInfo *util.DDLServerInfo `json:"owner_info,omitempty"`
+}
+
 // ServeHTTP handles request of ddl server info.
 func (h ddlServerInfoHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	session, err := session.CreateSession(h.store.(kv.Storage))
@@ -1262,16 +1268,16 @@ func (h ddlServerInfoHandler) ServeHTTP(w http.ResponseWriter, req *http.Request
 		return
 	}
 	ddl := domain.GetDomain(session.(sessionctx.Context)).DDL()
-	infoMap := ddl.GetServerInfo()
-	if isOwner, ok := infoMap["is_owner"]; !ok || !(isOwner).(bool) {
+	info := &ClusterInfo{}
+	selfInfo := ddl.GetServerInfo()
+	if !selfInfo.IsOwner {
 		ownerInfo, err := ddl.GetOwnerServerInfo()
 		if err != nil {
 			writeError(w, errors.New("ddl server information not found"))
 			return
 		}
-		for k, v := range ownerInfo {
-			infoMap[k] = v
-		}
+		info.OwnerInfo = ownerInfo
 	}
-	writeData(w, infoMap)
+	info.SelfInfo = selfInfo
+	writeData(w, info)
 }

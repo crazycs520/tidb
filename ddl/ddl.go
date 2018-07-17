@@ -209,9 +209,9 @@ type DDL interface {
 	// SetBinlogClient sets the binlog client for DDL worker. It's exported for testing.
 	SetBinlogClient(interface{})
 
-	GetServerInfo() map[string]interface{}
+	GetServerInfo() *util.DDLServerInfo
 	StoreServerInfoToPD() error
-	GetOwnerServerInfo() (map[string]interface{}, error)
+	GetOwnerServerInfo() (*util.DDLServerInfo, error)
 }
 
 // ddl is used to handle the statements that define the structure or schema of the database.
@@ -514,19 +514,17 @@ func (d *ddl) SetBinlogClient(binlogCli interface{}) {
 	d.binlogCli = binlogCli
 }
 
-func (d *ddl) GetServerInfo() map[string]interface{} {
-	m := make(map[string]interface{})
+func (d *ddl) GetServerInfo() *util.DDLServerInfo {
+	info := &util.DDLServerInfo{}
 	cfg := config.GetGlobalConfig()
-	m["ip"] = cfg.Host
-	m["status_port"] = cfg.Status.StatusPort
-	m["ddl_id"] = d.uuid
-	isOwer := d.isOwner()
-	m["is_owner"] = isOwer
-	return m
+	info.IP = cfg.Host
+	info.StatusPort = cfg.Status.StatusPort
+	info.ID = d.uuid
+	info.IsOwner = d.isOwner()
+	return info
 }
 
-func (d *ddl) GetOwnerServerInfo() (map[string]interface{}, error) {
-	m := make(map[string]interface{})
+func (d *ddl) GetOwnerServerInfo() (*util.DDLServerInfo, error) {
 	ctx := context.Background()
 	ddlOwnerID, err := d.ownerManager.GetOwnerID(ctx)
 	if err != nil {
@@ -537,8 +535,7 @@ func (d *ddl) GetOwnerServerInfo() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	m["owner_info"] = ownerInfo
-	return m, nil
+	return ownerInfo, nil
 }
 
 func (d *ddl) StoreServerInfoToPD() error {
