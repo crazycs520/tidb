@@ -89,7 +89,7 @@ type SchemaSyncer interface {
 	// It returns until all servers' versions are equal to the latest version or the ctx is done.
 	OwnerCheckAllVersions(ctx context.Context, latestVer int64) error
 
-	GetDDLServerInfoFromPD(ctx context.Context, ddlID string) ([]byte, error)
+	GetDDLServerInfoFromPD(ctx context.Context, ddlID string) (map[string]interface{}, error)
 
 	UpdateSelfServerInfo(ctx context.Context, infoMap map[string]interface{}) error
 }
@@ -164,7 +164,7 @@ func (s *schemaVersionSyncer) Init(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
-func (s *schemaVersionSyncer) GetDDLServerInfoFromPD(ctx context.Context, ddlID string) ([]byte, error) {
+func (s *schemaVersionSyncer) GetDDLServerInfoFromPD(ctx context.Context, ddlID string) (map[string]interface{}, error) {
 	var err error
 	var resp *clientv3.GetResponse
 	ddlPath := fmt.Sprintf("%s/%s", DDLServerInformation, ddlID)
@@ -179,7 +179,12 @@ func (s *schemaVersionSyncer) GetDDLServerInfoFromPD(ctx context.Context, ddlID 
 			continue
 		}
 		if err == nil && len(resp.Kvs) > 0 {
-			return resp.Kvs[0].Value, nil
+			infoMap := make(map[string]interface{})
+			err := json.Unmarshal(resp.Kvs[0].Value, &infoMap)
+			if err != nil {
+				return nil, err
+			}
+			return infoMap, nil
 		}
 	}
 }

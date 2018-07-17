@@ -532,7 +532,7 @@ func (d *ddl) GetOwnerServerInfo() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	m["owner_id"] = ddlOwnerID
+	//m["owner_id"] = ddlOwnerID
 	ownerInfo, err := d.schemaSyncer.GetDDLServerInfoFromPD(ctx, ddlOwnerID)
 	if err != nil {
 		return nil, errors.Trace(err)

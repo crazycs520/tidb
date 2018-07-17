@@ -14,7 +14,6 @@
 package ddl
 
 import (
-	"encoding/json"
 	"sync/atomic"
 	"time"
 
@@ -104,12 +103,8 @@ func (s *mockSchemaSyncer) OwnerCheckAllVersions(ctx context.Context, latestVer 
 	}
 }
 
-func (s *mockSchemaSyncer) GetDDLServerInfoFromPD(ctx context.Context, ddlID string) ([]byte, error) {
-	buf, err := json.Marshal(s.infoMap)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return buf, nil
+func (s *mockSchemaSyncer) GetDDLServerInfoFromPD(ctx context.Context, ddlID string) (map[string]interface{}, error) {
+	return s.infoMap, nil
 }
 
 func (s *mockSchemaSyncer) UpdateSelfServerInfo(ctx context.Context, infoMap map[string]interface{}) error {
