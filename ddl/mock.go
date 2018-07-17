@@ -118,6 +118,9 @@ func (s *mockSchemaSyncer) UpdateSelfServerInfo(ctx context.Context, info *util.
 	s.selfServerInfo = info
 	return nil
 }
+func (s *mockSchemaSyncer) RemoveSelfServerInfo() error {
+	return nil
+}
 
 type mockDelRange struct {
 }

@@ -95,6 +95,8 @@ type SchemaSyncer interface {
 	GetAllDDLServerInfoFromPD(ctx context.Context, ddlID string) (map[string]*util.DDLServerInfo, error)
 
 	UpdateSelfServerInfo(ctx context.Context, info *util.DDLServerInfo) error
+
+	RemoveSelfServerInfo() error
 }
 
 type schemaVersionSyncer struct {
@@ -212,7 +214,7 @@ func (s *schemaVersionSyncer) GetAllDDLServerInfoFromPD(ctx context.Context, ddl
 
 		for _, kv := range resp.Kvs {
 			info := &util.DDLServerInfo{}
-			err := json.Unmarshal(resp.Kvs[0].Value, info)
+			err := json.Unmarshal(kv.Value, info)
 			if err != nil {
 				log.Infof("[syncer] get all ddl server info, ddl %s json.Unmarshal %v failed %v, continue checking.", kv.Key, kv.Value, err)
 				return nil, err
@@ -221,6 +223,30 @@ func (s *schemaVersionSyncer) GetAllDDLServerInfoFromPD(ctx context.Context, ddl
 		}
 		return allDDLInfo, nil
 	}
+}
+
+func (s *schemaVersionSyncer) UpdateSelfServerInfo(ctx context.Context, info *util.DDLServerInfo) error {
+	infoBuf, err := json.Marshal(info)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = s.putKV(ctx, keyOpDefaultRetryCnt, s.selfServerInfoPath, hack.String(infoBuf))
+	return errors.Trace(err)
+}
+
+func (s *schemaVersionSyncer) RemoveSelfServerInfo() error {
+	var err error
+	ctx := context.Background()
+	for i := 0; i < keyOpDefaultRetryCnt; i++ {
+		childCtx, cancel := context.WithTimeout(ctx, keyOpDefaultTimeout)
+		_, err = s.etcdCli.Delete(childCtx, s.selfServerInfoPath)
+		cancel()
+		if err == nil {
+			return nil
+		}
+		log.Warnf("[syncer] remove server info path %s failed %v no.%d", s.selfServerInfoPath, err, i)
+	}
+	return errors.Trace(err)
 }
 
 // Done implements SchemaSyncer.Done interface.
@@ -288,15 +314,6 @@ func (s *schemaVersionSyncer) UpdateSelfVersion(ctx context.Context, version int
 		clientv3.WithLease(s.session.Lease()))
 
 	metrics.UpdateSelfVersionHistogram.WithLabelValues(metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
-	return errors.Trace(err)
-}
-
-func (s *schemaVersionSyncer) UpdateSelfServerInfo(ctx context.Context, info *util.DDLServerInfo) error {
-	infoBuf, err := json.Marshal(info)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = s.putKV(ctx, keyOpDefaultRetryCnt, s.selfServerInfoPath, hack.String(infoBuf))
 	return errors.Trace(err)
 }
 
