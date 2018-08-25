@@ -405,21 +405,28 @@ func (j *innerJoiner) tryToMatch(outer chunk.Row, inners chunk.Iterator, chk *ch
 	if len(j.conditions) == 0 {
 		chkForJoin = chk
 	}
+	match := false
+
 	inner, numToAppend := inners.Current(), j.maxChunkSize-chk.NumRows()
 	for ; inner != inners.End() && numToAppend > 0; inner, numToAppend = inners.Next(), numToAppend-1 {
+		j.chk.Reset()
 		if j.outerIsRight {
 			j.makeJoinRowToChunk(chkForJoin, inner, outer)
 		} else {
 			j.makeJoinRowToChunk(chkForJoin, outer, inner)
 		}
+		if len(j.conditions) != 0 {
+			matched, err := expression.FilterRow(j.ctx, j.conditions, j.chk.GetRow(0))
+			if err != nil {
+				return false, errors.Trace(err)
+			}
+			if matched {
+				match = true
+				chk.AppendRow(j.chk.GetRow(0))
+			}
+		}
 	}
-	if len(j.conditions) == 0 {
-		return true, nil
-	}
-
-	// reach here, chkForJoin is j.chk
-	matched, err := j.filter(chkForJoin, chk)
-	return matched, errors.Trace(err)
+	return match, nil
 }
 
 func (j *innerJoiner) onMissMatch(outer chunk.Row, chk *chunk.Chunk) {
