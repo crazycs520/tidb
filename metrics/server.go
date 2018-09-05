@@ -120,6 +120,15 @@ var (
 			Help:      "Duration (us) for getting token, it should be small until concurrency limit is reached.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 22), // 1us ~ 2s
 		})
+
+	SlowQueryHistogram = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "tidb",
+			Subsystem: "server",
+			Name:      "slow_query_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of of slow queries.",
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 22),
+		})
 )
 
 func init() {
@@ -134,6 +143,7 @@ func init() {
 	prometheus.MustRegister(PlanCacheCounter)
 	prometheus.MustRegister(HandShakeErrorCounter)
 	prometheus.MustRegister(GetTokenDurationHistogram)
+	prometheus.MustRegister(SlowQueryHistogram)
 }
 
 // ExecuteErrorToLabel converts an execute error to label.
