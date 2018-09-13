@@ -129,11 +129,33 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of of slow queries.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 22),
 		}, []string{LblType, LblResult})
-)
 
-const (
-	LbProcess = "process"
-	LbWait    = "wait"
+	SlowQueryProcessHistogram = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "tidb",
+			Subsystem: "server",
+			Name:      "slow_query_process_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of of slow queries.",
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 22),
+		})
+
+	SlowQueryCopHistogram = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "tidb",
+			Subsystem: "server",
+			Name:      "slow_query_cop_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of of slow queries.",
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 22),
+		})
+
+	SlowQueryWaitHistogram = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "tidb",
+			Subsystem: "server",
+			Name:      "slow_query_wait_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of of slow queries.",
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 22),
+		})
 )
 
 func init() {
@@ -149,6 +171,9 @@ func init() {
 	prometheus.MustRegister(HandShakeErrorCounter)
 	prometheus.MustRegister(GetTokenDurationHistogram)
 	prometheus.MustRegister(SlowQueryHistogram)
+	prometheus.MustRegister(SlowQueryProcessHistogram)
+	prometheus.MustRegister(SlowQueryCopHistogram)
+	prometheus.MustRegister(SlowQueryWaitHistogram)
 }
 
 // ExecuteErrorToLabel converts an execute error to label.
