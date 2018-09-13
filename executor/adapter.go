@@ -364,7 +364,9 @@ func (a *ExecStmt) logSlowQuery(txnTS uint64, succ bool) {
 		logutil.SlowQueryLogger.Warnf(
 			"[SLOW_QUERY] cost_time:%v %s succ:%v con:%v user:%s txn_start_ts:%v database:%v %v%vsql:%v",
 			costTime, sessVars.StmtCtx.GetExecDetails(), succ, connID, user, txnTS, currentDB, tableIDs, indexIDs, sql)
-		metrics.SlowQueryHistogram.Observe(costTime.Seconds())
+
+		detail := sessVars.StmtCtx.GetExecDetails()
+		metrics.SlowQueryHistogram.WithLabelValues("sql", fmt.Sprintf("cop: %v, wait: %v", detail.ProcessTime.Seconds(), detail.WaitTime.Seconds())).Observe(costTime.Seconds())
 	}
 }
 

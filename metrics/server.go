@@ -121,14 +121,19 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 22), // 1us ~ 2s
 		})
 
-	SlowQueryHistogram = prometheus.NewHistogram(
+	SlowQueryHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "tidb",
 			Subsystem: "server",
 			Name:      "slow_query_duration_seconds",
 			Help:      "Bucketed histogram of processing time (s) of of slow queries.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 22),
-		})
+		}, []string{LblType, LblResult})
+)
+
+const (
+	LbProcess = "process"
+	LbWait    = "wait"
 )
 
 func init() {
