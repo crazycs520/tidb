@@ -17,11 +17,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/juju/errors"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/plan"
 	"github.com/pingcap/tidb/session"
@@ -30,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tidb/util/testleak"
+	"github.com/pkg/errors"
 )
 
 var _ = Suite(&testAnalyzeSuite{})
@@ -145,8 +144,7 @@ func (s *testAnalyzeSuite) TestTableDual(c *C) {
 	c.Assert(h.Update(dom.InfoSchema()), IsNil)
 
 	testKit.MustQuery(`explain select * from t where 1 = 0`).Check(testkit.Rows(
-		`Projection_5 0.00 root test.t.a`,
-		`└─TableDual_6 0.00 root rows:0`,
+		`TableDual_6 0.00 root rows:0`,
 	))
 
 	testKit.MustQuery(`explain select * from t where 1 = 1 limit 0`).Check(testkit.Rows(
@@ -554,7 +552,7 @@ func (s *testAnalyzeSuite) TestPreparedNullParam(c *C) {
 		testKit.MustExec("insert into t values (1), (2), (3)")
 
 		sql := "select * from t where id = ?"
-		best := "IndexReader(Index(t.id)[])"
+		best := "Dual"
 
 		ctx := testKit.Se.(sessionctx.Context)
 		stmts, err := session.Parse(ctx, sql)
@@ -671,10 +669,7 @@ func (s *testAnalyzeSuite) TestInconsistentEstimation(c *C) {
 	for i := 0; i < 10; i++ {
 		tk.MustExec("insert into t values (5,5,5), (10,10,10)")
 	}
-	origin := executor.GetMaxBucketSizeForTest()
-	defer func() { executor.SetMaxBucketSizeForTest(origin) }()
-	executor.SetMaxBucketSizeForTest(2)
-	tk.MustExec("analyze table t")
+	tk.MustExec("analyze table t with 2 buckets")
 	// Force using the histogram to estimate.
 	tk.MustExec("update mysql.stats_histograms set stats_ver = 0")
 	dom.StatsHandle().Clear()
