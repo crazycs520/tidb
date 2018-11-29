@@ -137,7 +137,7 @@ func convertJob2RollbackJob(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) 
 		ver, err = rollingbackAddColumn(t, job)
 	case model.ActionAddIndex:
 		ver, err = rollingbackAddindex(w, d, t, job)
-	case model.ActionCreateTable:
+	case model.ActionCreateTable, model.ActionCreateSchema:
 		job.State = model.JobStateCancelled
 		err = errCancelledDDLJob
 	default:
