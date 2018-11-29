@@ -131,23 +131,6 @@ func rollingbackAddindex(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 	return
 }
 
-func rollingbackCreateTable(t *meta.Meta, job *model.Job) (err error) {
-	schemaID := job.SchemaID
-	tbInfo := &model.TableInfo{}
-	if err = job.DecodeArgs(tbInfo); err != nil {
-		// Invalid arguments, cancel this job.
-		job.State = model.JobStateCancelled
-		return errors.Trace(err)
-	}
-
-	err = checkTableNotExists(t, job, schemaID, tbInfo.Name.L)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	job.State = model.JobStateCancelled
-	return errCancelledDDLJob
-}
-
 func convertJob2RollbackJob(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error) {
 	switch job.Type {
 	case model.ActionAddColumn:
@@ -155,7 +138,8 @@ func convertJob2RollbackJob(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job) 
 	case model.ActionAddIndex:
 		ver, err = rollingbackAddindex(w, d, t, job)
 	case model.ActionCreateTable:
-		err = rollingbackCreateTable(t, job)
+		job.State = model.JobStateCancelled
+		err = errCancelledDDLJob
 	default:
 		job.State = model.JobStateCancelled
 		err = errCancelledDDLJob
