@@ -2156,24 +2156,15 @@ func (s *testDBSuite) TestRestoreTable(c *C) {
 	tk.MustExec("insert into t_recover values (1),(2),(3)")
 	tk.MustExec("drop table t_recover")
 
-	rs, err := tk.Exec("admin show ddl jobs")
-	c.Assert(err, IsNil)
-	rows, err := session.GetRows4Test(context.Background(), tk.Se, rs)
-	c.Assert(err, IsNil)
-	row := rows[0]
-	c.Assert(row.GetString(1), Equals, "test_restore")
-	c.Assert(row.GetString(3), Equals, "drop table")
-	jobID := row.GetInt64(0)
-
 	// if gc safe point is not exists in mysql.tidb
-	_, err = tk.Exec(fmt.Sprintf("admin restore table by job %d", jobID))
+	_, err := tk.Exec("admin restore table t_recover")
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "can not get 'tikv_gc_safe_point'")
 	// set gc safe point
 	tk.MustExec(fmt.Sprintf(safePointSQL, timeBeforeDrop))
 
 	// if gc enable is not exists in mysql.tidb
-	_, err = tk.Exec(fmt.Sprintf("admin restore table by job %d", jobID))
+	_, err = tk.Exec("admin restore table t_recover")
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "[ddl:-1]can not get 'tikv_gc_enable'")
 
@@ -2182,7 +2173,7 @@ func (s *testDBSuite) TestRestoreTable(c *C) {
 
 	// recover job is before gc safe point
 	tk.MustExec(fmt.Sprintf(safePointSQL, timeAfterDrop))
-	_, err = tk.Exec(fmt.Sprintf("admin restore table by job %d", jobID))
+	_, err = tk.Exec("admin restore table t_recover")
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, variable.ErrSnapshotTooOld.GenWithStackByArgs(timeAfterDrop).Error())
 
@@ -2190,14 +2181,14 @@ func (s *testDBSuite) TestRestoreTable(c *C) {
 	tk.MustExec(fmt.Sprintf(safePointSQL, timeBeforeDrop))
 	// if there is a new table with the same name, should return failed.
 	tk.MustExec("create table t_recover (a int);")
-	_, err = tk.Exec(fmt.Sprintf("admin restore table by job %d", jobID))
+	_, err = tk.Exec("admin restore table t_recover")
 	c.Assert(err.Error(), Equals, infoschema.ErrTableExists.GenWithStackByArgs("t_recover").Error())
 
 	// drop the new table with the same name, then restore table.
-	tk.MustExec("drop table t_recover")
+	tk.MustExec("rename table t_recover to t_recover2")
 
 	// do restore table.
-	tk.MustExec(fmt.Sprintf("admin restore table by job %d", jobID))
+	tk.MustExec("admin restore table t_recover")
 
 	// check recover table meta and data record.
 	tk.MustQuery("select * from t_recover;").Check(testkit.Rows("1", "2", "3"))
@@ -2215,16 +2206,8 @@ func (s *testDBSuite) TestRestoreTable(c *C) {
 
 	tk.MustExec("delete from t_recover where a > 1")
 	tk.MustExec("drop table t_recover")
-	rs, err = tk.Exec("admin show ddl jobs")
-	c.Assert(err, IsNil)
-	rows, err = session.GetRows4Test(context.Background(), tk.Se, rs)
-	c.Assert(err, IsNil)
-	row = rows[0]
-	c.Assert(row.GetString(1), Equals, "test_restore")
-	c.Assert(row.GetString(3), Equals, "drop table")
-	jobID = row.GetInt64(0)
 
-	tk.MustExec(fmt.Sprintf("admin restore table by job %d", jobID))
+	tk.MustExec("admin restore table t_recover")
 
 	// check recover table meta and data record.
 	tk.MustQuery("select * from t_recover;").Check(testkit.Rows("1"))

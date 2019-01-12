@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/admin"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/gcutil"
 	"github.com/pingcap/tidb/util/sqlexec"
@@ -296,7 +295,8 @@ func (e *DDLExec) executeAlterTable(s *ast.AlterTableStmt) error {
 // is used to recover the table that deleted by mistake.
 type RestoreTableExec struct {
 	baseExecutor
-	jobID int64
+	Table  *ast.TableName
+	JobNum int64
 }
 
 // Open implements the Executor Open interface.
@@ -314,37 +314,49 @@ func (e *RestoreTableExec) Next(ctx context.Context, chk *chunk.Chunk) error {
 		return errors.Trace(err)
 	}
 	t := meta.NewMeta(txn)
-	job, err := t.GetHistoryDDLJob(e.jobID)
+	jobs, err := t.GetAllHistoryDDLJobs()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if job == nil {
-		return admin.ErrDDLJobNotFound.GenWithStackByArgs(e.jobID)
-	}
-	if job.Type != model.ActionDropTable {
-		return errors.Errorf("Job %v type is %v, not drop table", job.ID, job.Type)
-	}
-
-	// Check gc safe point for getting snapshot infoSchema.
-	err = gcutil.ValidateSnapshot(e.ctx, job.StartTS)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
+	var job *model.Job
+	var tblInfo *model.TableInfo
 	dom := domain.GetDomain(e.ctx)
-	// Get the snapshot infoSchema before drop table.
-	snapInfo, err := dom.GetSnapshotInfoSchema(job.StartTS)
+	gcSafePoint, err := gcutil.GetGCSafePoint(e.ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// Get table meta from snapshot infoSchema.
-	table, ok := snapInfo.TableByID(job.TableID)
-	if !ok {
-		return infoschema.ErrTableNotExists.GenWithStackByArgs(
-			fmt.Sprintf("(Schema ID %d)", job.SchemaID),
-			fmt.Sprintf("(Table ID %d)", job.TableID),
-		)
+	for i := len(jobs) - 1; i > 0; i-- {
+		job = jobs[i]
+		if job.Type != model.ActionDropTable {
+			continue
+		}
+		// Check gc safe point for getting snapshot infoSchema.
+		err = gcutil.ValidateSnapshotWithGCSafePoint(job.StartTS, gcSafePoint)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// Get the snapshot infoSchema before drop table.
+		snapInfo, err := dom.GetSnapshotInfoSchema(job.StartTS)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// Get table meta from snapshot infoSchema.
+		table, ok := snapInfo.TableByID(job.TableID)
+		if !ok {
+			return infoschema.ErrTableNotExists.GenWithStackByArgs(
+				fmt.Sprintf("(Schema ID %d)", job.SchemaID),
+				fmt.Sprintf("(Table ID %d)", job.TableID),
+			)
+		}
+		if table.Meta().Name == e.Table.Name {
+			tblInfo = table.Meta()
+			break
+		}
 	}
+	if tblInfo == nil {
+		return errors.Errorf("Can't found drop table: %v in ddl history jobs", e.Table.Name)
+	}
+
 	// Get table original autoID before table drop.
 	m, err := dom.GetSnapshotMeta(job.StartTS)
 	if err != nil {
@@ -355,6 +367,6 @@ func (e *RestoreTableExec) Next(ctx context.Context, chk *chunk.Chunk) error {
 		return errors.Errorf("recover table_id: %d, get original autoID from snapshot meta err: %s", job.TableID, err.Error())
 	}
 	// Call DDL RestoreTable
-	err = domain.GetDomain(e.ctx).DDL().RestoreTable(e.ctx, table.Meta(), job.SchemaID, autoID, job.ID, job.StartTS)
+	err = domain.GetDomain(e.ctx).DDL().RestoreTable(e.ctx, tblInfo, job.SchemaID, autoID, job.ID, job.StartTS)
 	return errors.Trace(err)
 }

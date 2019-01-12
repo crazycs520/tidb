@@ -151,17 +151,8 @@ func (s *testSerialSuite) TestRestoreTableFail(c *C) {
 	tk.MustExec("insert into t_recover values (1),(2),(3)")
 	tk.MustExec("drop table t_recover")
 
-	rs, err := tk.Exec("admin show ddl jobs")
-	c.Assert(err, IsNil)
-	rows, err := session.GetRows4Test(context.Background(), tk.Se, rs)
-	c.Assert(err, IsNil)
-	row := rows[0]
-	c.Assert(row.GetString(1), Equals, "test_restore")
-	c.Assert(row.GetString(3), Equals, "drop table")
-	jobID := row.GetInt64(0)
-
 	// enableGC first
-	err = gcutil.EnableGC(tk.Se)
+	err := gcutil.EnableGC(tk.Se)
 	c.Assert(err, IsNil)
 	tk.MustExec(fmt.Sprintf(safePointSQL, timeBeforeDrop))
 
@@ -178,7 +169,7 @@ func (s *testSerialSuite) TestRestoreTableFail(c *C) {
 	s.dom.DDL().(ddl.DDLForTest).SetHook(hook)
 
 	// do restore table.
-	tk.MustExec(fmt.Sprintf("admin restore table by job %d", jobID))
+	tk.MustExec("admin restore table t_recover")
 	gofail.Disable("github.com/pingcap/tidb/store/tikv/mockCommitError")
 	gofail.Disable("github.com/pingcap/tidb/ddl/mockRestoreTableCommitErr")
 

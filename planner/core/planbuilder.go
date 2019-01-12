@@ -551,7 +551,7 @@ func (b *PlanBuilder) buildAdmin(as *ast.AdminStmt) (Plan, error) {
 		p.SetSchema(buildShowSlowSchema())
 		ret = p
 	case ast.AdminRestoreTable:
-		ret = &RestoreTable{JobID: as.JobIDs[0]}
+		ret = &RestoreTable{Table: as.Tables[0], JobNum: as.JobNumber}
 	default:
 		return nil, ErrUnsupportedType.GenWithStack("Unsupported ast.AdminStmt(%T) for buildAdmin", as)
 	}
