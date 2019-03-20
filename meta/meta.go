@@ -25,9 +25,11 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
+	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/structure"
@@ -397,11 +399,28 @@ func (m *Meta) ListTables(dbID int64) ([]*model.TableInfo, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-
 		tables = append(tables, tbInfo)
 	}
 
+	if config.GetGlobalConfig().IgnoreColumnUTF8Charset {
+		for _, tbInfo := range tables {
+			ignoreColumnUTF8Charset(tbInfo)
+		}
+	}
+
 	return tables, nil
+}
+
+func ignoreColumnUTF8Charset(tbInfo *model.TableInfo) {
+	if tbInfo.Charset == charset.CharsetUTF8 {
+		return
+	}
+	for _, col := range tbInfo.Columns {
+		if col.Charset == charset.CharsetUTF8 {
+			col.Charset = tbInfo.Charset
+			col.Collate = tbInfo.Collate
+		}
+	}
 }
 
 // ListDatabases shows all databases.
@@ -452,6 +471,12 @@ func (m *Meta) GetTable(dbID int64, tableID int64) (*model.TableInfo, error) {
 
 	tableInfo := &model.TableInfo{}
 	err = json.Unmarshal(value, tableInfo)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if config.GetGlobalConfig().IgnoreColumnUTF8Charset {
+		ignoreColumnUTF8Charset(tableInfo)
+	}
 	return tableInfo, errors.Trace(err)
 }
 

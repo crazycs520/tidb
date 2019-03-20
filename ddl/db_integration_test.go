@@ -1299,6 +1299,8 @@ func (s *testIntegrationSuite) TestIgnoreColumnUTF8Charset(c *C) {
 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
 
 	config.GetGlobalConfig().IgnoreColumnUTF8Charset = false
+	s.tk.MustExec("drop table if exists t")
+	s.tk.MustExec("create table t (a varchar(10) character set utf8, b varchar(10) character set ascii) charset=utf8mb4;")
 	assertErrorCode(c, s.tk, "insert into t set a= x'f09f8c80';", mysql.ErrTruncatedWrongValueForField)
 	s.tk.MustQuery("show create table t").Check(testkit.Rows("t CREATE TABLE `t` (\n" +
 		"  `a` varchar(10) CHARACTER SET utf8 COLLATE utf8_bin DEFAULT NULL,\n" +

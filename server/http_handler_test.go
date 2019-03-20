@@ -655,6 +655,7 @@ func (ts *HTTPHandlerTestSuite) TestPostSettings(c *C) {
 	dbt.mustExec("create database tidb_test;")
 	dbt.mustExec("use tidb_test;")
 	dbt.mustExec("drop table if exists t2;")
+	config.GetGlobalConfig().IgnoreColumnUTF8Charset = false
 	dbt.mustExec("create table t2(a varchar(100) charset utf8);")
 	form.Set("check_mb4_value_in_utf8", "1")
 	resp, err = http.PostForm("http://127.0.0.1:10090/settings", form)
@@ -663,7 +664,6 @@ func (ts *HTTPHandlerTestSuite) TestPostSettings(c *C) {
 	c.Assert(config.GetGlobalConfig().CheckMb4ValueInUtf8, Equals, true)
 	txn1, err := dbt.db.Begin()
 	c.Assert(err, IsNil)
-	config.GetGlobalConfig().IgnoreColumnUTF8Charset = false
 	_, err = txn1.Exec("insert t2 values (unhex('F0A48BAE'));")
 	c.Assert(err, NotNil)
 	txn1.Commit()
