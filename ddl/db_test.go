@@ -2240,6 +2240,7 @@ func (s *testDBSuite) TestCheckTooBigFieldLength(c *C) {
 	s.tk = testkit.NewTestKit(c, s.store)
 	s.tk.MustExec("use test")
 	s.tk.MustExec("drop table if exists tr_01;")
+	config.GetGlobalConfig().IgnoreColumnUTF8Charset = false
 	s.tk.MustExec("create table tr_01 (id int, name varchar(20000), purchased date )  default charset=utf8 collate=utf8_bin;")
 
 	s.tk.MustExec("drop table if exists tr_02;")
@@ -2649,10 +2650,10 @@ func (s *testDBSuite) TestIssue9100(c *C) {
 func (s *testDBSuite) TestModifyColumnCharset(c *C) {
 	s.tk = testkit.NewTestKit(c, s.store)
 	s.tk.MustExec("use test_db")
+	config.GetGlobalConfig().IgnoreColumnUTF8Charset = false
 	s.tk.MustExec("create table t_mcc(a varchar(8) charset utf8, b varchar(8) charset utf8)")
 	defer s.mustExec(c, "drop table t_mcc;")
 
-	config.GetGlobalConfig().IgnoreColumnUTF8Charset = false
 	result := s.tk.MustQuery(`show create table t_mcc`)
 	result.Check(testkit.Rows(
 		"t_mcc CREATE TABLE `t_mcc` (\n" +
