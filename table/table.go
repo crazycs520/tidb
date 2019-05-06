@@ -84,6 +84,8 @@ var (
 	ErrUnknownPartition = terror.ClassTable.New(codeUnknownPartition, mysql.MySQLErrName[mysql.ErrUnknownPartition])
 	// ErrNoPartitionForGivenValue returns table has no partition for value.
 	ErrNoPartitionForGivenValue = terror.ClassTable.New(codeNoPartitionForGivenValue, mysql.MySQLErrName[mysql.ErrNoPartitionForGivenValue])
+	// ErrWrongValueCountOnRow returns wrong value count on row.
+	ErrWrongValueCountOnRow = terror.ClassOptimizer.New(codeErrWrongValueCountOnRow, mysql.MySQLErrName[mysql.ErrWrongValueCountOnRow])
 )
 
 // RecordIterFunc is used for low-level record iteration.
@@ -209,6 +211,7 @@ const (
 
 	codeUnknownPartition         = mysql.ErrUnknownPartition
 	codeNoPartitionForGivenValue = mysql.ErrNoPartitionForGivenValue
+	codeErrWrongValueCountOnRow  = mysql.ErrWrongValueCountOnRow
 )
 
 // Slice is used for table sorting.
@@ -231,6 +234,7 @@ func init() {
 		codeTruncateWrongValue:       mysql.ErrTruncatedWrongValueForField,
 		codeUnknownPartition:         mysql.ErrUnknownPartition,
 		codeNoPartitionForGivenValue: mysql.ErrNoPartitionForGivenValue,
+		codeErrWrongValueCountOnRow:  mysql.ErrWrongValueCountOnRow,
 	}
 	terror.ErrClassToMySQLCodes[terror.ClassTable] = tableMySQLErrCodes
 }

@@ -1007,6 +1007,11 @@ func buildTableInfo(ctx sessionctx.Context, d *ddl, tableName model.CIStr, cols 
 			} else {
 				idxInfo.Tp = constr.Option.Tp
 			}
+			// validate index split options.
+			err = validateIndexSplitOptions(ctx, tbInfo, idxInfo, constr.Option.SplitOpt)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 		} else {
 			// Use btree as default index type.
 			idxInfo.Tp = model.IndexTypeBtree
@@ -1015,6 +1020,29 @@ func buildTableInfo(ctx sessionctx.Context, d *ddl, tableName model.CIStr, cols 
 		tbInfo.Indices = append(tbInfo.Indices, idxInfo)
 	}
 	return
+}
+
+func validateIndexSplitOptions(ctx sessionctx.Context, tblInfo *model.TableInfo, indexInfo *model.IndexInfo, splitOpt *ast.SplitOption) error {
+	if splitOpt == nil {
+		return nil
+	}
+	for i, valuesItem := range splitOpt.ValueLists {
+		if len(valuesItem) > len(indexInfo.Columns) {
+			return table.ErrWrongValueCountOnRow.GenWithStackByArgs(i + 1)
+		}
+		for j, valueItem := range valuesItem {
+			x, ok := valueItem.(*driver.ValueExpr)
+			if !ok {
+				return errors.New("expect constant values")
+			}
+			colOffset := indexInfo.Columns[j].Offset
+			_, err := x.Datum.ConvertTo(ctx.GetSessionVars().StmtCtx, &tblInfo.Columns[colOffset].FieldType)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (d *ddl) CreateTableWithLike(ctx sessionctx.Context, ident, referIdent ast.Ident, ifNotExists bool) error {
