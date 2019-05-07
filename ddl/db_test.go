@@ -2755,6 +2755,7 @@ func (s *testDBSuite2) TestPreSplitRegion(c *C) {
 	tk := s.tk
 
 	tk.MustExec("use test")
+	defer tk.MustExec("drop table if exists t1,t2,t3")
 	tk.MustExec(`create table t1 (a varchar(50), index(a) split min ("aa") max ("zz") number 5 );`)
 	tk.MustExec("create table t2 (a bigint, index(a) split min (-1) max (0) number 8 );")
 	tk.MustExec("create table t3 (a bigint, index(a) split min (-1) max (1000) number 8 );")

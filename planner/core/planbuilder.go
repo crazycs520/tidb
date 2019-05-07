@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	driver "github.com/pingcap/tidb/types/parser_driver"
+	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/ranger"
 )
 
@@ -1614,6 +1615,10 @@ func (b *PlanBuilder) buildSplitIndexRegion(node *ast.SplitIndexRegionStmt) (Pla
 		return nil, ErrKeyDoesNotExist.GenWithStackByArgs(node.IndexName, tblInfo.Name)
 	}
 
+	mockTablePlan := LogicalTableDual{}.Init(b.ctx)
+	schema := expression.TableInfo2SchemaWithDBName(b.ctx, node.Table.Schema, tblInfo)
+	mockTablePlan.SetSchema(schema)
+
 	indexValues := make([][]types.Datum, 0, len(node.ValueLists))
 	for i, valuesItem := range node.ValueLists {
 		if len(valuesItem) > len(indexInfo.Columns) {
@@ -1621,16 +1626,33 @@ func (b *PlanBuilder) buildSplitIndexRegion(node *ast.SplitIndexRegionStmt) (Pla
 		}
 		valueList := make([]types.Datum, 0, len(valuesItem))
 		for j, valueItem := range valuesItem {
-			x, ok := valueItem.(*driver.ValueExpr)
+			var expr expression.Expression
+			var err error
+			switch x := valueItem.(type) {
+			case *driver.ValueExpr:
+				expr = &expression.Constant{
+					Value:   x.Datum,
+					RetType: &x.Type,
+				}
+			default:
+				expr, _, err = b.rewrite(valueItem, mockTablePlan, nil, true)
+				if err != nil {
+					return nil, err
+				}
+			}
+			constant, ok := expr.(*expression.Constant)
 			if !ok {
 				return nil, errors.New("expect constant values")
 			}
-			colOffset := indexInfo.Columns[j].Offset
-			value, err := x.Datum.ConvertTo(b.ctx.GetSessionVars().StmtCtx, &tblInfo.Columns[colOffset].FieldType)
+			value, err := constant.Eval(chunk.Row{})
 			if err != nil {
 				return nil, err
 			}
-
+			colOffset := indexInfo.Columns[j].Offset
+			value, err = value.ConvertTo(b.ctx.GetSessionVars().StmtCtx, &tblInfo.Columns[colOffset].FieldType)
+			if err != nil {
+				return nil, err
+			}
 			valueList = append(valueList, value)
 		}
 		indexValues = append(indexValues, valueList)

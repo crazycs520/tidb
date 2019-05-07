@@ -1033,13 +1033,24 @@ func validateIndexSplitOptions(ctx sessionctx.Context, tblInfo *model.TableInfo,
 	checkValue := func(valuesItem []ast.ExprNode) ([]types.Datum, error) {
 		values := make([]types.Datum, 0, len(valuesItem))
 		for j, valueItem := range valuesItem {
-			buf := new(bytes.Buffer)
-			valueItem.Format(buf)
-			e, err := expression.ParseSimpleExprWithTableInfo(ctx, buf.String(), tblInfo)
-			if err != nil {
-				return nil, errors.Trace(err)
+			var expr expression.Expression
+			var err error
+			switch x := valueItem.(type) {
+			case *driver.ValueExpr:
+				expr = &expression.Constant{
+					Value:   x.Datum,
+					RetType: &x.Type,
+				}
+			default:
+				buf := new(bytes.Buffer)
+				valueItem.Format(buf)
+				expr, err = expression.ParseSimpleExprWithTableInfo(ctx, buf.String(), tblInfo)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
 			}
-			constant, ok := e.(*expression.Constant)
+
+			constant, ok := expr.(*expression.Constant)
 			if !ok {
 				return nil, errors.New("expect constant values")
 			}
@@ -1458,7 +1469,7 @@ func (e *SplitIndexRegionOpt) Split(ctx sessionctx.Context) error {
 		for _, vs := range valuesList {
 			fmt.Printf("in : %x\n", vs)
 		}
-		fmt.Printf("\n------------------------------------------\n\n")
+		fmt.Printf("\n--------------------------------------\n\n")
 		e.ValueLists = valuesList
 	}
 
