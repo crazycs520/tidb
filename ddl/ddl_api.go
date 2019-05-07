@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -1008,7 +1009,7 @@ func buildTableInfo(ctx sessionctx.Context, d *ddl, tableName model.CIStr, cols 
 				idxInfo.Tp = constr.Option.Tp
 			}
 			// validate index split options.
-			err = validateIndexSplitOptions(ctx, tbInfo, idxInfo, constr.Option.SplitOpt)
+			_, err = validateIndexSplitOptions(ctx, tbInfo, idxInfo, constr.Option.SplitOpt)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -1022,27 +1023,62 @@ func buildTableInfo(ctx sessionctx.Context, d *ddl, tableName model.CIStr, cols 
 	return
 }
 
-func validateIndexSplitOptions(ctx sessionctx.Context, tblInfo *model.TableInfo, indexInfo *model.IndexInfo, splitOpt *ast.SplitOption) error {
+const MaxPreSplitRegionNum = 256
+
+func validateIndexSplitOptions(ctx sessionctx.Context, tblInfo *model.TableInfo, indexInfo *model.IndexInfo, splitOpt *ast.SplitOption) (*SplitIndexRegionOpt, error) {
 	if splitOpt == nil {
-		return nil
+		return nil, nil
 	}
-	for i, valuesItem := range splitOpt.ValueLists {
-		if len(valuesItem) > len(indexInfo.Columns) {
-			return table.ErrWrongValueCountOnRow.GenWithStackByArgs(i + 1)
-		}
+	checkValue := func(valuesItem []ast.ExprNode) ([]types.Datum, error) {
+		values := make([]types.Datum, 0, len(valuesItem))
 		for j, valueItem := range valuesItem {
 			x, ok := valueItem.(*driver.ValueExpr)
 			if !ok {
-				return errors.New("expect constant values")
+				return nil, errors.New("expect constant values")
 			}
 			colOffset := indexInfo.Columns[j].Offset
-			_, err := x.Datum.ConvertTo(ctx.GetSessionVars().StmtCtx, &tblInfo.Columns[colOffset].FieldType)
+			value, err := x.Datum.ConvertTo(ctx.GetSessionVars().StmtCtx, &tblInfo.Columns[colOffset].FieldType)
 			if err != nil {
-				return err
+				return nil, err
 			}
+			values = append(values, value)
 		}
+		return values, nil
 	}
-	return nil
+	splitIndexOpt := &SplitIndexRegionOpt{
+		Table: tblInfo,
+		Index: indexInfo,
+	}
+	if len(splitOpt.ValueLists) > 0 {
+		for i, valuesItem := range splitOpt.ValueLists {
+			if len(valuesItem) > len(indexInfo.Columns) {
+				return nil, table.ErrWrongValueCountOnRow.GenWithStackByArgs(i + 1)
+			}
+			values, err := checkValue(valuesItem)
+			if err != nil {
+				return nil, err
+			}
+			splitIndexOpt.ValueLists = append(splitIndexOpt.ValueLists, values)
+		}
+		return splitIndexOpt, nil
+	}
+
+	values, err := checkValue(splitOpt.Min)
+	if err != nil {
+		return nil, err
+	}
+	splitIndexOpt.Min = values
+	values, err = checkValue(splitOpt.Max)
+	if err != nil {
+		return nil, err
+	}
+	splitIndexOpt.Max = values
+	if splitOpt.Num > MaxPreSplitRegionNum {
+		return nil, errors.Errorf("The pre-split region num is exceed the limit %v", MaxPreSplitRegionNum)
+	}
+	splitIndexOpt.Num = int(splitOpt.Num)
+
+	return splitIndexOpt, nil
 }
 
 func (d *ddl) CreateTableWithLike(ctx sessionctx.Context, ident, referIdent ast.Ident, ifNotExists bool) error {
@@ -1245,8 +1281,10 @@ func (d *ddl) CreateTable(ctx sessionctx.Context, s *ast.CreateTableStmt) (err e
 		if preSplitAndScatter != nil {
 			if ctx.GetSessionVars().WaitTableSplitFinish {
 				preSplitAndScatter()
+				splitIndexRegion(ctx, tbInfo, s)
 			} else {
 				go preSplitAndScatter()
+				go splitIndexRegion(ctx, tbInfo, s)
 			}
 		}
 
@@ -1263,6 +1301,88 @@ func (d *ddl) CreateTable(ctx sessionctx.Context, s *ast.CreateTableStmt) (err e
 	}
 	err = d.callHookOnChanged(err)
 	return errors.Trace(err)
+}
+
+func splitIndexRegion(ctx sessionctx.Context, tbInfo *model.TableInfo, s *ast.CreateTableStmt) {
+	for _, constr := range s.Constraints {
+		if constr.Option == nil || constr.Option.SplitOpt == nil {
+			continue
+		}
+
+		idxInfo := tbInfo.FindIndexByName(strings.ToLower(constr.Name))
+		if idxInfo == nil {
+			return
+		}
+
+		splitOpt, err := validateIndexSplitOptions(ctx, tbInfo, idxInfo, constr.Option.SplitOpt)
+		if err != nil {
+			return
+		}
+		if splitOpt == nil {
+			return
+		}
+		err = splitOpt.Split(ctx)
+		if err != nil {
+			logutil.Logger(context.Background()).Warn("split table index region failed",
+				zap.String("table", tbInfo.Name.L),
+				zap.String("index", idxInfo.Name.L),
+				zap.Error(err))
+		}
+	}
+}
+
+type SplitIndexRegionOpt struct {
+	Table *model.TableInfo
+	Index *model.IndexInfo
+
+	Min        []types.Datum
+	Max        []types.Datum
+	Num        int
+	ValueLists [][]types.Datum // use index key directly.
+}
+
+func (e *SplitIndexRegionOpt) Split(ctx sessionctx.Context) error {
+	store := ctx.GetStore()
+	s, ok := store.(splitableStore)
+	if !ok {
+		return nil
+	}
+	logutil.Logger(context.Background()).Info("start split table index region",
+		zap.String("table", e.Table.Name.L),
+		zap.String("index", e.Index.Name.L))
+	regionIDs := make([]uint64, 0, len(e.ValueLists))
+	index := tables.NewIndex(e.Table.ID, e.Table, e.Index)
+	for _, values := range e.ValueLists {
+		idxKey, _, err := index.GenIndexKey(ctx.GetSessionVars().StmtCtx, values, math.MinInt64, nil)
+		if err != nil {
+			return err
+		}
+
+		regionID, err := s.SplitRegionAndScatter(idxKey)
+		if err != nil {
+			logutil.Logger(context.Background()).Warn("split table index region failed",
+				zap.String("table", e.Table.Name.L),
+				zap.String("index", e.Index.Name.L),
+				zap.Error(err))
+			continue
+		}
+		regionIDs = append(regionIDs, regionID)
+
+	}
+	if !ctx.GetSessionVars().WaitTableSplitFinish {
+		return nil
+	}
+	for _, regionID := range regionIDs {
+		err := s.WaitScatterRegionFinish(regionID)
+		if err != nil {
+			logutil.Logger(context.Background()).Warn("wait scatter region failed",
+				zap.Uint64("regionID", regionID),
+				zap.String("table", e.Table.Name.L),
+				zap.String("index", e.Index.Name.L),
+				zap.Error(err))
+		}
+	}
+	return nil
 }
 
 func (d *ddl) RecoverTable(ctx sessionctx.Context, tbInfo *model.TableInfo, schemaID, autoID, dropJobID int64, snapshotTS uint64) (err error) {
