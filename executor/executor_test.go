@@ -3750,6 +3750,7 @@ func (s *testSuite) TestSplitIndexRegion(c *C) {
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t(a varchar(100),b int, index idx1(b,a))")
 	tk.MustExec(`split table t index idx1 by (10000,"abcd"),(10000000);`)
+	tk.MustExec(`split table t index idx1 by (-1),(10);`)
 	_, err := tk.Exec(`split table t index idx1 by ("abcd");`)
 	c.Assert(err, NotNil)
 	terr := errors.Cause(err).(*terror.Error)

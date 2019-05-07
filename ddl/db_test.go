@@ -2749,3 +2749,21 @@ func (s *testDBSuite2) TestAlterShardRowIDBits(c *C) {
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "[autoid:1467]Failed to read auto-increment value from storage engine")
 }
+
+func (s *testDBSuite2) TestPreSplitRegion(c *C) {
+	s.tk = testkit.NewTestKit(c, s.store)
+	tk := s.tk
+
+	tk.MustExec("use test")
+	tk.MustExec(`create table t1 (a varchar(50), index(a) split min ("aa") max ("zz") number 5 );`)
+	tk.MustExec("create table t2 (a bigint, index(a) split min (-1) max (0) number 8 );")
+	tk.MustExec("create table t3 (a bigint, index(a) split min (-1) max (1000) number 8 );")
+
+	_, err := tk.Exec("create table t4 (a bigint, index(a) split min (2) max (1) number 8 );")
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Equals, "Pre-split index a min value should less than the max value")
+
+	_, err = tk.Exec("create table t5 (a bigint, index(a) split min (-1) max (1000) number 1000 );")
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Equals, "The pre-split region num is exceed the limit 256")
+}
