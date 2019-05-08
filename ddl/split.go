@@ -208,9 +208,9 @@ func getDiffBytesValue(startIdx int, min, max []byte) uint64 {
 		diff = append(diff, max[i]-min[i])
 	}
 	if len(max) > l {
-		for i:=l;i<len(max);i++{
+		for i := l; i < len(max); i++ {
 			diff = append(diff, max[i])
-			if len(diff) >= 8{
+			if len(diff) >= 8 {
 				break
 			}
 		}
@@ -219,7 +219,6 @@ func getDiffBytesValue(startIdx int, min, max []byte) uint64 {
 		diff = append(diff, 0xff)
 	}
 	diffValue := binary.BigEndian.Uint64(diff)
-	fmt.Printf("split index \n common prefix: %x\n \nmin: %x\nmax: %x\ndif: %x\ndiffValue: %v\n-----------------------\n", min[:startIdx], min, max, diff, diffValue)
 	return diffValue
 }
 
@@ -227,6 +226,7 @@ func getValuesList(min, max []byte, num int) [][]byte {
 	startIdx := longestCommonPrefixLen(min, max)
 	diffValue := getDiffBytesValue(startIdx, min, max)
 	step := diffValue / uint64(num)
+	fmt.Printf("split index \n common prefix: %x\n \nmin: %x\nmax: %x\ndif: %x\ndiffValue: %v\n-----------------------\n", min[:startIdx], min, max, step, diffValue)
 
 	startValueTemp := min[startIdx:]
 	if len(startValueTemp) > 8 {
@@ -249,6 +249,10 @@ func getValuesList(min, max []byte, num int) [][]byte {
 		value = append(value, tmp...)
 		valuesList = append(valuesList, value)
 	}
+	for _, vs := range valuesList {
+		fmt.Printf("in : %x\n", vs)
+	}
+	fmt.Printf("\n--------------------------------------\n\n")
 	return valuesList
 }
 
@@ -263,11 +267,7 @@ func (e *SplitIndexRegionOpt) Split(ctx sessionctx.Context) error {
 		zap.String("index", e.Index.Name.L))
 
 	if len(e.ValueLists) == 0 {
-		valuesList := getValuesList(e.Min, e.Max, e.Num-1)
-		for _, vs := range valuesList {
-			fmt.Printf("in : %x\n", vs)
-		}
-		fmt.Printf("\n--------------------------------------\n\n")
+		valuesList := getValuesList(e.Min, e.Max, e.Num)
 		e.ValueLists = valuesList
 	}
 
