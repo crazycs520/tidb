@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"strings"
 
@@ -215,6 +214,15 @@ func getDiffBytesValue(startIdx int, min, max []byte) uint64 {
 			}
 		}
 	}
+	if len(min) > l {
+		for i := l; i < len(min); i++ {
+			diff = append(diff, 0xff-min[i])
+			if len(diff) >= 8 {
+				break
+			}
+		}
+	}
+
 	for i := len(diff); i < 8; i++ {
 		diff = append(diff, 0xff)
 	}
@@ -226,7 +234,6 @@ func getValuesList(min, max []byte, num int) [][]byte {
 	startIdx := longestCommonPrefixLen(min, max)
 	diffValue := getDiffBytesValue(startIdx, min, max)
 	step := diffValue / uint64(num)
-	fmt.Printf("split index \n common prefix: %x\n \nmin: %x\nmax: %x\ndif: %x\ndiffValue: %v\n-----------------------\n", min[:startIdx], min, max, step, diffValue)
 
 	startValueTemp := min[startIdx:]
 	if len(startValueTemp) > 8 {
@@ -249,10 +256,6 @@ func getValuesList(min, max []byte, num int) [][]byte {
 		value = append(value, tmp...)
 		valuesList = append(valuesList, value)
 	}
-	for _, vs := range valuesList {
-		fmt.Printf("in : %x\n", vs)
-	}
-	fmt.Printf("\n--------------------------------------\n\n")
 	return valuesList
 }
 
