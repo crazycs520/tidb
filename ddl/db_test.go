@@ -2760,10 +2760,22 @@ func (s *testDBSuite2) TestPreSplitRegion(c *C) {
 	tk.MustExec("create table t2 (a bigint, index(a) split min (-1) max (0) number 8 );")
 	tk.MustExec("create table t3 (a bigint, index(a) split min (-1) max (1000) number 8 );")
 
+	// Check min value is more than max value.
 	_, err := tk.Exec("create table t4 (a bigint, index(a) split min (2) max (1) number 8 );")
 	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "Pre-split index a min value should less than the max value")
+	c.Assert(err.Error(), Matches, "Pre-split index `a` min value .*should less than the max value .*")
 
+	// Check min value is invalid.
+	_, err = tk.Exec("create table t4 (a bigint, index(a) split min () max (1) number 8 );")
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Equals, "Pre-split index `a` min value num should more than 0")
+
+	// Check max value is invalid.
+	_, err = tk.Exec("create table t4 (a bigint, index(a) split min (1) max () number 8 );")
+	c.Assert(err, NotNil)
+	c.Assert(err.Error(), Equals, "Pre-split index `a` max value num should more than 0")
+
+	// Check pre-split region num is too large.
 	_, err = tk.Exec("create table t5 (a bigint, index(a) split min (-1) max (1000) number 1000 );")
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "The pre-split region num is exceed the limit 256")
