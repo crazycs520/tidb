@@ -223,10 +223,23 @@ func EncodeValue(sc *stmtctx.StatementContext, b []byte, raw types.Datum) ([]byt
 // valBuf and values pass by caller, for reducing EncodeRow allocates temporary bufs. If you pass valBuf and values as nil,
 // EncodeRow will allocate it.
 func EncodeRow(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, valBuf []byte, values []types.Datum) ([]byte, error) {
+	var err error
+	values, err = getEncodeRowValues(sc, row, colIDs, values)
+	if err != nil {
+		return nil, err
+	}
+	valBuf = valBuf[:0]
+	if len(values) == 0 {
+		// We could not set nil value into kv.
+		return []byte{codec.NilFlag}, nil
+	}
+	return codec.EncodeValue(sc, valBuf, values...)
+}
+
+func getEncodeRowValues(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, values []types.Datum) ([]types.Datum, error) {
 	if len(row) != len(colIDs) {
 		return nil, errors.Errorf("EncodeRow error: data and columnID count not match %d vs %d", len(row), len(colIDs))
 	}
-	valBuf = valBuf[:0]
 	if values == nil {
 		values = make([]types.Datum, len(row)*2)
 	}
@@ -238,11 +251,36 @@ func EncodeRow(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, 
 			return nil, errors.Trace(err)
 		}
 	}
+	return values, nil
+}
+
+func EncodeRowWithColSizeMap(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, valBuf []byte, values []types.Datum) ([]byte, map[int64]int64, error) {
+	var err error
+	values, err = getEncodeRowValues(sc, row, colIDs, values)
+	if err != nil {
+		return nil, nil, err
+	}
+	valBuf = valBuf[:0]
+	colSize := make(map[int64]int64, len(colIDs))
 	if len(values) == 0 {
 		// We could not set nil value into kv.
-		return []byte{codec.NilFlag}, nil
+		return []byte{codec.NilFlag}, colSize, nil
 	}
-	return codec.EncodeValue(sc, valBuf, values...)
+	lastLen := 0
+	var colID int64
+	for i, v := range values {
+		valBuf, err = codec.EncodeValue(sc, valBuf, v)
+		if err != nil {
+			return valBuf, colSize, errors.Trace(err)
+		}
+		if i%2 == 0 {
+			colID = v.GetInt64()
+		} else {
+			colSize[colID] = int64(len(valBuf) - lastLen - 1)
+		}
+		lastLen = len(valBuf)
+	}
+	return valBuf, colSize, errors.Trace(err)
 }
 
 func flatten(sc *stmtctx.StatementContext, data types.Datum, ret *types.Datum) error {
