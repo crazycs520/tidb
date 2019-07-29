@@ -254,14 +254,16 @@ func getEncodeRowValues(sc *stmtctx.StatementContext, row []types.Datum, colIDs 
 	return values, nil
 }
 
-func EncodeRowWithColSizeMap(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, valBuf []byte, values []types.Datum) ([]byte, map[int64]int64, error) {
+func EncodeRowWithColSizeMap(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, valBuf []byte, values []types.Datum, colSize map[int64]int64) ([]byte, map[int64]int64, error) {
 	var err error
 	values, err = getEncodeRowValues(sc, row, colIDs, values)
 	if err != nil {
 		return valBuf, nil, err
 	}
 	valBuf = valBuf[:0]
-	colSize := make(map[int64]int64, len(colIDs))
+	if colSize == nil {
+		colSize = make(map[int64]int64, len(colIDs))
+	}
 	if len(values) == 0 {
 		// We could not set nil value into kv.
 		return append(valBuf, codec.NilFlag), colSize, nil

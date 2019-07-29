@@ -98,6 +98,8 @@ type Context interface {
 	ReleaseAllTableLocks()
 	// HasLockedTables uses to check whether this session locked any tables.
 	HasLockedTables() bool
+
+	GetCacheManager() *CacheManager
 }
 
 type basicCtxType int
@@ -130,4 +132,30 @@ const ConnID kv.ContextKey = "conn ID"
 // SetCommitCtx sets the variables for context before commit a transaction.
 func SetCommitCtx(ctx context.Context, sessCtx Context) context.Context {
 	return context.WithValue(ctx, ConnID, sessCtx.GetSessionVars().ConnectionID)
+}
+
+type CacheManager struct {
+	// Cache for adding record.
+	colIDs       []int64
+	row          []types.Datum
+	colValueSize map[int64]int64
+}
+
+func (c *CacheManager) GetAddRecordCache(length int) (colIDs []int64, row []types.Datum, colValueSize map[int64]int64) {
+	if cap(c.colIDs) < length {
+		c.colIDs = make([]int64, 0, length)
+		c.row = make([]types.Datum, 0, length)
+		c.colValueSize = make(map[int64]int64, length)
+		return c.colIDs, c.row, c.colValueSize
+	}
+	c.colIDs = c.colIDs[:0]
+	c.row = c.row[:0]
+	if len(c.colValueSize) != length {
+		c.colValueSize = make(map[int64]int64, length)
+		return c.colIDs, c.row, c.colValueSize
+	}
+	for k, _ := range c.colValueSize {
+		c.colValueSize[k] = 0
+	}
+	return c.colIDs, c.row, c.colValueSize
 }

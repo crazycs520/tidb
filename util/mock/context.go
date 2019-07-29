@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/kvcache"
 	"github.com/pingcap/tidb/util/sqlexec"
-	binlog "github.com/pingcap/tipb/go-binlog"
+	"github.com/pingcap/tipb/go-binlog"
 )
 
 var _ sessionctx.Context = (*Context)(nil)
@@ -38,15 +38,16 @@ var _ sqlexec.SQLExecutor = (*Context)(nil)
 
 // Context represents mocked sessionctx.Context.
 type Context struct {
-	values      map[fmt.Stringer]interface{}
-	txn         wrapTxn    // mock global variable
-	Store       kv.Storage // mock global variable
-	sessionVars *variable.SessionVars
-	mux         sync.Mutex // fix data race in ddl test.
-	ctx         context.Context
-	cancel      context.CancelFunc
-	sm          util.SessionManager
-	pcache      *kvcache.SimpleLRUCache
+	values       map[fmt.Stringer]interface{}
+	txn          wrapTxn    // mock global variable
+	Store        kv.Storage // mock global variable
+	sessionVars  *variable.SessionVars
+	mux          sync.Mutex // fix data race in ddl test.
+	ctx          context.Context
+	cancel       context.CancelFunc
+	sm           util.SessionManager
+	pcache       *kvcache.SimpleLRUCache
+	cacheManager *sessionctx.CacheManager
 }
 
 type wrapTxn struct {
@@ -249,6 +250,13 @@ func (c *Context) HasLockedTables() bool {
 
 // Close implements the sessionctx.Context interface.
 func (c *Context) Close() {
+}
+
+func (s *Context) GetCacheManager() *sessionctx.CacheManager {
+	if s.cacheManager == nil {
+		s.cacheManager = &sessionctx.CacheManager{}
+	}
+	return s.cacheManager
 }
 
 // NewContext creates a new mocked sessionctx.Context.

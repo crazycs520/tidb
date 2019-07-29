@@ -481,10 +481,7 @@ func (t *tableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ..
 		return h, err
 	}
 
-	var colIDs, binlogColIDs []int64
-	var row, binlogRow []types.Datum
-	colIDs = make([]int64, 0, len(r))
-	row = make([]types.Datum, 0, len(r))
+	colIDs, row, colSize := ctx.GetCacheManager().GetAddRecordCache(len(r))
 
 	for _, col := range t.WritableCols() {
 		var value types.Datum
@@ -515,8 +512,7 @@ func (t *tableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ..
 	adjustRowValuesBuf(writeBufs, len(row))
 	key := t.RecordKey(recordID)
 	sc := sessVars.StmtCtx
-	var colSize map[int64]int64
-	writeBufs.RowValBuf, colSize, err = tablecodec.EncodeRowWithColSizeMap(sc, row, colIDs, writeBufs.RowValBuf, writeBufs.AddRowValues)
+	writeBufs.RowValBuf, colSize, err = tablecodec.EncodeRowWithColSizeMap(sc, row, colIDs, writeBufs.RowValBuf, writeBufs.AddRowValues, colSize)
 	if err != nil {
 		return 0, err
 	}
@@ -537,8 +533,8 @@ func (t *tableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ..
 	}
 	if shouldWriteBinlog(ctx) {
 		// For insert, TiDB and Binlog can use same row and schema.
-		binlogRow = row
-		binlogColIDs = colIDs
+		binlogRow := row
+		binlogColIDs := colIDs
 		err = t.addInsertBinlog(ctx, recordID, binlogRow, binlogColIDs)
 		if err != nil {
 			return 0, err
