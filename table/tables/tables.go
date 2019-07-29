@@ -339,7 +339,7 @@ func (t *tableCommon) UpdateRecord(ctx sessionctx.Context, h int64, oldData, new
 			return err
 		}
 	}
-	colSize := make(map[int64]int64)
+	colSize := make(map[int64]int64, len(t.Cols()))
 	encodedCol := make([]byte, 0, 16)
 	for id, col := range t.Cols() {
 		encodedCol, err = tablecodec.EncodeValue(sc, encodedCol[:0], newData[id])
@@ -544,7 +544,7 @@ func (t *tableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ..
 		}
 	}
 	sc.AddAffectedRows(1)
-	colSize := make(map[int64]int64)
+	colSize := make(map[int64]int64, len(t.Cols()))
 	encodedCol := make([]byte, 0, 16)
 	for id, col := range t.Cols() {
 		encodedCol, err = tablecodec.EncodeValue(sc, encodedCol[:0], r[id])
@@ -726,7 +726,7 @@ func (t *tableCommon) RemoveRecord(ctx sessionctx.Context, h int64, r []types.Da
 		}
 		err = t.addDeleteBinlog(ctx, binlogRow, colIDs)
 	}
-	colSize := make(map[int64]int64)
+	colSize := make(map[int64]int64, len(t.Cols()))
 	encodedCol := make([]byte, 0, 16)
 	sc := ctx.GetSessionVars().StmtCtx
 	for id, col := range t.Cols() {
