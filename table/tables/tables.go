@@ -481,7 +481,7 @@ func (t *tableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ..
 		return h, err
 	}
 
-	colIDs, row, colSize := ctx.GetCacheManager().GetAddRecordCache(len(r))
+	colIDs, row := ctx.GetCacheManager().GetAddRecordCache(len(r))
 
 	for _, col := range t.WritableCols() {
 		var value types.Datum
@@ -512,7 +512,8 @@ func (t *tableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ..
 	adjustRowValuesBuf(writeBufs, len(row))
 	key := t.RecordKey(recordID)
 	sc := sessVars.StmtCtx
-	writeBufs.RowValBuf, colSize, err = tablecodec.EncodeRowWithColSizeMap(sc, row, colIDs, writeBufs.RowValBuf, writeBufs.AddRowValues, colSize)
+	var colSize map[int64]int64
+	writeBufs.RowValBuf, colSize, err = tablecodec.EncodeRowWithColSizeMap(sc, row, colIDs, writeBufs.RowValBuf, writeBufs.AddRowValues)
 	if err != nil {
 		return 0, err
 	}
