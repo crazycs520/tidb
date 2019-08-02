@@ -183,6 +183,8 @@ type session struct {
 	ddlOwnerChecker owner.DDLOwnerChecker
 	// lockedTables use to record the table locks hold by the session.
 	lockedTables map[int64]model.TableLockTpInfo
+
+	cacheManager *sessionctx.CacheManager
 }
 
 // AddTableLock adds table lock to the session lock map.
@@ -1962,6 +1964,13 @@ func (s *session) recordTransactionCounter(err error) {
 			transactionCounterGeneralOK.Inc()
 		}
 	}
+}
+
+func (s *session) GetCacheManager() *sessionctx.CacheManager {
+	if s.cacheManager == nil {
+		s.cacheManager = &sessionctx.CacheManager{}
+	}
+	return s.cacheManager
 }
 
 type multiQueryNoDelayRecordSet struct {

@@ -481,11 +481,7 @@ func (t *tableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ..
 		return h, err
 	}
 
-	var colIDs, binlogColIDs []int64
-	var row, binlogRow []types.Datum
-	colIDs = make([]int64, 0, len(r))
-	row = make([]types.Datum, 0, len(r))
-
+	colIDs, row := ctx.GetCacheManager().GetAddRecordCache(len(r))
 	for _, col := range t.WritableCols() {
 		var value types.Datum
 		// Update call `AddRecord` will already handle the write only column default value.
@@ -536,9 +532,8 @@ func (t *tableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, opts ..
 	}
 	if shouldWriteBinlog(ctx) {
 		// For insert, TiDB and Binlog can use same row and schema.
-		binlogRow = row
-		binlogColIDs = colIDs
-		err = t.addInsertBinlog(ctx, recordID, binlogRow, binlogColIDs)
+		// TODO: remove encode in addInsertBinlog and reuse the encode value.
+		err = t.addInsertBinlog(ctx, recordID, row, colIDs)
 		if err != nil {
 			return 0, err
 		}
