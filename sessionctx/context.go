@@ -16,10 +16,11 @@ package sessionctx
 import (
 	"context"
 	"fmt"
-
+	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/owner"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util"
@@ -138,6 +139,8 @@ type CacheManager struct {
 	// Cache for adding record.
 	colIDs []int64
 	row    []types.Datum
+
+	sqlDigester *parser.SQLDigester
 }
 
 func (c *CacheManager) GetAddRecordCache(length int) (colIDs []int64, row []types.Datum) {
@@ -149,4 +152,18 @@ func (c *CacheManager) GetAddRecordCache(length int) (colIDs []int64, row []type
 	c.colIDs = c.colIDs[:0]
 	c.row = c.row[:0]
 	return c.colIDs, c.row
+}
+
+func (c *CacheManager) GetSQLDigester() *parser.SQLDigester {
+	if c.sqlDigester == nil {
+		c.sqlDigester = parser.DigesterPool.Get().(*parser.SQLDigester)
+	}
+	return c.sqlDigester
+}
+
+func (c *CacheManager) Close() {
+	if c.sqlDigester != nil {
+		parser.DigesterPool.Put(c.sqlDigester)
+		fmt.Printf("\n-----------------------\nSQLDigestNum: %v, new digester: %v\n\n", stmtctx.SQLDigestNum, parser.NewSQLDigesterNum)
+	}
 }

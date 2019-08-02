@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/parser"
@@ -152,13 +153,22 @@ func (sc *StatementContext) ResetNowTs() {
 	sc.stmtTimeCached = false
 }
 
+var SQLDigestNum = int64(0)
+
 // SQLDigest gets normalized and digest for provided sql.
 // it will cache result after first calling.
-func (sc *StatementContext) SQLDigest() (normalized, sqlDigest string) {
+func (sc *StatementContext) SQLDigest(digester *parser.SQLDigester) (normalized, sqlDigest string) {
+	atomic.AddInt64(&SQLDigestNum, 1)
 	sc.digestMemo.Do(func() {
-		sc.digestMemo.normalized, sc.digestMemo.digest = parser.NormalizeDigest(sc.OriginalSQL)
+		sc.digestMemo.normalized, sc.digestMemo.digest = sc.NormalizeDigest(sc.OriginalSQL, digester)
 	})
 	return sc.digestMemo.normalized, sc.digestMemo.digest
+}
+
+// NormalizeDigest combines Normalize and DigestHash into one method.
+func (sc *StatementContext) NormalizeDigest(sql string, digester *parser.SQLDigester) (normalized, digest string) {
+	normalized, digest = digester.DoNormalizeDigest(sql)
+	return
 }
 
 // TableEntry presents table in db.

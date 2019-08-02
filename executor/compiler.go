@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/opentracing/opentracing-go"
-	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb/bindinfo"
 	"github.com/pingcap/tidb/config"
@@ -381,15 +380,15 @@ func addHint(ctx sessionctx.Context, stmtNode ast.StmtNode) ast.StmtNode {
 	case *ast.ExplainStmt:
 		switch x.Stmt.(type) {
 		case *ast.SelectStmt:
-			normalizeExplainSQL := parser.Normalize(x.Text())
+			normalizeExplainSQL := ctx.GetCacheManager().GetSQLDigester().DoNormalize(x.Text())
 			idx := strings.Index(normalizeExplainSQL, "select")
 			normalizeSQL := normalizeExplainSQL[idx:]
-			hash := parser.DigestHash(normalizeSQL)
+			hash := ctx.GetCacheManager().GetSQLDigester().DoDigest(normalizeSQL)
 			x.Stmt = addHintForSelect(hash, normalizeSQL, ctx, x.Stmt)
 		}
 		return x
 	case *ast.SelectStmt:
-		normalizeSQL, hash := parser.NormalizeDigest(x.Text())
+		normalizeSQL, hash := ctx.GetCacheManager().GetSQLDigester().DoNormalizeDigest(x.Text())
 		return addHintForSelect(hash, normalizeSQL, ctx, x)
 	default:
 		return stmtNode
