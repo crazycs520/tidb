@@ -549,9 +549,9 @@ func DatumToConstant(d types.Datum, tp byte) *Constant {
 // GetParamExpression generate a getparam function expression.
 func GetParamExpression(ctx sessionctx.Context, v *driver.ParamMarkerExpr) (Expression, error) {
 	useCache := ctx.GetSessionVars().StmtCtx.UseCache
-	tp := types.NewFieldType(mysql.TypeUnspecified)
-	types.DefaultParamTypeForValue(v.GetValue(), tp)
-	value := &Constant{Value: v.Datum, RetType: tp}
+	value := constCacheManager.getCacheConstant(ctx)
+	types.DefaultParamTypeForValue(v.GetValue(), value.RetType)
+	value.Value = v.Datum
 	if useCache {
 		f, err := NewFunctionBase(ctx, ast.GetParam, &v.Type,
 			DatumToConstant(types.NewIntDatum(int64(v.Order)), mysql.TypeLonglong))

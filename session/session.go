@@ -1124,15 +1124,15 @@ func (s *session) handleInvalidBindRecord(ctx context.Context, stmtNode ast.Stmt
 	case *ast.ExplainStmt:
 		switch x.Stmt.(type) {
 		case *ast.SelectStmt:
-			normalizeExplainSQL := parser.Normalize(x.Text())
+			normalizeExplainSQL := s.GetCacheManager().GetSQLDigester().DoNormalize(x.Text())
 			idx := strings.Index(normalizeExplainSQL, "select")
 			normdOrigSQL = normalizeExplainSQL[idx:]
-			hash = parser.DigestHash(normdOrigSQL)
+			hash = s.GetCacheManager().GetSQLDigester().DoDigest(normdOrigSQL)
 		default:
 			return
 		}
 	case *ast.SelectStmt:
-		normdOrigSQL, hash = parser.NormalizeDigest(x.Text())
+		normdOrigSQL, hash = s.GetCacheManager().GetSQLDigester().DoNormalizeDigest(x.Text())
 	default:
 		return
 	}

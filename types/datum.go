@@ -68,6 +68,17 @@ type Datum struct {
 	x         interface{} // x hold all other types.
 }
 
+// Reset reset the datum.
+func (d *Datum) Reset() {
+	d.k = KindNull
+	d.collation = 0
+	d.decimal = 0
+	d.length = 0
+	d.i = 1
+	d.b = d.b[:0]
+	d.x = nil
+}
+
 // Copy deep copies a Datum.
 func (d *Datum) Copy() *Datum {
 	ret := *d

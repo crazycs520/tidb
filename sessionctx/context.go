@@ -141,6 +141,8 @@ type CacheManager struct {
 	row    []types.Datum
 
 	sqlDigester *parser.SQLDigester
+
+	ConstantCacheIndex int
 }
 
 func (c *CacheManager) GetAddRecordCache(length int) (colIDs []int64, row []types.Datum) {
@@ -159,6 +161,11 @@ func (c *CacheManager) GetSQLDigester() *parser.SQLDigester {
 		c.sqlDigester = parser.DigesterPool.Get().(*parser.SQLDigester)
 	}
 	return c.sqlDigester
+}
+
+// Clean should be call
+func (c *CacheManager) Reset() {
+	c.ConstantCacheIndex = 0
 }
 
 func (c *CacheManager) Close() {
