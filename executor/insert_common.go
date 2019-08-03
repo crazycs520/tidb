@@ -186,9 +186,11 @@ func (e *InsertValues) insertRows(ctx context.Context, exec func(ctx context.Con
 	batchSize := sessVars.DMLBatchSize
 
 	rows := make([][]types.Datum, 0, len(e.Lists))
+	var hasValue []bool
 	for i, list := range e.Lists {
 		e.rowCount++
-		row, err := e.evalRow(ctx, list, i)
+		var row []types.Datum
+		row, hasValue, err = e.evalRow(ctx, list, i, hasValue)
 		if err != nil {
 			return err
 		}
@@ -230,34 +232,42 @@ func (e *InsertValues) handleErr(col *table.Column, val *types.Datum, rowIdx int
 
 // evalRow evaluates a to-be-inserted row. The value of the column may base on another column,
 // so we use setValueForRefColumn to fill the empty row some default values when needFillDefaultValues is true.
-func (e *InsertValues) evalRow(ctx context.Context, list []expression.Expression, rowIdx int) ([]types.Datum, error) {
+func (e *InsertValues) evalRow(ctx context.Context, list []expression.Expression, rowIdx int, hasValue []bool) ([]types.Datum, []bool, error) {
 	rowLen := len(e.Table.Cols())
 	if e.hasExtraHandle {
 		rowLen++
 	}
 	row := make([]types.Datum, rowLen)
-	hasValue := make([]bool, rowLen)
+	if len(hasValue) != rowLen {
+		hasValue = make([]bool, rowLen)
+	} else {
+		for i := range hasValue {
+			hasValue[i] = false
+		}
+	}
 
 	// For statements like `insert into t set a = b + 1`.
 	if e.hasRefCols {
 		if err := e.setValueForRefColumn(row, hasValue); err != nil {
-			return nil, err
+			return nil, hasValue, err
 		}
 	}
 
 	e.evalBuffer.SetDatums(row...)
+	rowCache := e.ctx.GetCacheManager().GetCacheDatums(len(list))
 	for i, expr := range list {
 		val, err := expr.Eval(e.evalBuffer.ToRow())
 		if err = e.handleErr(e.insertColumns[i], &val, rowIdx, err); err != nil {
-			return nil, err
+			return nil, hasValue, err
 		}
 		val1, err := table.CastValue(e.ctx, val, e.insertColumns[i].ToInfo())
 		if err = e.handleErr(e.insertColumns[i], &val, rowIdx, err); err != nil {
-			return nil, err
+			return nil, hasValue, err
 		}
 
 		offset := e.insertColumns[i].Offset
-		row[offset], hasValue[offset] = *val1.Copy(), true
+		val1.CopyWith(rowCache[i])
+		row[offset], hasValue[offset] = *rowCache[i], true
 		e.evalBuffer.SetDatum(offset, val1)
 	}
 
@@ -376,8 +386,8 @@ func (e *InsertValues) getRow(ctx context.Context, vals []types.Datum) ([]types.
 		row[offset] = casted
 		hasValue[offset] = true
 	}
-
-	return e.fillRow(ctx, row, hasValue)
+	row, _, err := e.fillRow(ctx, row, hasValue)
+	return row, err
 }
 
 func (e *InsertValues) getRowInPlace(ctx context.Context, vals []types.Datum, rowBuf []types.Datum) ([]types.Datum, error) {
@@ -391,7 +401,8 @@ func (e *InsertValues) getRowInPlace(ctx context.Context, vals []types.Datum, ro
 		rowBuf[offset] = casted
 		hasValue[offset] = true
 	}
-	return e.fillRow(ctx, rowBuf, hasValue)
+	row, _, err := e.fillRow(ctx, rowBuf, hasValue)
+	return row, err
 }
 
 func (e *InsertValues) filterErr(err error) error {
@@ -446,7 +457,7 @@ func (e *InsertValues) fillColValue(ctx context.Context, datum types.Datum, idx 
 
 // fillRow fills generated columns, auto_increment column and empty column.
 // For NOT NULL column, it will return error or use zero value based on sql_mode.
-func (e *InsertValues) fillRow(ctx context.Context, row []types.Datum, hasValue []bool) ([]types.Datum, error) {
+func (e *InsertValues) fillRow(ctx context.Context, row []types.Datum, hasValue []bool) ([]types.Datum, []bool, error) {
 	gCols := make([]*table.Column, 0)
 	for i, c := range e.Table.Cols() {
 		var err error
@@ -457,11 +468,11 @@ func (e *InsertValues) fillRow(ctx context.Context, row []types.Datum, hasValue 
 			// Get the default value for all no value columns, the auto increment column is different from the others.
 			row[i], err = e.fillColValue(ctx, row[i], i, c, hasValue[i])
 			if err != nil {
-				return nil, err
+				return nil, hasValue, err
 			}
 			// Handle the bad null error.
 			if row[i], err = c.HandleBadNull(row[i], e.ctx.GetSessionVars().StmtCtx); err != nil {
-				return nil, err
+				return nil, hasValue, err
 			}
 		}
 	}
@@ -469,18 +480,18 @@ func (e *InsertValues) fillRow(ctx context.Context, row []types.Datum, hasValue 
 		colIdx := gCol.ColumnInfo.Offset
 		val, err := e.GenExprs[i].Eval(chunk.MutRowFromDatums(row).ToRow())
 		if e.filterErr(err) != nil {
-			return nil, err
+			return nil, hasValue, err
 		}
 		row[colIdx], err = table.CastValue(e.ctx, val, gCol.ToInfo())
 		if err != nil {
-			return nil, err
+			return nil, hasValue, err
 		}
 		// Handle the bad null error.
 		if row[colIdx], err = gCol.HandleBadNull(row[colIdx], e.ctx.GetSessionVars().StmtCtx); err != nil {
-			return nil, err
+			return nil, hasValue, err
 		}
 	}
-	return row, nil
+	return row, hasValue, nil
 }
 
 func (e *InsertValues) adjustAutoIncrementDatum(ctx context.Context, d types.Datum, hasValue bool, c *table.Column) (types.Datum, error) {

@@ -74,7 +74,7 @@ func (d *Datum) Reset() {
 	d.collation = 0
 	d.decimal = 0
 	d.length = 0
-	d.i = 1
+	d.i = 0
 	d.b = d.b[:0]
 	d.x = nil
 }
@@ -94,6 +94,32 @@ func (d *Datum) Copy() *Datum {
 		ret.SetMysqlTime(d.GetMysqlTime())
 	}
 	return &ret
+}
+
+// Copy deep copies a Datum.
+func (d *Datum) CopyWith(ret *Datum) {
+	ret.k = d.k
+	ret.collation = d.collation
+	ret.decimal = d.decimal
+	ret.length = d.length
+	ret.i = d.i
+	ret.x = d.x
+	if d.b != nil {
+		if cap(ret.b) >= len(d.b) {
+			ret.b = ret.b[:0]
+			ret.b = append(ret.b, d.b...)
+		} else {
+			ret.b = make([]byte, len(d.b))
+			copy(ret.b, d.b)
+		}
+	}
+	switch ret.Kind() {
+	case KindMysqlDecimal:
+		d := *d.GetMysqlDecimal()
+		ret.SetMysqlDecimal(&d)
+	case KindMysqlTime:
+		ret.SetMysqlTime(d.GetMysqlTime())
+	}
 }
 
 // Kind gets the kind of the datum.

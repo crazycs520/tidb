@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/kvcache"
 	"github.com/pingcap/tipb/go-binlog"
+	"sync"
 )
 
 // Context is an interface for transaction and executive args environment.
@@ -143,6 +144,10 @@ type CacheManager struct {
 	sqlDigester *parser.SQLDigester
 
 	ConstantCacheIndex int
+
+	datums    []*types.Datum
+	datumsIdx int
+	sync.Mutex
 }
 
 func (c *CacheManager) GetAddRecordCache(length int) (colIDs []int64, row []types.Datum) {
@@ -166,6 +171,7 @@ func (c *CacheManager) GetSQLDigester() *parser.SQLDigester {
 // Clean should be call
 func (c *CacheManager) Reset() {
 	c.ConstantCacheIndex = 0
+	c.datumsIdx = 0
 }
 
 func (c *CacheManager) Close() {
@@ -173,4 +179,35 @@ func (c *CacheManager) Close() {
 		parser.DigesterPool.Put(c.sqlDigester)
 		fmt.Printf("\n-----------------------\nSQLDigestNum: %v, new digester: %v\n\n", stmtctx.SQLDigestNum, parser.NewSQLDigesterNum)
 	}
+}
+
+func (c *CacheManager) GetCacheDatum() *types.Datum {
+	c.Lock()
+	if c.datumsIdx >= len(c.datums) {
+		d := &types.Datum{}
+		c.datums = append(c.datums, d)
+		c.datumsIdx++
+		c.Unlock()
+		return d
+	}
+	d := c.datums[c.datumsIdx]
+	c.datumsIdx++
+	c.Unlock()
+	d.Reset()
+	return d
+}
+
+func (c *CacheManager) GetCacheDatums(length int) []*types.Datum {
+	c.Lock()
+	for (c.datumsIdx + length) > len(c.datums) {
+		d := &types.Datum{}
+		c.datums = append(c.datums, d)
+	}
+	ds := c.datums[c.datumsIdx : c.datumsIdx+length]
+	c.datumsIdx += length
+	c.Unlock()
+	for i := range ds {
+		ds[i].Reset()
+	}
+	return ds
 }
