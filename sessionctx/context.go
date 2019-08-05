@@ -18,11 +18,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/owner"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util"
@@ -142,10 +140,7 @@ type CacheManager struct {
 	colIDs []int64
 	row    []types.Datum
 
-	sqlDigester *parser.SQLDigester
-
-	ConstantCacheIndex int
-
+	// Cache for Datum.
 	datums    []*types.Datum
 	datumsIdx int
 	sync.Mutex
@@ -162,24 +157,9 @@ func (c *CacheManager) GetAddRecordCache(length int) (colIDs []int64, row []type
 	return c.colIDs, c.row
 }
 
-func (c *CacheManager) GetSQLDigester() *parser.SQLDigester {
-	if c.sqlDigester == nil {
-		c.sqlDigester = parser.DigesterPool.Get().(*parser.SQLDigester)
-	}
-	return c.sqlDigester
-}
-
 // Clean should be call
 func (c *CacheManager) Reset() {
-	c.ConstantCacheIndex = 0
 	c.datumsIdx = 0
-}
-
-func (c *CacheManager) Close() {
-	if c.sqlDigester != nil {
-		parser.DigesterPool.Put(c.sqlDigester)
-		fmt.Printf("\n-----------------------\nSQLDigestNum: %v, new digester: %v\n\n", stmtctx.SQLDigestNum, parser.NewSQLDigesterNum)
-	}
 }
 
 func (c *CacheManager) GetCacheDatum() *types.Datum {

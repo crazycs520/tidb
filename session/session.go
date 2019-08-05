@@ -1124,15 +1124,15 @@ func (s *session) handleInvalidBindRecord(ctx context.Context, stmtNode ast.Stmt
 	case *ast.ExplainStmt:
 		switch x.Stmt.(type) {
 		case *ast.SelectStmt:
-			normalizeExplainSQL := s.GetCacheManager().GetSQLDigester().DoNormalize(x.Text())
+			normalizeExplainSQL := parser.Normalize(x.Text())
 			idx := strings.Index(normalizeExplainSQL, "select")
 			normdOrigSQL = normalizeExplainSQL[idx:]
-			hash = s.GetCacheManager().GetSQLDigester().DoDigest(normdOrigSQL)
+			hash = parser.DigestHash(normdOrigSQL)
 		default:
 			return
 		}
 	case *ast.SelectStmt:
-		normdOrigSQL, hash = s.GetCacheManager().GetSQLDigester().DoNormalizeDigest(x.Text())
+		normdOrigSQL, hash = parser.NormalizeDigest(x.Text())
 	default:
 		return
 	}
@@ -1342,9 +1342,6 @@ func (s *session) ClearValue(key fmt.Stringer) {
 // Close function does some clean work when session end.
 // Close should release the table locks which hold by the session.
 func (s *session) Close() {
-	if s.cacheManager != nil {
-		s.cacheManager.Close()
-	}
 	// TODO: do clean table locks when session exited without execute Close.
 	// TODO: do clean table locks when tidb-server was `kill -9`.
 	if s.HasLockedTables() && config.TableLockEnabled() {
