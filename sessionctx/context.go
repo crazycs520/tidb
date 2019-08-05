@@ -16,6 +16,8 @@ package sessionctx
 import (
 	"context"
 	"fmt"
+	"sync"
+
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/kv"
@@ -26,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/kvcache"
 	"github.com/pingcap/tipb/go-binlog"
-	"sync"
 )
 
 // Context is an interface for transaction and executive args environment.
@@ -100,7 +101,7 @@ type Context interface {
 	ReleaseAllTableLocks()
 	// HasLockedTables uses to check whether this session locked any tables.
 	HasLockedTables() bool
-
+	// GetCacheManager gets cache manager.
 	GetCacheManager() *CacheManager
 }
 

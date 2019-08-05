@@ -15,6 +15,7 @@ package expression
 
 import (
 	"fmt"
+
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/sessionctx"
@@ -25,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
-	"sync"
 )
 
 var (
@@ -352,67 +352,4 @@ func (c *Constant) ResolveIndices(_ *Schema) (Expression, error) {
 
 func (c *Constant) resolveIndices(_ *Schema) error {
 	return nil
-}
-
-func (c *Constant) reset() {
-	c.DeferredExpr = nil
-	c.hashcode = c.hashcode[:0]
-	resetFieldType(c.RetType)
-	//c.Value.Reset()
-}
-
-func resetFieldType(tp *types.FieldType) {
-	tp.Tp = 0
-	tp.Flag = 0
-	tp.Flen = 0
-	tp.Decimal = 0
-	tp.Charset = ""
-	tp.Collate = ""
-	tp.Elems = tp.Elems[:0]
-}
-
-var constCacheManager = constantCacheManager{caches: make(map[uint64]*sessionConstantCache, 10)}
-
-// TODO: clean the cache.
-type constantCacheManager struct {
-	caches map[uint64]*sessionConstantCache
-	sync.RWMutex
-}
-
-func (c *constantCacheManager) getCacheConstant(sc sessionctx.Context) *Constant {
-	connID := sc.GetSessionVars().ConnectionID
-	if connID <= 0 {
-		return newConstant()
-	}
-	c.RLock()
-	sessionCache, ok := c.caches[connID]
-	c.RUnlock()
-	if !ok {
-		sessionCache = &sessionConstantCache{}
-		c.Lock()
-		c.caches[connID] = sessionCache
-		c.Unlock()
-	}
-	return sessionCache.getConstant(sc)
-}
-
-type sessionConstantCache struct {
-	cache []*Constant
-	sync.Mutex
-}
-
-func (c *sessionConstantCache) getConstant(sc sessionctx.Context) *Constant {
-	c.Lock()
-	if sc.GetCacheManager().ConstantCacheIndex >= len(c.cache) {
-		c.cache = append(c.cache, newConstant())
-	}
-	cons := c.cache[sc.GetCacheManager().ConstantCacheIndex]
-	sc.GetCacheManager().ConstantCacheIndex++
-	c.Unlock()
-	cons.reset()
-	return cons
-}
-
-func newConstant() *Constant {
-	return &Constant{RetType: types.NewFieldType(mysql.TypeUnspecified)}
 }

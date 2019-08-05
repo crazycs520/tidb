@@ -248,6 +248,7 @@ func (c *Context) HasLockedTables() bool {
 	return false
 }
 
+// GetCacheManager implements the context.Context interface.
 func (s *Context) GetCacheManager() *sessionctx.CacheManager {
 	if s.cacheManager == nil {
 		s.cacheManager = &sessionctx.CacheManager{}

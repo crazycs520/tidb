@@ -1969,6 +1969,7 @@ func (s *session) recordTransactionCounter(err error) {
 	}
 }
 
+// GetCacheManager implements the context.Context interface.
 func (s *session) GetCacheManager() *sessionctx.CacheManager {
 	if s.cacheManager == nil {
 		s.cacheManager = &sessionctx.CacheManager{}
