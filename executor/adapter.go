@@ -178,7 +178,7 @@ func (a *recordSet) NewChunk() *chunk.Chunk {
 
 func (a *recordSet) Close() error {
 	err := a.executor.Close()
-	a.stmt.LogSlowQuery(a.txnStartTS, a.lastErr == nil, true)
+	a.stmt.LogSlowQuery(a.txnStartTS, a.lastErr == nil)
 	a.stmt.Ctx.GetSessionVars().PrevStmt = a.stmt.OriginText()
 	a.stmt.logAudit()
 	a.stmt.SummaryStmt()
@@ -709,7 +709,7 @@ func FormatSQL(sql string, sessVars *variable.SessionVars) string {
 }
 
 // LogSlowQuery is used to print the slow query in the log files.
-func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, isSelect bool) {
+func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool) {
 	sessVars := a.Ctx.GetSessionVars()
 	level := log.GetLevel()
 	if level > zapcore.WarnLevel {
@@ -751,16 +751,6 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, isSelect bool) {
 	}
 	if _, ok := a.StmtNode.(*ast.CommitStmt); ok {
 		slowItems.PrevStmt = FormatSQL(sessVars.PrevStmt, sessVars)
-	}
-	if isSelect && atomic.LoadUint32(&cfg.Log.SlowLogPlan) == 1 {
-		//if p, ok := a.Plan.(plannercore.PhysicalPlan); ok {
-		//planTree, err := plannercore.EncodePlan(p)
-		//if err == nil {
-		//	slowItems.Plan = planTree
-		//} else {
-		//	logutil.BgLogger().Error("encode plan tree error", zap.Error(err))
-		//}
-		//}
 	}
 	if costTime < threshold {
 		logutil.SlowQueryLogger.Debug(sessVars.SlowLogFormat(slowItems))
