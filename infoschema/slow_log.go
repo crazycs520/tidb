@@ -23,7 +23,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/planner/codec"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
@@ -326,12 +325,12 @@ func (st *slowQueryTuple) convertToDatumRow() []types.Datum {
 	}
 	planString := st.plan
 	if len(planString) > 0 {
-		decodePlanString, err := codec.DecodePlan(st.plan)
-		if err == nil {
-			planString = decodePlanString
-		} else {
-			logutil.BgLogger().Error("encode plan tree error", zap.String("plan", st.plan), zap.Error(err))
-		}
+		//decodePlanString, err := codec.DecodePlan(st.plan)
+		//if err == nil {
+		//	planString = decodePlanString
+		//} else {
+		//	logutil.BgLogger().Error("encode plan tree error", zap.String("plan", st.plan), zap.Error(err))
+		//}
 
 	}
 	record = append(record, types.NewStringDatum(planString))
