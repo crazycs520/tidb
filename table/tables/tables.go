@@ -274,8 +274,8 @@ func (t *tableCommon) UpdateRecord(ctx sessionctx.Context, h int64, oldData, new
 		return err
 	}
 
-	// TODO: reuse bs, like AddRecord does.
-	bs := kv.NewBufferStore(txn, kv.DefaultTxnMembufCap)
+	sessVars := ctx.GetSessionVars()
+	bs := sessVars.GetUpdateBufferStoreWithTxn(txn)
 
 	// rebuild index
 	err = t.rebuildIndices(ctx, bs, h, touched, oldData, newData)
@@ -316,7 +316,6 @@ func (t *tableCommon) UpdateRecord(ctx sessionctx.Context, h int64, oldData, new
 	}
 
 	key := t.RecordKey(h)
-	sessVars := ctx.GetSessionVars()
 	sc := sessVars.StmtCtx
 	value, err := tablecodec.EncodeRow(sc, row, colIDs, nil, nil)
 	if err != nil {

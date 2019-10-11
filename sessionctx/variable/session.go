@@ -370,6 +370,8 @@ type SessionVars struct {
 
 	writeStmtBufs WriteStmtBufs
 
+	updateBufferStore *kv.BufferStore
+
 	// L2CacheSize indicates the size of CPU L2 cache, using byte as unit.
 	L2CacheSize int
 
@@ -603,6 +605,17 @@ func (s *SessionVars) SetReplicaRead(val kv.ReplicaReadType) {
 // GetWriteStmtBufs get pointer of SessionVars.writeStmtBufs.
 func (s *SessionVars) GetWriteStmtBufs() *WriteStmtBufs {
 	return &s.writeStmtBufs
+}
+
+// GetWriteStmtBufs get pointer of SessionVars.writeStmtBufs.
+func (s *SessionVars) GetUpdateBufferStoreWithTxn(txn kv.Transaction) *kv.BufferStore {
+	if s.updateBufferStore == nil {
+		s.updateBufferStore = kv.NewBufferStore(txn, kv.DefaultTxnMembufCap)
+		return s.updateBufferStore
+	}
+	s.updateBufferStore.SetRetriever(txn)
+	s.updateBufferStore.Reset()
+	return s.updateBufferStore
 }
 
 // GetSplitRegionTimeout gets split region timeout.

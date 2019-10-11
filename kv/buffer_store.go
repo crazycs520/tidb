@@ -52,6 +52,11 @@ func (s *BufferStore) Reset() {
 	s.MemBuffer.Reset()
 }
 
+// SetRetriever sets the Retriever.
+func (s *BufferStore) SetRetriever(r Retriever) {
+	s.r = r
+}
+
 // SetCap sets the MemBuffer capability.
 func (s *BufferStore) SetCap(cap int) {
 	s.MemBuffer.SetCap(cap)
