@@ -136,6 +136,7 @@ func (e *UpdateExec) Next(ctx context.Context, req *chunk.Chunk) error {
 			return err
 		}
 		e.fetched = true
+		defer e.ctx.GetSessionVars().ResetBuffers()
 		e.ctx.GetSessionVars().StmtCtx.AddRecordRows(uint64(len(e.rows)))
 
 		for {

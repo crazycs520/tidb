@@ -181,12 +181,33 @@ type WriteStmtBufs struct {
 	IndexKeyBuf []byte
 }
 
+// GetWriteStmtBufs get pointer of SessionVars.writeStmtBufs.
+func (s *WriteStmtBufs) GetBufferStoreWithTxn(txn kv.Transaction) *kv.BufferStore {
+	if s.BufStore == nil {
+		s.BufStore = kv.NewBufferStore(txn, kv.DefaultTxnMembufCap)
+		return s.BufStore
+	}
+	s.BufStore.SetRetriever(txn)
+	s.BufStore.Reset()
+	return s.BufStore
+}
+
 func (ib *WriteStmtBufs) clean() {
 	ib.BufStore = nil
 	ib.RowValBuf = nil
 	ib.AddRowValues = nil
 	ib.IndexValsBuf = nil
 	ib.IndexKeyBuf = nil
+}
+
+func (ib *WriteStmtBufs) Reset() {
+	if ib.BufStore != nil {
+		ib.BufStore.Reset()
+	}
+	ib.RowValBuf = ib.RowValBuf[:0]
+	ib.AddRowValues = ib.AddRowValues[:0]
+	ib.IndexValsBuf = ib.IndexValsBuf[:0]
+	ib.IndexKeyBuf = ib.IndexKeyBuf[:0]
 }
 
 // SessionVars is to handle user-defined or global variables in the current session.
@@ -626,6 +647,11 @@ func (s *SessionVars) GetSplitRegionTimeout() time.Duration {
 // CleanBuffers cleans the temporary bufs
 func (s *SessionVars) CleanBuffers() {
 	s.GetWriteStmtBufs().clean()
+}
+
+// ResetBuffers cleans the temporary bufs
+func (s *SessionVars) ResetBuffers() {
+	s.GetWriteStmtBufs().Reset()
 }
 
 // AllocPlanColumnID allocates column id for plan.
