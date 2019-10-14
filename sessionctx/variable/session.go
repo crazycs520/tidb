@@ -181,7 +181,7 @@ type WriteStmtBufs struct {
 	IndexKeyBuf []byte
 }
 
-// GetWriteStmtBufs get pointer of SessionVars.writeStmtBufs.
+// GetBufferStoreWithTxn gets the buffer store with the txn.
 func (s *WriteStmtBufs) GetBufferStoreWithTxn(txn kv.Transaction) *kv.BufferStore {
 	if s.BufStore == nil {
 		s.BufStore = kv.NewBufferStore(txn, kv.DefaultTxnMembufCap)
@@ -192,22 +192,23 @@ func (s *WriteStmtBufs) GetBufferStoreWithTxn(txn kv.Transaction) *kv.BufferStor
 	return s.BufStore
 }
 
-func (ib *WriteStmtBufs) clean() {
-	ib.BufStore = nil
-	ib.RowValBuf = nil
-	ib.AddRowValues = nil
-	ib.IndexValsBuf = nil
-	ib.IndexKeyBuf = nil
+func (s *WriteStmtBufs) clean() {
+	s.BufStore = nil
+	s.RowValBuf = nil
+	s.AddRowValues = nil
+	s.IndexValsBuf = nil
+	s.IndexKeyBuf = nil
 }
 
-func (ib *WriteStmtBufs) Reset() {
-	if ib.BufStore != nil {
-		ib.BufStore.Reset()
+// Reset uses to reset the buffer.
+func (s *WriteStmtBufs) Reset() {
+	if s.BufStore != nil {
+		s.BufStore.Reset()
 	}
-	ib.RowValBuf = ib.RowValBuf[:0]
-	ib.AddRowValues = ib.AddRowValues[:0]
-	ib.IndexValsBuf = ib.IndexValsBuf[:0]
-	ib.IndexKeyBuf = ib.IndexKeyBuf[:0]
+	s.RowValBuf = s.RowValBuf[:0]
+	s.AddRowValues = s.AddRowValues[:0]
+	s.IndexValsBuf = s.IndexValsBuf[:0]
+	s.IndexKeyBuf = s.IndexKeyBuf[:0]
 }
 
 // SessionVars is to handle user-defined or global variables in the current session.
@@ -390,8 +391,6 @@ type SessionVars struct {
 	EnableArrow bool
 
 	writeStmtBufs WriteStmtBufs
-
-	updateBufferStore *kv.BufferStore
 
 	// L2CacheSize indicates the size of CPU L2 cache, using byte as unit.
 	L2CacheSize int
@@ -626,17 +625,6 @@ func (s *SessionVars) SetReplicaRead(val kv.ReplicaReadType) {
 // GetWriteStmtBufs get pointer of SessionVars.writeStmtBufs.
 func (s *SessionVars) GetWriteStmtBufs() *WriteStmtBufs {
 	return &s.writeStmtBufs
-}
-
-// GetWriteStmtBufs get pointer of SessionVars.writeStmtBufs.
-func (s *SessionVars) GetUpdateBufferStoreWithTxn(txn kv.Transaction) *kv.BufferStore {
-	if s.updateBufferStore == nil {
-		s.updateBufferStore = kv.NewBufferStore(txn, kv.DefaultTxnMembufCap)
-		return s.updateBufferStore
-	}
-	s.updateBufferStore.SetRetriever(txn)
-	s.updateBufferStore.Reset()
-	return s.updateBufferStore
 }
 
 // GetSplitRegionTimeout gets split region timeout.

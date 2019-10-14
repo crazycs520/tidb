@@ -318,10 +318,13 @@ func (t *tableCommon) UpdateRecord(ctx sessionctx.Context, h int64, oldData, new
 
 	key := t.RecordKey(h)
 	sc := sessVars.StmtCtx
-	value, err := tablecodec.EncodeRow(sc, row, colIDs, writeBufs.RowValBuf, writeBufs.AddRowValues)
+	adjustRowValuesBuf(writeBufs, len(row))
+	writeBufs.RowValBuf, err = tablecodec.EncodeRow(sc, row, colIDs, writeBufs.RowValBuf, writeBufs.AddRowValues)
 	if err != nil {
 		return err
 	}
+
+	value := writeBufs.RowValBuf
 	if err = bs.Set(key, value); err != nil {
 		return err
 	}

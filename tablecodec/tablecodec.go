@@ -240,7 +240,7 @@ func EncodeRow(sc *stmtctx.StatementContext, row []types.Datum, colIDs []int64, 
 		return nil, errors.Errorf("EncodeRow error: data and columnID count not match %d vs %d", len(row), len(colIDs))
 	}
 	valBuf = valBuf[:0]
-	if values == nil || len(values) < len(row)*2 {
+	if values == nil || len(values) < (len(row)*2) {
 		values = make([]types.Datum, len(row)*2)
 	} else {
 		values = values[:len(row)*2]
