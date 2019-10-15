@@ -1,14 +1,11 @@
-package helloworld
+package rpcserver
 
 import (
 	"context"
-	"google.golang.org/grpc"
-	"log"
-	"net"
-
-	pb "github.com/pingcap/tidb/rpcserver/helloworld"
+	pb "github.com/pingcap/tidb/rpcserver/rpcserver_proto"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
 
 // server is used to implement helloworld.GreeterServer.
@@ -24,14 +21,8 @@ func (s *server) SayHelloAgain(ctx context.Context, in *pb.HelloRequest) (*pb.He
 	return &pb.HelloReply{Message: "Hello again " + in.Name, Body: "tidb"}, nil
 }
 
-func RunRPCServer(addr string) {
-	lis, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
+func CreateRPCServer() *grpc.Server {
 	s := grpc.NewServer()
 	pb.RegisterGreeterServer(s, &server{})
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
+	return s
 }

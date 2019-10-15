@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	pb "github.com/pingcap/tidb/rpcserver/helloworld"
+	pb "github.com/pingcap/tidb/rpcserver/rpcserver_proto"
 	"google.golang.org/grpc"
 )
 

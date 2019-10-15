@@ -17,7 +17,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	helloworld "github.com/pingcap/tidb/rpcserver"
 	"os"
 	"runtime"
 	"strconv"
@@ -557,12 +556,6 @@ func createServer() {
 	terror.MustNil(err, closeDomainAndStorage)
 	go dom.ExpensiveQueryHandle().SetSessionManager(svr).Run()
 	dom.InfoSyncer().SetSessionManager(svr)
-	createRPCServer()
-}
-
-func createRPCServer() {
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Status.StatusPort)
-	go helloworld.RunRPCServer(addr)
 }
 
 func serverShutdown(isgraceful bool) {
