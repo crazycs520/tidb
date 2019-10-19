@@ -83,3 +83,5 @@ require (
 go 1.13
 
 replace github.com/pingcap/kvproto => github.com/crazycs520/kvproto v0.0.0-20191019041535-13904503e947
+
+replace github.com/pingcap/tipb => github.com/crazycs520/tipb v0.0.0-20191019072218-db0762008467
