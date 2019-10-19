@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"time"
 
@@ -42,6 +43,8 @@ const (
 	ServerInformationPath = "/tidb/server/info"
 	// ServerMinStartTSPath store the server min start timestamp.
 	ServerMinStartTSPath = "/tidb/server/minstartts"
+
+	ServerGenIDPath = "/tidb/server/id"
 	// keyOpDefaultRetryCnt is the default retry count for etcd store.
 	keyOpDefaultRetryCnt = 2
 	// keyOpDefaultTimeout is the default time out for etcd store.
@@ -66,6 +69,7 @@ type InfoSyncer struct {
 // It will not be updated when tidb-server running. So please only put static information in ServerInfo struct.
 type ServerInfo struct {
 	ServerVersionInfo
+	ServerID   int64  `json:"server_id"`
 	ID         string `json:"ddl_id"`
 	IP         string `json:"ip"`
 	Port       uint   `json:"listening_port"`
@@ -80,6 +84,7 @@ type ServerVersionInfo struct {
 }
 
 var globalInfoSyncer *InfoSyncer
+var globalServerID int64
 
 // GlobalInfoSyncerInit return a new InfoSyncer. It is exported for testing.
 func GlobalInfoSyncerInit(ctx context.Context, id string, etcdCli *clientv3.Client) (*InfoSyncer, error) {
@@ -160,6 +165,13 @@ func (is *InfoSyncer) storeServerInfo(ctx context.Context) error {
 	if is.etcdCli == nil {
 		return nil
 	}
+	id, err := is.GenGlobalServerID(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	is.info.ServerID = id
+	globalServerID = id
+
 	infoBuf, err := json.Marshal(is.info)
 	if err != nil {
 		return errors.Trace(err)
@@ -167,6 +179,49 @@ func (is *InfoSyncer) storeServerInfo(ctx context.Context) error {
 	str := string(hack.String(infoBuf))
 	err = util.PutKVToEtcd(ctx, is.etcdCli, keyOpDefaultRetryCnt, is.serverInfoPath, str, clientv3.WithLease(is.session.Lease()))
 	return err
+}
+
+func GetGlobalServerID() int64 {
+	return globalServerID
+}
+
+// OwnerUpdateGlobalVersion implements SchemaSyncer.OwnerUpdateGlobalVersion interface.
+func (is *InfoSyncer) GenGlobalServerID(ctx context.Context) (int64, error) {
+	if is.etcdCli == nil {
+		return 1, nil
+	}
+
+	var resp *clientv3.GetResponse
+	var err error
+	ver := 0
+	for i := 0; i < 100; i++ {
+		if err != nil {
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
+		}
+		resp, err = is.etcdCli.Get(ctx, ServerGenIDPath)
+		if err != nil {
+			continue
+		}
+		value := ""
+		if len(resp.Kvs) > 0 {
+			value = string(resp.Kvs[0].Value)
+			ver, err = strconv.Atoi(value)
+			if err != nil {
+				logutil.BgLogger().Error("gen server id, parse ver error, should never happen", zap.Error(err))
+			}
+		}
+
+		_, err = is.etcdCli.Txn(ctx).
+			If(clientv3.Compare(clientv3.Value(ServerGenIDPath), "=", value)).
+			Then(clientv3.OpPut(ServerGenIDPath, strconv.FormatInt(int64(ver+1), 10))).
+			Commit()
+		if err != nil {
+			logutil.BgLogger().Error("gen server id error", zap.Error(err))
+			continue
+		}
+		break
+	}
+	return int64(ver + 1), nil
 }
 
 // RemoveServerInfo remove self server static information from etcd.

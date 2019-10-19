@@ -2,6 +2,7 @@ package infoschema
 
 import (
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"strings"
@@ -43,7 +44,7 @@ func dataForClusterSlowLog(ctx sessionctx.Context) ([][]types.Datum, error) {
 	}
 
 	for i := range rows {
-		rows[i] = append(rows[i], types.NewUintDatum(1))
+		rows[i] = append(rows[i], types.NewUintDatum(uint64(infosync.GetGlobalServerID())))
 	}
 	return rows, nil
 }
