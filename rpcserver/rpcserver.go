@@ -2,27 +2,22 @@ package rpcserver
 
 import (
 	"context"
-	pb "github.com/pingcap/tidb/rpcserver/rpcserver_proto"
-	"github.com/pingcap/tidb/util/logutil"
-	"go.uber.org/zap"
+	"fmt"
+	"github.com/pingcap/kvproto/pkg/mpp_processor"
+	"github.com/pingcap/kvproto/pkg/tidbpb"
 	"google.golang.org/grpc"
 )
 
-// server is used to implement helloworld.GreeterServer.
-type server struct{}
-
-// SayHello implements helloworld.GreeterServer
-func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
-	logutil.BgLogger().Info("get rpc msg", zap.String("name", in.Name))
-	return &pb.HelloReply{Message: "hello, this is cs, you are " + in.Name}, nil
-}
-
-func (s *server) SayHelloAgain(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
-	return &pb.HelloReply{Message: "Hello again " + in.Name, Body: "tidb"}, nil
-}
-
 func CreateRPCServer() *grpc.Server {
 	s := grpc.NewServer()
-	pb.RegisterGreeterServer(s, &server{})
+	tidbpb.RegisterTidbServer(s, &mppServer{})
 	return s
+}
+
+type mppServer struct {
+}
+
+func (s *mppServer) MppProcessor(ctx context.Context, req *mpp_processor.Request) (*mpp_processor.Response, error) {
+	fmt.Println(string(req.Data))
+	return &mpp_processor.Response{Data: []byte("hello " + string(req.Data))}, nil
 }

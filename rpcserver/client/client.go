@@ -6,7 +6,8 @@ import (
 	"os"
 	"time"
 
-	pb "github.com/pingcap/tidb/rpcserver/rpcserver_proto"
+	"github.com/pingcap/kvproto/pkg/mpp_processor"
+	"github.com/pingcap/kvproto/pkg/tidbpb"
 	"google.golang.org/grpc"
 )
 
@@ -22,7 +23,7 @@ func main() {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
-	c := pb.NewGreeterClient(conn)
+	c := tidbpb.NewTidbClient(conn)
 
 	// Contact the server and print out its response.
 	name := defaultName
@@ -31,15 +32,9 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: name})
+	r, err := c.MppProcessor(ctx, &mpp_processor.Request{Data: []byte(name)})
 	if err != nil {
 		log.Fatalf("could not greet: %v", err)
 	}
-	log.Printf("Greeting: %s", r.Message)
-
-	r, err = c.SayHelloAgain(ctx, &pb.HelloRequest{Name: name})
-	if err != nil {
-		log.Fatalf("could not greet: %v", err)
-	}
-	log.Printf("Greeting: %s, body: %v", r.Message, r.Body)
+	log.Printf("Greeting: %s", r.Data)
 }
