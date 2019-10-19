@@ -34,5 +34,5 @@ func (e *ClusterTableReaderExecutor) Next(ctx context.Context, chk *chunk.Chunk)
 		return err
 	}
 	req := &mpp_processor.Request{Data: data}
-	return mpp_client.SendRPC(e.ctx, req, chk, retTypes(e))
+	return mpp_client.SendRPCToALLServer(e.ctx, req, chk, retTypes(e))
 }

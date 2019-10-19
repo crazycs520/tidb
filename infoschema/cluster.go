@@ -14,7 +14,7 @@ const (
 )
 
 var clusterTableMap = map[string]struct{}{
-	clusterTableSlowLog: struct{}{},
+	clusterTableSlowLog: {},
 }
 
 var clusterSlowQueryCols []columnInfo

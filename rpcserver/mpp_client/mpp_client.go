@@ -5,6 +5,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/kvproto/pkg/mpp_processor"
 	"github.com/pingcap/kvproto/pkg/tidbpb"
+	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -12,14 +13,25 @@ import (
 	"github.com/pingcap/tipb/go-tipb"
 	"google.golang.org/grpc"
 	"log"
+	"strconv"
 	"time"
 )
 
-const (
-	address = "localhost:10080"
-)
+func SendRPCToALLServer(sctx sessionctx.Context, req *mpp_processor.Request, chk *chunk.Chunk, fieldTypes []*types.FieldType) error {
+	servers, err := infosync.GetAllServerInfo(context.Background())
+	if err != nil {
+		return err
+	}
+	for _, ser := range servers {
+		err := SendRPC(sctx, ser.IP+":"+strconv.FormatUint(uint64(ser.StatusPort), 10), req, chk, fieldTypes)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-func SendRPC(sctx sessionctx.Context, req *mpp_processor.Request, chk *chunk.Chunk, fieldTypes []*types.FieldType) error {
+func SendRPC(sctx sessionctx.Context, address string, req *mpp_processor.Request, chk *chunk.Chunk, fieldTypes []*types.FieldType) error {
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
 	if err != nil {
