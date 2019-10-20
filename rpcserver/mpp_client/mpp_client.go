@@ -60,14 +60,15 @@ func readRowsData(ctx sessionctx.Context, resp *mpp_processor.Response, chk *chu
 	if len(selResp.Chunks) < 1 {
 		return nil
 	}
-	rowsData := selResp.Chunks[0].RowsData
-
 	decoder := codec.NewDecoder(chk, ctx.GetSessionVars().Location())
-	for !chk.IsFull() && len(rowsData) > 0 {
-		for i := 0; i < len(fieldTypes); i++ {
-			rowsData, err = decoder.DecodeOne(rowsData, i, fieldTypes[i])
-			if err != nil {
-				return err
+	for _, chunk := range selResp.Chunks {
+		rowsData := chunk.RowsData
+		for len(rowsData) > 0 {
+			for i := 0; i < len(fieldTypes); i++ {
+				rowsData, err = decoder.DecodeOne(rowsData, i, fieldTypes[i])
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
