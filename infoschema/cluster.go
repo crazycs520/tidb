@@ -5,15 +5,19 @@ import (
 	"github.com/pingcap/tidb/domain/infosync"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/stmtsummary"
 	"strings"
 )
 
 const clusterTableSuffix = "_CLUSTER"
 
+const TableNameEventsStatementsSummaryByDigestUpper = "EVENTS_STATEMENTS_SUMMARY_BY_DIGEST"
+
 // Cluster table list.
 const (
-	clusterTableSlowLog     = tableSlowLog + clusterTableSuffix
-	clusterTableProcesslist = tableProcesslist + clusterTableSuffix
+	clusterTableSlowLog                             = tableSlowLog + clusterTableSuffix
+	clusterTableProcesslist                         = tableProcesslist + clusterTableSuffix
+	clusterTableNameEventsStatementsSummaryByDigest = TableNameEventsStatementsSummaryByDigestUpper + clusterTableSuffix
 )
 
 // cluster table columns
@@ -24,8 +28,9 @@ var (
 
 // register for cluster memory tables;
 var clusterTableMap = map[string]struct{}{
-	clusterTableSlowLog:     {},
-	clusterTableProcesslist: {},
+	clusterTableSlowLog:                             {},
+	clusterTableProcesslist:                         {},
+	clusterTableNameEventsStatementsSummaryByDigest: {},
 }
 
 var clusterTableCols = []columnInfo{
@@ -51,6 +56,19 @@ func IsClusterTable(tableName string) bool {
 	return ok
 }
 
+func GetClusterMemTableRows(ctx sessionctx.Context, tableName string) (rows [][]types.Datum, err error) {
+	tableName = strings.ToUpper(tableName)
+	switch tableName {
+	case clusterTableSlowLog:
+		rows, err = dataForClusterSlowLog(ctx)
+	case clusterTableProcesslist:
+		rows, err = dataForClusterProcesslist(ctx)
+	case clusterTableNameEventsStatementsSummaryByDigest:
+		rows = dataForClusterTableNameEventsStatementsSummaryByDigest()
+	}
+	return rows, err
+}
+
 func dataForClusterSlowLog(ctx sessionctx.Context) ([][]types.Datum, error) {
 	rows, err := dataForSlowLog(ctx)
 	if err != nil {
@@ -63,6 +81,11 @@ func dataForClusterSlowLog(ctx sessionctx.Context) ([][]types.Datum, error) {
 func dataForClusterProcesslist(ctx sessionctx.Context) ([][]types.Datum, error) {
 	rows := dataForProcesslist(ctx)
 	return appendClusterColumnsToRows(rows), nil
+}
+
+func dataForClusterTableNameEventsStatementsSummaryByDigest() [][]types.Datum {
+	rows := stmtsummary.StmtSummaryByDigestMap.ToDatum()
+	return appendClusterColumnsToRows(rows)
 }
 
 func appendClusterColumnsToRows(rows [][]types.Datum) [][]types.Datum {

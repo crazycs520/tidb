@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -1906,17 +1905,6 @@ func (s schemasSorter) Swap(i, j int) {
 
 func (s schemasSorter) Less(i, j int) bool {
 	return s[i].Name.L < s[j].Name.L
-}
-
-func GetClusterMemTableRows(ctx sessionctx.Context, tableName string) (rows [][]types.Datum, err error) {
-	tableName = strings.ToUpper(tableName)
-	switch tableName {
-	case clusterTableSlowLog:
-		rows, err = dataForClusterSlowLog(ctx)
-	case clusterTableProcesslist:
-		rows, err = dataForClusterProcesslist(ctx)
-	}
-	return rows, err
 }
 
 func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column) (fullRows [][]types.Datum, err error) {

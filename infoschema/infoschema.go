@@ -387,7 +387,7 @@ func initInfoSchemaDB() {
 		infoSchemaTables = append(infoSchemaTables, tableInfo)
 		tableInfo.ID = autoid.GenLocalSchemaID()
 		for i, c := range tableInfo.Columns {
-			c.ID = int64(i)
+			c.ID = int64(i) + 1
 		}
 	}
 	infoSchemaDB = &model.DBInfo{

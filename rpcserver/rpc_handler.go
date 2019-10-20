@@ -298,8 +298,8 @@ func (e *memTableScanExec) Next(ctx context.Context) ([]types.Datum, error) {
 	if e.cursor < len(e.rows) {
 		row = make([]types.Datum, len(e.columnIDs))
 		for i := range e.columnIDs {
-			// For mem-table, the column offset should equal to column id.
-			offset := int(e.columnIDs[i])
+			// For mem-table, the column offset should equal to column id -1 .
+			offset := int(e.columnIDs[i] - 1)
 			row[i] = e.rows[e.cursor][offset]
 		}
 		e.cursor++
