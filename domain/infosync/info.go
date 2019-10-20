@@ -17,7 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
+	"github.com/pingcap/tidb/meta"
 	"strconv"
 	"time"
 
@@ -57,6 +57,7 @@ var InfoSessionTTL = 1 * 60
 // InfoSyncer stores server info to etcd when the tidb-server starts and delete when tidb-server shuts down.
 type InfoSyncer struct {
 	etcdCli        *clientv3.Client
+	store          kv.Storage
 	info           *ServerInfo
 	serverInfoPath string
 	minStartTS     uint64
@@ -87,9 +88,10 @@ var globalInfoSyncer *InfoSyncer
 var globalServerID int64
 
 // GlobalInfoSyncerInit return a new InfoSyncer. It is exported for testing.
-func GlobalInfoSyncerInit(ctx context.Context, id string, etcdCli *clientv3.Client) (*InfoSyncer, error) {
+func GlobalInfoSyncerInit(ctx context.Context, id string, etcdCli *clientv3.Client, store kv.Storage) (*InfoSyncer, error) {
 	globalInfoSyncer = &InfoSyncer{
 		etcdCli:        etcdCli,
+		store:          store,
 		info:           getServerInfo(id),
 		serverInfoPath: fmt.Sprintf("%s/%s", ServerInformationPath, id),
 		minStartTSPath: fmt.Sprintf("%s/%s", ServerMinStartTSPath, id),
@@ -185,43 +187,16 @@ func GetGlobalServerID() int64 {
 	return globalServerID
 }
 
-// OwnerUpdateGlobalVersion implements SchemaSyncer.OwnerUpdateGlobalVersion interface.
 func (is *InfoSyncer) GenGlobalServerID(ctx context.Context) (int64, error) {
-	if is.etcdCli == nil {
-		return 1, nil
-	}
-
-	var resp *clientv3.GetResponse
-	var err error
-	ver := 0
-	for i := 0; i < 100; i++ {
-		if err != nil {
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
-		}
-		resp, err = is.etcdCli.Get(ctx, ServerGenIDPath)
-		if err != nil {
-			continue
-		}
-		value := ""
-		if len(resp.Kvs) > 0 {
-			value = string(resp.Kvs[0].Value)
-			ver, err = strconv.Atoi(value)
-			if err != nil {
-				logutil.BgLogger().Error("gen server id, parse ver error, should never happen", zap.Error(err))
-			}
-		}
-
-		_, err = is.etcdCli.Txn(ctx).
-			If(clientv3.Compare(clientv3.Value(ServerGenIDPath), "=", value)).
-			Then(clientv3.OpPut(ServerGenIDPath, strconv.FormatInt(int64(ver+1), 10))).
-			Commit()
-		if err != nil {
-			logutil.BgLogger().Error("gen server id error", zap.Error(err))
-			continue
-		}
-		break
-	}
-	return int64(ver + 1), nil
+	var id int64
+	err := kv.RunInNewTxn(is.store, true, func(txn kv.Transaction) error {
+		t := meta.NewMeta(txn)
+		var err error
+		id, err = t.GenGlobalServerID()
+		return errors.Trace(err)
+	})
+	logutil.BgLogger().Info("gen server id", zap.Int64("id", int64(id)), zap.Error(err))
+	return id, err
 }
 
 // RemoveServerInfo remove self server static information from etcd.

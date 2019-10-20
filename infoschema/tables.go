@@ -651,6 +651,7 @@ var tableTiKVRegionPeersCols = []columnInfo{
 }
 
 var tableTiDBServersInfoCols = []columnInfo{
+	{"TIDB_ID", mysql.TypeLonglong, 21, 0, nil, nil},
 	{"DDL_ID", mysql.TypeVarchar, 64, 0, nil, nil},
 	{"IP", mysql.TypeVarchar, 64, 0, nil, nil},
 	{"PORT", mysql.TypeLonglong, 21, 0, nil, nil},
@@ -948,7 +949,7 @@ func dataForProcesslist(ctx sessionctx.Context) [][]types.Datum {
 	for _, pi := range pl {
 		// If you have the PROCESS privilege, you can see all threads.
 		// Otherwise, you can see only your own threads.
-		if !hasProcessPriv && pi.User != loginUser.Username {
+		if !hasProcessPriv && loginUser != nil && pi.User != loginUser.Username {
 			continue
 		}
 
@@ -1816,6 +1817,7 @@ func dataForServersInfo() ([][]types.Datum, error) {
 	rows := make([][]types.Datum, 0, len(serversInfo))
 	for _, info := range serversInfo {
 		row := types.MakeDatums(
+			int(info.ServerID),
 			info.ID,              // DDL_ID
 			info.IP,              // IP
 			int(info.Port),       // PORT
@@ -1911,6 +1913,8 @@ func GetClusterMemTableRows(ctx sessionctx.Context, tableName string) (rows [][]
 	switch tableName {
 	case clusterTableSlowLog:
 		rows, err = dataForClusterSlowLog(ctx)
+	case clusterTableProcesslist:
+		rows, err = dataForClusterProcesslist(ctx)
 	}
 	return rows, err
 }
@@ -1972,8 +1976,8 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 		fullRows = dataForProcesslist(ctx)
 	case tableSlowLog:
 		fullRows, err = dataForSlowLog(ctx)
-	case clusterTableSlowLog:
-		fullRows, err = dataForClusterSlowLog(ctx)
+	//case clusterTableSlowLog:
+	//	fullRows, err = dataForClusterSlowLog(ctx)
 	case tableTiDBHotRegions:
 		fullRows, err = dataForTiDBHotRegions(ctx)
 	case tableTiKVStoreStatus:
