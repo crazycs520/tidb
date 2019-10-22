@@ -16,8 +16,8 @@ package mocktikv
 import (
 	"bytes"
 	"context"
-	"github.com/pingcap/tidb/infoschema"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -189,9 +189,18 @@ func (h *rpcHandler) buildDAG(ctx *dagContext, executors []*tipb.Executor) (exec
 	return src, nil
 }
 
+func isTiKVMemTable(tableName string) bool {
+	tableName = strings.ToUpper(tableName)
+	switch tableName {
+	case "TIKV_INFOS":
+		return true
+	}
+	return false
+}
+
 func (h *rpcHandler) buildMemTableScan(ctx *dagContext, executor *tipb.Executor) (*memTableScanExec, error) {
 	memTblScan := executor.MemTblScan
-	if !infoschema.IsTiKVMemTable(memTblScan.TableName) {
+	if !isTiKVMemTable(memTblScan.TableName) {
 		return nil, errors.Errorf("table %s is not a tikv memory table", memTblScan.TableName)
 	}
 

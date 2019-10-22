@@ -16,8 +16,8 @@ package mocktikv
 import (
 	"bytes"
 	"context"
-	"github.com/pingcap/tidb/infoschema"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -109,7 +109,7 @@ func (e *memTableScanExec) Cursor() ([]byte, bool) {
 
 func (e *memTableScanExec) Next(ctx context.Context) ([][]byte, error) {
 	if e.rows == nil {
-		rows, err := infoschema.GetTiKVMemTableRows(e.tableName)
+		rows, err := getTiKVMemTableRows(e.tableName)
 		if err != nil {
 			return nil, err
 		}
@@ -137,6 +137,28 @@ func (e *memTableScanExec) Next(ctx context.Context) ([][]byte, error) {
 		values[i] = handleData
 	}
 	return values, nil
+}
+
+func getTiKVMemTableRows(tableName string) (rows [][]types.Datum, err error) {
+	tableName = strings.ToUpper(tableName)
+	switch tableName {
+	case "TIKV_INFOS":
+		rows = dataForTiKVInfo()
+	}
+	return rows, err
+}
+
+func dataForTiKVInfo() (records [][]types.Datum) {
+	records = append(records,
+		types.MakeDatums(
+			float64(0.1),
+			float64(0.1),
+			float64(0.1),
+			float64(0.1),
+			"hello tikv",
+		),
+	)
+	return records
 }
 
 type tableScanExec struct {

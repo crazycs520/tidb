@@ -2,7 +2,6 @@ package infoschema
 
 import (
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/types"
 	"strings"
 )
 
@@ -19,28 +18,6 @@ func IsTiKVMemTable(tableName string) bool {
 	tableName = strings.ToUpper(tableName)
 	_, ok := tikvMemTableMap[tableName]
 	return ok
-}
-
-func GetTiKVMemTableRows(tableName string) (rows [][]types.Datum, err error) {
-	tableName = strings.ToUpper(tableName)
-	switch tableName {
-	case tableTiKVInfo:
-		rows = dataForTiKVInfo()
-	}
-	return rows, err
-}
-
-func dataForTiKVInfo() (records [][]types.Datum) {
-	records = append(records,
-		types.MakeDatums(
-			float64(0.1),
-			float64(0.1),
-			float64(0.1),
-			float64(0.1),
-			"hello tikv",
-		),
-	)
-	return records
 }
 
 var tikvInfoCols = []columnInfo{
