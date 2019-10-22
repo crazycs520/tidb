@@ -16,6 +16,7 @@ package mocktikv
 import (
 	"bytes"
 	"context"
+	"github.com/pingcap/tidb/infoschema"
 	"sort"
 	"time"
 
@@ -66,6 +67,76 @@ type executor interface {
 	// ExecDetails returns its and its children's execution details.
 	// The order is same as DAGRequest.Executors, which children are in front of parents.
 	ExecDetails() []*execDetail
+}
+
+type memTableScanExec struct {
+	tableName string
+	columnIDs []int64
+
+	execDetail *execDetail
+	src        executor
+
+	rows   [][]types.Datum
+	cursor int
+}
+
+func (e *memTableScanExec) SetSrcExec(exec executor) {
+	e.src = exec
+}
+
+func (e *memTableScanExec) GetSrcExec() executor {
+	return e.src
+}
+
+func (e *memTableScanExec) ExecDetails() []*execDetail {
+	var suffix []*execDetail
+	if e.src != nil {
+		suffix = e.src.ExecDetails()
+	}
+	return append(suffix, e.execDetail)
+}
+
+func (e *memTableScanExec) ResetCounts() {
+}
+
+func (e *memTableScanExec) Counts() []int64 {
+	return []int64{int64(e.cursor)}
+}
+
+func (e *memTableScanExec) Cursor() ([]byte, bool) {
+	return nil, false
+}
+
+func (e *memTableScanExec) Next(ctx context.Context) ([][]byte, error) {
+	if e.rows == nil {
+		rows, err := infoschema.GetTiKVMemTableRows(e.tableName)
+		if err != nil {
+			return nil, err
+		}
+		e.rows = rows
+	}
+	var row []types.Datum
+	if e.cursor < len(e.rows) {
+		row = make([]types.Datum, len(e.columnIDs))
+		for i := range e.columnIDs {
+			// For mem-table, the column offset should equal to column id -1 .
+			offset := int(e.columnIDs[i] - 1)
+			row[i] = e.rows[e.cursor][offset]
+		}
+		e.cursor++
+	}
+	if len(row) == 0 {
+		return nil, nil
+	}
+	values := make([][]byte, len(row))
+	for i, d := range row {
+		handleData, err1 := codec.EncodeValue(nil, nil, d)
+		if err1 != nil {
+			return nil, errors.Trace(err1)
+		}
+		values[i] = handleData
+	}
+	return values, nil
 }
 
 type tableScanExec struct {

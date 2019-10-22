@@ -235,6 +235,8 @@ const (
 	TiFlash
 	// ClusterMem means the data is in the memory of all TiDB servers.
 	ClusterMem
+	// TiKVMem means the data is in the memory of TiKV servers.
+	TiKVMem
 )
 
 // Request represents a kv request.

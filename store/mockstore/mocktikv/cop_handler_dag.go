@@ -16,6 +16,7 @@ package mocktikv
 import (
 	"bytes"
 	"context"
+	"github.com/pingcap/tidb/infoschema"
 	"io"
 	"time"
 
@@ -165,6 +166,8 @@ func (h *rpcHandler) buildExec(ctx *dagContext, curr *tipb.Executor) (executor, 
 		currExec, err = h.buildTopN(ctx, curr)
 	case tipb.ExecType_TypeLimit:
 		currExec = &limitExec{limit: curr.Limit.GetLimit(), execDetail: new(execDetail)}
+	case tipb.ExecType_TypeMemTableScan:
+		currExec, err = h.buildMemTableScan(ctx, curr)
 	default:
 		// TODO: Support other types.
 		err = errors.Errorf("this exec type %v doesn't support yet.", curr.GetTp())
@@ -184,6 +187,26 @@ func (h *rpcHandler) buildDAG(ctx *dagContext, executors []*tipb.Executor) (exec
 		src = curr
 	}
 	return src, nil
+}
+
+func (h *rpcHandler) buildMemTableScan(ctx *dagContext, executor *tipb.Executor) (*memTableScanExec, error) {
+	memTblScan := executor.MemTblScan
+	if !infoschema.IsTiKVMemTable(memTblScan.TableName) {
+		return nil, errors.Errorf("table %s is not a tikv memory table", memTblScan.TableName)
+	}
+
+	columns := memTblScan.Columns
+	ctx.evalCtx.setColumnInfo(columns)
+	ids := make([]int64, len(columns))
+	for i, col := range columns {
+		ids[i] = col.ColumnId
+	}
+
+	return &memTableScanExec{
+		tableName:  memTblScan.TableName,
+		columnIDs:  ids,
+		execDetail: new(execDetail),
+	}, nil
 }
 
 func (h *rpcHandler) buildTableScan(ctx *dagContext, executor *tipb.Executor) (*tableScanExec, error) {

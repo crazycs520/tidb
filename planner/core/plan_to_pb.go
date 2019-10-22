@@ -91,7 +91,7 @@ func (p *PhysicalLimit) ToPB(ctx sessionctx.Context) (*tipb.Executor, error) {
 // ToPB implements PhysicalPlan ToPB interface.
 func (p *PhysicalTableScan) ToPB(ctx sessionctx.Context) (*tipb.Executor, error) {
 	columns := p.Columns
-	if p.StoreType == kv.ClusterMem {
+	if p.StoreType == kv.ClusterMem || p.StoreType == kv.TiKVMem {
 		return p.toMemTableScanPB(ctx)
 	}
 	tsExec := &tipb.TableScan{

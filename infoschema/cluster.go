@@ -45,9 +45,12 @@ func init() {
 	clusterProcesslistCols = append(clusterProcesslistCols, tableProcesslistCols...)
 	clusterProcesslistCols = append(clusterProcesslistCols, clusterTableCols...)
 
-	// Register information_schema tables.
+	// Register tidb_mem_cluster information_schema tables.
 	tableNameToColumns[clusterTableSlowLog] = clusterSlowQueryCols
 	tableNameToColumns[clusterTableProcesslist] = clusterProcesslistCols
+
+	// Register tikv mem_table to information_schema tables.
+	tableNameToColumns[tableTiKVInfo] = tikvInfoCols
 }
 
 func IsClusterTable(tableName string) bool {
