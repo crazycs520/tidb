@@ -213,12 +213,40 @@ const rangesPerTask = 25000
 
 func buildCopTasks(bo *Backoffer, cache *RegionCache, ranges *copRanges, req *kv.Request) ([]*copTask, error) {
 	start := time.Now()
-	rangesLen := ranges.len()
 	cmdType := tikvrpc.CmdCop
 	if req.Streaming {
 		cmdType = tikvrpc.CmdCopStream
 	}
 
+	//
+	if req.StoreType == kv.TiKVMem {
+		err := cache.loadAllStores(bo)
+		if err != nil {
+			return nil, err
+		}
+		storeIDs := cache.getAllStoreIDs()
+		tasks := make([]*copTask, 0, len(storeIDs))
+		for _, id := range storeIDs {
+			region := cache.getAnyRegionInStore(id)
+			if region == nil {
+				continue
+			}
+			ranges := &copRanges{mid: []kv.KeyRange{kv.KeyRange{region.meta.StartKey, region.meta.EndKey}}}
+			tasks = append(tasks, &copTask{
+				region: region.VerID(),
+				ranges: ranges,
+				// Channel buffer is 2 for handling region split.
+				// In a common case, two region split tasks will not be blocked.
+				respChan:  make(chan *copResponse, 2),
+				cmdType:   cmdType,
+				storeType: req.StoreType,
+			})
+		}
+		fmt.Printf("build tikv mem scan: total stores: %v, tasks num: %v\n", len(storeIDs), len(tasks))
+		return tasks, nil
+	}
+
+	rangesLen := ranges.len()
 	var tasks []*copTask
 	appendTask := func(region RegionVerID, ranges *copRanges) {
 		// TiKV will return gRPC error if the message is too large. So we need to limit the length of the ranges slice
