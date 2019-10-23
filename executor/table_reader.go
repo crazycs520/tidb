@@ -92,11 +92,12 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 		ctx = opentracing.ContextWithSpan(ctx, span1)
 	}
 	if e.storeType == kv.ClusterMem {
-		e.clusterMemTblReader = &ClusterTableReaderExecutor{
-			baseExecutor: e.baseExecutor,
-			dagPB:        e.dagPB,
-		}
-		return e.clusterMemTblReader.Open(ctx)
+		//e.clusterMemTblReader = &ClusterTableReaderExecutor{
+		//	baseExecutor: e.baseExecutor,
+		//	dagPB:        e.dagPB,
+		//}
+		//return e.clusterMemTblReader.Open(ctx)
+
 	}
 
 	e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaDistSQL)
@@ -156,7 +157,7 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 // The task was actually done by tableReaderHandler.
 func (e *TableReaderExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 	if e.storeType == kv.ClusterMem {
-		return e.clusterMemTblReader.Next(ctx, req)
+		//return e.clusterMemTblReader.Next(ctx, req)
 	}
 
 	logutil.Eventf(ctx, "table scan table: %s, range: %v", stringutil.MemoizeStr(func() string {
@@ -176,7 +177,7 @@ func (e *TableReaderExecutor) Next(ctx context.Context, req *chunk.Chunk) error 
 // Close implements the Executor Close interface.
 func (e *TableReaderExecutor) Close() error {
 	if e.storeType == kv.ClusterMem {
-		return e.clusterMemTblReader.Close()
+		//return e.clusterMemTblReader.Close()
 	}
 	var err error
 	if e.resultHandler != nil {

@@ -180,8 +180,11 @@ func SetPBColumnsDefaultValue(ctx sessionctx.Context, pbColumns []*tipb.ColumnIn
 // TODO: Support more kinds of physical plan.
 func SupportStreaming(p PhysicalPlan) bool {
 	switch p.(type) {
-	case *PhysicalTableScan, *PhysicalIndexScan, *PhysicalSelection:
+	case *PhysicalIndexScan, *PhysicalSelection:
 		return true
+	case *PhysicalTableScan:
+		tp := p.(*PhysicalTableScan).StoreType
+		return tp != kv.ClusterMem && tp != kv.TiKVMem
 	}
 	return false
 }

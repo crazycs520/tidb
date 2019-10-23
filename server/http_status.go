@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -35,7 +36,6 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/rpcserver"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/printer"
 	"github.com/prometheus/client_golang/prometheus"
@@ -276,7 +276,8 @@ func (s *Server) setupStatuServerAndRPCServer(addr string, serverMux *http.Serve
 	grpcL := m.Match(cmux.Any())
 
 	s.statusServer = &http.Server{Addr: addr, Handler: CorsHandler{handler: serverMux, cfg: s.cfg}}
-	s.grpcServer = rpcserver.CreateRPCServer()
+	//s.grpcServer = rpcserver.CreateRPCServer()
+	s.grpcServer = mocktikv.CreateRPCServer()
 
 	// Use the muxed listeners for your servers.
 	go s.grpcServer.Serve(grpcL)

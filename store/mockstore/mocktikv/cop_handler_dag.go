@@ -16,6 +16,7 @@ package mocktikv
 import (
 	"bytes"
 	"context"
+	"github.com/pingcap/tidb/infoschema"
 	"io"
 	"strings"
 	"time"
@@ -92,7 +93,7 @@ func (h *rpcHandler) handleCopDAGRequest(req *coprocessor.Request) *coprocessor.
 }
 
 func (h *rpcHandler) buildDAGExecutor(req *coprocessor.Request) (*dagContext, executor, *tipb.DAGRequest, error) {
-	if len(req.Ranges) == 0 {
+	if len(req.Ranges) == 0 && req.Context.GetRegionId() != 0 {
 		return nil, nil, nil, errors.New("request range is null")
 	}
 	if req.GetTp() != kv.ReqTypeDAG {
@@ -200,8 +201,8 @@ func isTiKVMemTable(tableName string) bool {
 
 func (h *rpcHandler) buildMemTableScan(ctx *dagContext, executor *tipb.Executor) (*memTableScanExec, error) {
 	memTblScan := executor.MemTblScan
-	if !isTiKVMemTable(memTblScan.TableName) {
-		return nil, errors.Errorf("table %s is not a tikv memory table", memTblScan.TableName)
+	if !isTiKVMemTable(memTblScan.TableName) && !infoschema.IsClusterTable(memTblScan.TableName) {
+		return nil, errors.Errorf("table %s is not a tikv/tidb memory table", memTblScan.TableName)
 	}
 
 	columns := memTblScan.Columns
@@ -363,7 +364,7 @@ func (h *rpcHandler) buildStreamAgg(ctx *dagContext, executor *tipb.Executor) (*
 		aggCtxs = append(aggCtxs, agg.CreateContext(ctx.evalCtx.sc))
 	}
 
-	return &streamAggExec{
+	e := &streamAggExec{
 		evalCtx:           ctx.evalCtx,
 		aggExprs:          aggs,
 		aggCtxs:           aggCtxs,
@@ -372,7 +373,8 @@ func (h *rpcHandler) buildStreamAgg(ctx *dagContext, executor *tipb.Executor) (*
 		relatedColOffsets: relatedColOffsets,
 		row:               make([]types.Datum, len(ctx.evalCtx.columnInfos)),
 		execDetail:        new(execDetail),
-	}, nil
+	}
+	return e, nil
 }
 
 func (h *rpcHandler) buildTopN(ctx *dagContext, executor *tipb.Executor) (*topNExec, error) {

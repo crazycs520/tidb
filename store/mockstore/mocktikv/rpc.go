@@ -144,6 +144,9 @@ type rpcHandler struct {
 }
 
 func (h *rpcHandler) checkRequestContext(ctx *kvrpcpb.Context) *errorpb.Error {
+	if ctx.GetRegionId() == 0 {
+		return nil
+	}
 	ctxPeer := ctx.GetPeer()
 	if ctxPeer != nil && ctxPeer.GetStoreId() != h.storeID {
 		return &errorpb.Error{

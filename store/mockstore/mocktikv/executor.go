@@ -16,6 +16,8 @@ package mocktikv
 import (
 	"bytes"
 	"context"
+	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/util/mock"
 	"sort"
 	"strings"
 	"time"
@@ -78,6 +80,7 @@ type memTableScanExec struct {
 
 	rows   [][]types.Datum
 	cursor int
+	counts []int64
 }
 
 func (e *memTableScanExec) SetSrcExec(exec executor) {
@@ -100,6 +103,9 @@ func (e *memTableScanExec) ResetCounts() {
 }
 
 func (e *memTableScanExec) Counts() []int64 {
+	if e.counts == nil {
+		return nil
+	}
 	return []int64{int64(e.cursor)}
 }
 
@@ -107,9 +113,16 @@ func (e *memTableScanExec) Cursor() ([]byte, bool) {
 	return nil, false
 }
 
-func (e *memTableScanExec) Next(ctx context.Context) ([][]byte, error) {
+func (e *memTableScanExec) Next(ctx context.Context) (values [][]byte, err error) {
+	defer func(begin time.Time) {
+		e.execDetail.update(begin, values)
+	}(time.Now())
 	if e.rows == nil {
 		rows, err := getTiKVMemTableRows(e.tableName)
+		if len(rows) == 0 {
+			sctx := mock.NewContext()
+			rows, err = infoschema.GetClusterMemTableRows(sctx, e.tableName)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -128,7 +141,7 @@ func (e *memTableScanExec) Next(ctx context.Context) ([][]byte, error) {
 	if len(row) == 0 {
 		return nil, nil
 	}
-	values := make([][]byte, len(row))
+	values = make([][]byte, len(row))
 	for i, d := range row {
 		handleData, err1 := codec.EncodeValue(nil, nil, d)
 		if err1 != nil {
