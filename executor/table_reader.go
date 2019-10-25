@@ -80,8 +80,6 @@ type TableReaderExecutor struct {
 	corColInFilter bool
 	// corColInAccess tells whether there's correlated column in access conditions.
 	corColInAccess bool
-
-	clusterMemTblReader *ClusterTableReaderExecutor
 }
 
 // Open initialzes necessary variables for using this executor.
@@ -90,14 +88,6 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 		span1 := span.Tracer().StartSpan("TableReaderExecutor.Open", opentracing.ChildOf(span.Context()))
 		defer span1.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, span1)
-	}
-	if e.storeType == kv.ClusterMem {
-		//e.clusterMemTblReader = &ClusterTableReaderExecutor{
-		//	baseExecutor: e.baseExecutor,
-		//	dagPB:        e.dagPB,
-		//}
-		//return e.clusterMemTblReader.Open(ctx)
-
 	}
 
 	e.memTracker = memory.NewTracker(e.id, e.ctx.GetSessionVars().MemQuotaDistSQL)
@@ -156,10 +146,6 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 // Next fills data into the chunk passed by its caller.
 // The task was actually done by tableReaderHandler.
 func (e *TableReaderExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
-	if e.storeType == kv.ClusterMem {
-		//return e.clusterMemTblReader.Next(ctx, req)
-	}
-
 	logutil.Eventf(ctx, "table scan table: %s, range: %v", stringutil.MemoizeStr(func() string {
 		var tableName string
 		if meta := e.table.Meta(); meta != nil {
@@ -176,9 +162,6 @@ func (e *TableReaderExecutor) Next(ctx context.Context, req *chunk.Chunk) error 
 
 // Close implements the Executor Close interface.
 func (e *TableReaderExecutor) Close() error {
-	if e.storeType == kv.ClusterMem {
-		//return e.clusterMemTblReader.Close()
-	}
 	var err error
 	if e.resultHandler != nil {
 		err = e.resultHandler.Close()
