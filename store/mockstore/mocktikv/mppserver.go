@@ -8,10 +8,18 @@ import (
 	"github.com/pingcap/kvproto/pkg/errorpb"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/tikvpb"
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 func CreateRPCServer() *grpc.Server {
+	defer func() {
+		if v := recover(); v != nil {
+			logutil.BgLogger().Error("panic in mpp server", zap.Any("stack", v))
+		}
+	}()
+
 	s := grpc.NewServer()
 	tikvpb.RegisterTikvServer(s, &mppServer{})
 	return s
@@ -21,6 +29,11 @@ type mppServer struct {
 }
 
 func (c *mppServer) Coprocessor(ctx context.Context, in *coprocessor.Request) (*coprocessor.Response, error) {
+	defer func() {
+		if v := recover(); v != nil {
+			logutil.BgLogger().Error("panic in mpp server coprocessor", zap.Any("stack", v))
+		}
+	}()
 	handler := &rpcHandler{}
 	res := handler.handleCopDAGRequest(in)
 	return res, nil

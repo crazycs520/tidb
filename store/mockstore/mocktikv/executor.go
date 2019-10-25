@@ -118,6 +118,7 @@ func (e *setServerVarExec) Next(ctx context.Context) ([][]byte, error) {
 type memTableScanExec struct {
 	tableName string
 	columnIDs []int64
+	sctx      *mock.Context
 
 	execDetail *execDetail
 	src        executor
@@ -164,8 +165,8 @@ func (e *memTableScanExec) Next(ctx context.Context) (values [][]byte, err error
 	if e.rows == nil {
 		rows, err := getTiKVMemTableRows(e.tableName)
 		if len(rows) == 0 {
-			sctx := mock.NewContext()
-			rows, err = infoschema.GetClusterMemTableRows(sctx, e.tableName)
+			e.sctx = mock.NewContext()
+			rows, err = infoschema.GetClusterMemTableRows(e.sctx, e.tableName)
 		}
 		if err != nil {
 			return nil, err
@@ -187,7 +188,7 @@ func (e *memTableScanExec) Next(ctx context.Context) (values [][]byte, err error
 	}
 	values = make([][]byte, len(row))
 	for i, d := range row {
-		handleData, err1 := codec.EncodeValue(nil, nil, d)
+		handleData, err1 := codec.EncodeValue(e.sctx.GetSessionVars().StmtCtx, nil, d)
 		if err1 != nil {
 			return nil, errors.Trace(err1)
 		}

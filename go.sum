@@ -37,6 +37,8 @@ github.com/crazycs520/tipb v0.0.0-20191019072218-db0762008467 h1:afsxSYCCaDb7JCl
 github.com/crazycs520/tipb v0.0.0-20191019072218-db0762008467/go.mod h1:J5W0Gvay/AsnE5I7p3JH1RG3HemVvEmp/gSSBCn1NiA=
 github.com/crazycs520/tipb v0.0.0-20191025054918-3710de5b0513 h1:trhYPGvwWvbqhcas+EBwidXiwVS3coFd5pUPtiDrdhk=
 github.com/crazycs520/tipb v0.0.0-20191025054918-3710de5b0513/go.mod h1:J5W0Gvay/AsnE5I7p3JH1RG3HemVvEmp/gSSBCn1NiA=
+github.com/crazycs520/tipb v0.0.0-20191025111928-07ee0e9e0f91 h1:nYjZf93B46Qsad25jabapIg8oYl0t5TxozN5ZPWJDe4=
+github.com/crazycs520/tipb v0.0.0-20191025111928-07ee0e9e0f91/go.mod h1:J5W0Gvay/AsnE5I7p3JH1RG3HemVvEmp/gSSBCn1NiA=
 github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548 h1:iwZdTE0PVqJCos1vaoKsclOGD3ADKpshg3SRtYBbwso=
 github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548/go.mod h1:e6NPNENfs9mPDVNRekM7lKScauxd5kXTr1Mfyig6TDM=
 github.com/cznic/sortutil v0.0.0-20150617083342-4c7342852e65 h1:hxuZop6tSoOi0sxFzoGGYdRqNrPubyaIf9KoBG9tPiE=
