@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/mock"
 	"sort"
 	"strings"
@@ -69,6 +70,49 @@ type executor interface {
 	// ExecDetails returns its and its children's execution details.
 	// The order is same as DAGRequest.Executors, which children are in front of parents.
 	ExecDetails() []*execDetail
+}
+
+type setServerVarExec struct {
+	name       string
+	value      string
+	execDetail *execDetail
+	src        executor
+}
+
+func (e *setServerVarExec) SetSrcExec(exec executor) {
+	e.src = exec
+}
+
+func (e *setServerVarExec) GetSrcExec() executor {
+	return e.src
+}
+
+func (e *setServerVarExec) ExecDetails() []*execDetail {
+	var suffix []*execDetail
+	if e.src != nil {
+		suffix = e.src.ExecDetails()
+	}
+	return append(suffix, e.execDetail)
+}
+
+func (e *setServerVarExec) ResetCounts() {
+}
+
+func (e *setServerVarExec) Counts() []int64 {
+	return nil
+}
+
+func (e *setServerVarExec) Cursor() ([]byte, bool) {
+	return nil, false
+}
+
+func (e *setServerVarExec) Next(ctx context.Context) ([][]byte, error) {
+	defer func(begin time.Time) {
+		e.execDetail.update(begin, nil)
+	}(time.Now())
+
+	err := variable.SetServerVar(e.name, e.value)
+	return nil, err
 }
 
 type memTableScanExec struct {

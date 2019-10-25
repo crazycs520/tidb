@@ -874,7 +874,7 @@ func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *RPCCon
 	// When the request is using streaming API, the `Range` is not nil.
 	if resp.pbResp.Range != nil {
 		resp.startKey = resp.pbResp.Range.Start
-	} else {
+	} else if task.ranges != nil && task.ranges.len() > 0 {
 		resp.startKey = task.ranges.at(0).StartKey
 	}
 	if resp.detail == nil {
