@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
+	"net"
 	"reflect"
 	"strings"
 	"testing"
@@ -362,6 +363,18 @@ func (g *numStrGener) gen() interface{} {
 	return fmt.Sprintf("%v", g.rangeInt64Gener.gen())
 }
 
+// ipv6StrGener is used to generate ipv6 strings.
+type ipv6StrGener struct {
+}
+
+func (g *ipv6StrGener) gen() interface{} {
+	var ip net.IP = make([]byte, net.IPv6len)
+	for i := range ip {
+		ip[i] = uint8(rand.Intn(256))
+	}
+	return ip.String()
+}
+
 // randLenStrGener is used to generate strings whose lengths are in [lenBegin, lenEnd).
 type randLenStrGener struct {
 	lenBegin int
@@ -444,6 +457,15 @@ func (g *dataStrGener) gen() interface{} {
 	return fmt.Sprintf("%d:%d:%d", hour, minute, second)
 }
 
+// constStrGener always returns the given string
+type constStrGener struct {
+	s string
+}
+
+func (g *constStrGener) gen() interface{} {
+	return g.s
+}
+
 type randDurInt struct{}
 
 func (g *randDurInt) gen() interface{} {
@@ -472,11 +494,16 @@ type vecExprBenchCase struct {
 type vecExprBenchCases map[string][]vecExprBenchCase
 
 func fillColumn(eType types.EvalType, chk *chunk.Chunk, colIdx int, testCase vecExprBenchCase) {
-	batchSize := 1024
 	var gen dataGenerator
 	if len(testCase.geners) > colIdx && testCase.geners[colIdx] != nil {
 		gen = testCase.geners[colIdx]
-	} else {
+	}
+	fillColumnWithGener(eType, chk, colIdx, gen)
+}
+
+func fillColumnWithGener(eType types.EvalType, chk *chunk.Chunk, colIdx int, gen dataGenerator) {
+	batchSize := 1024
+	if gen == nil {
 		gen = &defaultGener{0.2, eType}
 	}
 
@@ -1157,8 +1184,8 @@ func generateRandomSel() []int {
 func (s *testEvaluatorSuite) TestVecEvalBool(c *C) {
 	ctx := mock.NewContext()
 	eTypes := []types.EvalType{types.ETReal, types.ETDecimal, types.ETString, types.ETTimestamp, types.ETDatetime, types.ETDuration}
-	for numCols := 1; numCols <= 10; numCols++ {
-		for round := 0; round < 64; round++ {
+	for numCols := 1; numCols <= 5; numCols++ {
+		for round := 0; round < 16; round++ {
 			exprs, input := genVecEvalBool(numCols, nil, eTypes)
 			selected, nulls, err := VecEvalBool(ctx, exprs, input, nil, nil)
 			c.Assert(err, IsNil)
@@ -1181,7 +1208,7 @@ func BenchmarkVecEvalBool(b *testing.B) {
 	nulls := make([]bool, 0, 1024)
 	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETString, types.ETTimestamp, types.ETDatetime, types.ETDuration}
 	tNames := []string{"int", "real", "decimal", "string", "timestamp", "datetime", "duration"}
-	for numCols := 1; numCols <= 3; numCols++ {
+	for numCols := 1; numCols <= 2; numCols++ {
 		typeCombination := make([]types.EvalType, numCols)
 		var combFunc func(nCols int)
 		combFunc = func(nCols int) {
@@ -1231,8 +1258,8 @@ func BenchmarkVecEvalBool(b *testing.B) {
 func (s *testEvaluatorSuite) TestRowBasedFilterAndVectorizedFilter(c *C) {
 	ctx := mock.NewContext()
 	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETString, types.ETTimestamp, types.ETDatetime, types.ETDuration}
-	for numCols := 1; numCols <= 10; numCols++ {
-		for round := 0; round < 64; round++ {
+	for numCols := 1; numCols <= 5; numCols++ {
+		for round := 0; round < 16; round++ {
 			exprs, input := genVecEvalBool(numCols, nil, eTypes)
 			it := chunk.NewIterator4Chunk(input)
 			isNull := make([]bool, it.Len())
@@ -1329,8 +1356,8 @@ func (s *testEvaluatorSuite) TestVectorizedFilterConsiderNull(c *C) {
 	ctx := mock.NewContext()
 	dafaultEnableVectorizedExpressionVar := ctx.GetSessionVars().EnableVectorizedExpression
 	eTypes := []types.EvalType{types.ETInt, types.ETReal, types.ETDecimal, types.ETString, types.ETTimestamp, types.ETDatetime, types.ETDuration}
-	for numCols := 1; numCols <= 10; numCols++ {
-		for round := 0; round < 64; round++ {
+	for numCols := 1; numCols <= 5; numCols++ {
+		for round := 0; round < 16; round++ {
 			exprs, input := genVecEvalBool(numCols, nil, eTypes)
 			it := chunk.NewIterator4Chunk(input)
 			isNull := make([]bool, it.Len())
