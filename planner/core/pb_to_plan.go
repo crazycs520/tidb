@@ -38,10 +38,11 @@ func PBToPhysicalTableScan(sctx sessionctx.Context, e *tipb.Executor) (PhysicalP
 		}
 	}
 
-	p := PhysicalTableScan{
+	p := PhysicalMemTable{
+		DBName:  model.NewCIStr("information_schema"),
 		Table:   tbl.Meta(),
 		Columns: columns,
-	}.Init(sctx, 0)
+	}.Init(sctx, nil, 0)
 	p.SetSchema(schema)
 	return p, nil
 }
@@ -49,16 +50,16 @@ func PBToPhysicalTableScan(sctx sessionctx.Context, e *tipb.Executor) (PhysicalP
 func convertColumnInfo(tblInfo *model.TableInfo, memTbl *tipb.MemTableScan) ([]*model.ColumnInfo, error) {
 	columns := make([]*model.ColumnInfo, 0, len(memTbl.Columns))
 	for _, col := range memTbl.Columns {
+		found := false
 		for _, colInfo := range tblInfo.Columns {
-			found := false
 			if col.ColumnId == colInfo.ID {
 				columns = append(columns, colInfo)
 				found = true
 				break
 			}
-			if !found {
-				return nil, errors.Errorf("Column ID %v of table not found", col.ColumnId, "information_schema."+memTbl.TableName)
-			}
+		}
+		if !found {
+			return nil, errors.Errorf("Column ID %v of table not found", col.ColumnId, "information_schema."+memTbl.TableName)
 		}
 	}
 	return columns, nil

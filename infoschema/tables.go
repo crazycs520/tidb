@@ -2309,6 +2309,11 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 		fullRows, err = dataForClusterConfig(ctx)
 	case tableTiFlashReplica:
 		fullRows = dataForTableTiFlashReplica(dbs)
+	case clusterTableSlowLog:
+		fullRows, err = dataForSlowLog(ctx)
+	case clusterTableProcesslist:
+		fullRows = dataForProcesslist(ctx)
+
 	}
 	if err != nil {
 		return nil, err

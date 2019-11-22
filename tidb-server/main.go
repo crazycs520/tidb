@@ -17,6 +17,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/pingcap/tidb/rpcserver"
 	"os"
 	"runtime"
 	"strconv"
@@ -587,6 +588,7 @@ func createServer() {
 	terror.MustNil(err, closeDomainAndStorage)
 	go dom.ExpensiveQueryHandle().SetSessionManager(svr).Run()
 	dom.InfoSyncer().SetSessionManager(svr)
+	rpcserver.SetGlobalDomain(dom)
 }
 
 func serverShutdown(isgraceful bool) {

@@ -63,10 +63,6 @@ var (
 	executorCounterIndexLookUpExecutor = metrics.ExecutorCounter.WithLabelValues("IndexLookUpExecutor")
 )
 
-type ExecutorBuilder struct {
-	*executorBuilder
-}
-
 // executorBuilder builds an Executor from a Plan.
 // The InfoSchema must not change during execution.
 type executorBuilder struct {
@@ -83,16 +79,6 @@ func newExecutorBuilder(ctx sessionctx.Context, is infoschema.InfoSchema) *execu
 		ctx: ctx,
 		is:  is,
 	}
-}
-
-func NewExecutorBuilder(ctx sessionctx.Context, is infoschema.InfoSchema) *ExecutorBuilder {
-	return &ExecutorBuilder{
-		newExecutorBuilder(ctx, is),
-	}
-}
-
-func (b *ExecutorBuilder) Build(p plannercore.Plan) Executor {
-	return b.build(p)
 }
 
 // MockPhysicalPlan is used to return a specified executor in when build.
