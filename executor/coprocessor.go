@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"fmt"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/coprocessor"
@@ -21,7 +20,6 @@ import (
 )
 
 func HandleCopDAGRequest(ctx context.Context, sctx sessionctx.Context, req *coprocessor.Request) *coprocessor.Response {
-	fmt.Println("handle cop process\n\n")
 	resp := &coprocessor.Response{}
 	e, dagReq, err := buildDAGExecutor(sctx, req)
 	if err != nil {
@@ -38,7 +36,9 @@ func HandleCopDAGRequest(ctx context.Context, sctx sessionctx.Context, req *copr
 	selResp := &tipb.SelectResponse{}
 
 	chk := newFirstChunk(e)
+	tps := e.base().retFieldTypes
 	for {
+		chk.Reset()
 		err = Next(ctx, e, chk)
 		if err != nil {
 			break
@@ -46,13 +46,14 @@ func HandleCopDAGRequest(ctx context.Context, sctx sessionctx.Context, req *copr
 		if chk.NumRows() == 0 {
 			break
 		}
+		err = fillUpData4SelectResponse(selResp, dagReq, sctx, chk, tps)
+		if err != nil {
+			break
+		}
 
-		chk.Reset()
 	}
 
-	tps := e.base().retFieldTypes
 	//selResp := h.initSelectResponse(err, dagCtx.evalCtx.sc.GetWarnings(), e.Counts())
-	err = fillUpData4SelectResponse(selResp, dagReq, sctx, chk, tps)
 	// FIXME: some err such as (overflow) will be include in Response.OtherError with calling this buildResp.
 	//  Such err should only be marshal in the data but not in OtherError.
 	//  However, we can not distinguish such err now.
@@ -64,13 +65,30 @@ func fillUpData4SelectResponse(selResp *tipb.SelectResponse, dagReq *tipb.DAGReq
 	case tipb.EncodeType_TypeDefault:
 		return encodeDefault(sctx, selResp, chk, tps, dagReq.OutputOffsets)
 	case tipb.EncodeType_TypeChunk:
-		//colTypes := h.constructRespSchema(dagCtx)
-		//loc := sctx.GetSessionVars().StmtCtx.TimeZone
-		//err := h.encodeChunk(selResp, rows, colTypes, dagReq.OutputOffsets, loc)
-		//if err != nil {
-		//	return err
-		//}
+		loc := sctx.GetSessionVars().StmtCtx.TimeZone
+		err := encodeChunk(selResp, chk, tps, dagReq.OutputOffsets, loc)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func encodeChunk(selResp *tipb.SelectResponse, chk *chunk.Chunk, colTypes []*types.FieldType, colOrdinal []uint32, loc *time.Location) error {
+	chunks := selResp.Chunks
+	respColTypes := make([]*types.FieldType, 0, len(colOrdinal))
+	for _, ordinal := range colOrdinal {
+		respColTypes = append(respColTypes, colTypes[ordinal])
+	}
+	encoder := chunk.NewCodec(respColTypes)
+	if chk.NumRows() > 0 {
+		chunks = append(chunks, tipb.Chunk{})
+		cur := &chunks[len(chunks)-1]
+		cur.RowsData = append(cur.RowsData, encoder.Encode(chk)...)
+		chk.Reset()
+	}
+	selResp.Chunks = chunks
+	selResp.EncodeType = tipb.EncodeType_TypeChunk
 	return nil
 }
 

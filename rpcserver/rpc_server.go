@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -40,8 +40,6 @@ func CreateTiDBRPCServer() *grpc.Server {
 			logutil.BgLogger().Error("panic in TiDB RPC server", zap.Any("stack", v))
 		}
 	}()
-	fmt.Println("create rpc server\n------\n\n")
-
 	s := grpc.NewServer()
 	srv := &tidbRPCServer{}
 	tikvpb.RegisterTikvServer(s, srv)
@@ -59,12 +57,12 @@ func (c *tidbRPCServer) Coprocessor(ctx context.Context, in *coprocessor.Request
 	defer func() {
 		if v := recover(); v != nil {
 			logutil.BgLogger().Error("panic in TiDB RPC server coprocessor", zap.Any("stack", v))
+			resp.OtherError = "rpc coprocessor panic"
 		}
-		resp.OtherError = "rpc coprocessor panic"
 	}()
-	fmt.Println("handle cop process\n\n")
-	res := c.handleCopDAGRequest(ctx, in)
-	return res, nil
+	fmt.Printf("rpc server handle coprocessor\n------------\n")
+	resp = c.handleCopDAGRequest(ctx, in)
+	return resp, nil
 }
 
 func (c *tidbRPCServer) handleCopDAGRequest(ctx context.Context, req *coprocessor.Request) *coprocessor.Response {
@@ -75,7 +73,9 @@ func (c *tidbRPCServer) handleCopDAGRequest(ctx context.Context, req *coprocesso
 		resp.OtherError = err.Error()
 		return resp
 	}
-	sctx := re.(sessionctx.Context)
+	sctx := re.(session.Session)
 	sctx.GetSessionVars().InRestrictedSQL = true
+	sctx.GetSessionManager()
+	sctx.SetSessionManager(util.GetglobalSessionManager())
 	return executor.HandleCopDAGRequest(ctx, sctx, req)
 }
