@@ -74,8 +74,10 @@ func (c *tidbRPCServer) handleCopDAGRequest(ctx context.Context, req *coprocesso
 		return resp
 	}
 	sctx := re.(session.Session)
+	do := domain.GetDomain(sctx)
+	is := do.InfoSchema()
+	sctx.GetSessionVars().TxnCtx.InfoSchema = is
 	sctx.GetSessionVars().InRestrictedSQL = true
-	sctx.GetSessionManager()
 	sctx.SetSessionManager(util.GetglobalSessionManager())
 	return executor.HandleCopDAGRequest(ctx, sctx, req)
 }

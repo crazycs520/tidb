@@ -5,7 +5,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/coprocessor"
-	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/planner/core"
@@ -156,7 +155,6 @@ func buildDAGExecutor(sctx sessionctx.Context, req *coprocessor.Request) (Execut
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-
 	sctx.GetSessionVars().StmtCtx = sc
 	e, err := buildDAG(sctx, dagReq.Executors)
 	if err != nil {
@@ -166,50 +164,21 @@ func buildDAGExecutor(sctx sessionctx.Context, req *coprocessor.Request) (Execut
 }
 
 func buildDAG(sctx sessionctx.Context, executors []*tipb.Executor) (Executor, error) {
-	var root, upper core.PhysicalPlan
+	var last, curr core.PhysicalPlan
+	var err error
+	is := sctx.GetSessionVars().TxnCtx.InfoSchema.(infoschema.InfoSchema)
+	bp := core.NewPBPlanBuilder(sctx, is)
 
 	for i := 0; i < len(executors); i++ {
-		curr, err := buildPlan(sctx, executors[i])
+		curr, err = bp.PBToPhysicalPlan(executors[i])
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		if upper != nil {
-			upper.SetChildren(curr)
-		}
-		if root == nil {
-			root = curr
-		}
-		upper = curr
+		curr.SetChildren(last)
+		last = curr
 	}
-
-	do := domain.GetDomain(sctx)
-	is := do.InfoSchema()
-	sctx.GetSessionVars().TxnCtx.InfoSchema = is
-
 	b := newExecutorBuilder(sctx, is)
-	return b.build(root), nil
-}
-
-func buildPlan(sctx sessionctx.Context, curr *tipb.Executor) (core.PhysicalPlan, error) {
-	var p core.PhysicalPlan
-	var err error
-	switch curr.GetTp() {
-	case tipb.ExecType_TypeMemTableScan:
-		p, err = buildMemTableScan(sctx, curr)
-	default:
-		// TODO: Support other types.
-		err = errors.Errorf("this exec type %v doesn't support yet.", curr.GetTp())
-	}
-
-	return p, errors.Trace(err)
-}
-
-func buildMemTableScan(sctx sessionctx.Context, e *tipb.Executor) (core.PhysicalPlan, error) {
-	memTblScan := e.MemTblScan
-	if !infoschema.IsClusterTable(memTblScan.TableName) {
-		return nil, errors.Errorf("table %s is not a tidb memory table", memTblScan.TableName)
-	}
-	return core.PBToPhysicalPlan(sctx, e)
+	return b.build(curr), nil
 }
 
 // constructTimeZone constructs timezone by name first. When the timezone name
