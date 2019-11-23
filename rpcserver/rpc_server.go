@@ -62,25 +62,36 @@ func (c *tidbRPCServer) Coprocessor(ctx context.Context, in *coprocessor.Request
 			resp.OtherError = fmt.Sprintf("rpc coprocessor panic, :%v", v)
 		}
 	}()
-	fmt.Printf("rpc server handle coprocessor\n------------\n")
 	resp = c.handleCopDAGRequest(ctx, in)
 	return resp, nil
 }
 
 func (c *tidbRPCServer) handleCopDAGRequest(ctx context.Context, req *coprocessor.Request) *coprocessor.Response {
 	resp := &coprocessor.Response{}
-	createSessionFunc := session.CreateSessionWithDomainFunc(globalDomain.Store())
-	re, err := createSessionFunc(globalDomain)
+	se, err := createSession()
 	if err != nil {
 		resp.OtherError = err.Error()
 		return resp
 	}
-	sctx := re.(session.Session)
-	do := domain.GetDomain(sctx)
+	return executor.HandleCopDAGRequest(ctx, se, req)
+}
+
+func createSession() (session.Session, error) {
+	createSessionFunc := session.CreateSessionWithDomainFunc(globalDomain.Store())
+	re, err := createSessionFunc(globalDomain)
+	if err != nil {
+		return nil, err
+	}
+	se := re.(session.Session)
+	do := domain.GetDomain(se)
 	is := do.InfoSchema()
-	sctx.GetSessionVars().TxnCtx.InfoSchema = is
-	sctx.GetSessionVars().InRestrictedSQL = true
-	sctx.GetSessionVars().StmtCtx.MemTracker = memory.NewTracker(stringutil.StringerStr("coprocessor"), -1)
-	sctx.SetSessionManager(util.GetglobalSessionManager())
-	return executor.HandleCopDAGRequest(ctx, sctx, req)
+	se.GetSessionVars().TxnCtx.InfoSchema = is
+	se.GetSessionVars().InRestrictedSQL = true
+	// This is for disable parallel hash agg.
+	// TODO: remove this.
+	se.GetSessionVars().HashAggPartialConcurrency = 1
+	se.GetSessionVars().HashAggFinalConcurrency = 1
+	se.GetSessionVars().StmtCtx.MemTracker = memory.NewTracker(stringutil.StringerStr("coprocessor"), -1)
+	se.SetSessionManager(util.GetglobalSessionManager())
+	return se, nil
 }

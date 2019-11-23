@@ -282,6 +282,7 @@ func (s *Server) setupStatuServerAndRPCServer(addr string, serverMux *http.Serve
 
 	s.statusServer = &http.Server{Addr: addr, Handler: CorsHandler{handler: serverMux, cfg: s.cfg}}
 	s.grpcServer = rpcserver.CreateTiDBRPCServer()
+	//s.grpcServer = mocktikv.CreateTiDBRPCServer()
 
 	go util.WithRecovery(func() {
 		err := s.grpcServer.Serve(grpcL)

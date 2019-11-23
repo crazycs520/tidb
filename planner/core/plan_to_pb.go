@@ -107,6 +107,7 @@ func (p *PhysicalTableScan) ToPB(ctx sessionctx.Context) (*tipb.Executor, error)
 func (p *PhysicalTableScan) toMemTableScanPB(ctx sessionctx.Context) (*tipb.Executor, error) {
 	columns := p.Columns
 	tsExec := &tipb.MemTableScan{
+		DbName:    p.DBName.L,
 		TableName: p.Table.Name.L,
 		Columns:   model.ColumnsToProto(columns, p.Table.PKIsHandle),
 	}

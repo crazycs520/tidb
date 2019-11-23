@@ -150,7 +150,7 @@ func buildDAGExecutor(sctx sessionctx.Context, req *coprocessor.Request) (Execut
 	}
 
 	sctx.GetSessionVars().StmtCtx.SetFlagsFromPBFlag(dagReq.Flags)
-	sctx.GetSessionVars().StmtCtx.TimeZone, err = constructTimeZone(dagReq.TimeZoneName, int(dagReq.TimeZoneOffset))
+	sctx.GetSessionVars().StmtCtx.TimeZone, err = timeutil.ConstructTimeZone(dagReq.TimeZoneName, int(dagReq.TimeZoneOffset))
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -177,15 +177,4 @@ func buildDAG(sctx sessionctx.Context, executors []*tipb.Executor) (Executor, er
 	}
 	b := newExecutorBuilder(sctx, is)
 	return b.build(curr), nil
-}
-
-// constructTimeZone constructs timezone by name first. When the timezone name
-// is set, the daylight saving problem must be considered. Otherwise the
-// timezone offset in seconds east of UTC is used to constructed the timezone.
-func constructTimeZone(name string, offset int) (*time.Location, error) {
-	if name != "" {
-		return timeutil.LoadLocation(name)
-	}
-
-	return time.FixedZone("", offset), nil
 }

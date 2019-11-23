@@ -4,6 +4,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/expression"
+	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -12,10 +13,9 @@ import (
 )
 
 type pbPlanBuilder struct {
-	sctx    sessionctx.Context
-	tps     []*types.FieldType
-	columns []*model.ColumnInfo
-	is      infoschema.InfoSchema
+	sctx sessionctx.Context
+	tps  []*types.FieldType
+	is   infoschema.InfoSchema
 }
 
 func NewPBPlanBuilder(sctx sessionctx.Context, is infoschema.InfoSchema) *pbPlanBuilder {
@@ -32,6 +32,10 @@ func (b *pbPlanBuilder) PBToPhysicalPlan(e *tipb.Executor) (p PhysicalPlan, err 
 		p, err = b.pbToTopN(e)
 	case tipb.ExecType_TypeLimit:
 		p, err = b.pbToLimit(e)
+	case tipb.ExecType_TypeAggregation:
+		p, err = b.pbToHashAgg(e)
+	case tipb.ExecType_TypeStreamAgg:
+		p, err = b.pbToStreamAgg(e)
 	default:
 		// TODO: Support other types.
 		err = errors.Errorf("this exec type %v doesn't support yet.", e.GetTp())
@@ -44,14 +48,31 @@ func (b *pbPlanBuilder) pbToMemTableScan(e *tipb.Executor) (PhysicalPlan, error)
 	if !infoschema.IsClusterTable(memTbl.TableName) {
 		return nil, errors.Errorf("table %s is not a tidb memory table", memTbl.TableName)
 	}
-	tbl, err := b.is.TableByName(model.NewCIStr("information_schema"), model.NewCIStr(memTbl.TableName))
+	dbName := model.NewCIStr(memTbl.DbName)
+	tbl, err := b.is.TableByName(dbName, model.NewCIStr(memTbl.TableName))
 	if err != nil {
 		return nil, err
 	}
-	columns, tps, err := convertColumnInfo(tbl.Meta(), memTbl)
+	columns, err := convertColumnInfo(tbl.Meta(), memTbl)
+	if err != nil {
+		return nil, err
+	}
+	schema := b.buildMemTableScanSchema(tbl.Meta(), columns)
+	p := PhysicalMemTable{
+		DBName:  dbName,
+		Table:   tbl.Meta(),
+		Columns: columns,
+	}.Init(b.sctx, nil, 0)
+	p.SetSchema(schema)
+	return p, nil
+}
+
+func (b *pbPlanBuilder) buildMemTableScanSchema(tblInfo *model.TableInfo, columns []*model.ColumnInfo) *expression.Schema {
 	schema := expression.NewSchema(make([]*expression.Column, 0, len(columns))...)
-	for _, col := range tbl.Cols() {
+	tps := make([]*types.FieldType, 0, len(columns))
+	for _, col := range tblInfo.Columns {
 		for _, colInfo := range columns {
+			tps = append(tps, colInfo.FieldType.Clone())
 			if col.ID == colInfo.ID {
 				newCol := &expression.Column{
 					UniqueID: b.sctx.GetSessionVars().AllocPlanColumnID(),
@@ -63,15 +84,7 @@ func (b *pbPlanBuilder) pbToMemTableScan(e *tipb.Executor) (PhysicalPlan, error)
 		}
 	}
 	b.tps = tps
-	b.columns = columns
-
-	p := PhysicalMemTable{
-		DBName:  model.NewCIStr("information_schema"),
-		Table:   tbl.Meta(),
-		Columns: columns,
-	}.Init(b.sctx, nil, 0)
-	p.SetSchema(schema)
-	return p, nil
+	return schema
 }
 
 func (b *pbPlanBuilder) pbToSelection(e *tipb.Executor) (PhysicalPlan, error) {
@@ -110,34 +123,89 @@ func (b *pbPlanBuilder) pbToLimit(e *tipb.Executor) (PhysicalPlan, error) {
 	return p, nil
 }
 
-func convertColumnInfo(tblInfo *model.TableInfo, memTbl *tipb.MemTableScan) ([]*model.ColumnInfo, []*types.FieldType, error) {
+func (b *pbPlanBuilder) pbToHashAgg(e *tipb.Executor) (PhysicalPlan, error) {
+	aggFuncs, groupBys, err := b.getAggInfo(e)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schema := b.buildAggSchema(aggFuncs, groupBys)
+	partialAgg := basePhysicalAgg{
+		AggFuncs:     aggFuncs,
+		GroupByItems: groupBys,
+	}.initForHash(b.sctx, nil, 0)
+	partialAgg.schema = schema
+	return partialAgg, nil
+}
+
+func (b *pbPlanBuilder) pbToStreamAgg(e *tipb.Executor) (PhysicalPlan, error) {
+	aggFuncs, groupBys, err := b.getAggInfo(e)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schema := b.buildAggSchema(aggFuncs, groupBys)
+	partialAgg := basePhysicalAgg{
+		AggFuncs:     aggFuncs,
+		GroupByItems: groupBys,
+	}.initForStream(b.sctx, nil, 0)
+	partialAgg.schema = schema
+	return partialAgg, nil
+}
+
+func (b *pbPlanBuilder) buildAggSchema(aggFuncs []*aggregation.AggFuncDesc, groupBys []expression.Expression) *expression.Schema {
+	schema := expression.NewSchema(make([]*expression.Column, 0, len(aggFuncs)+len(groupBys))...)
+	for _, agg := range aggFuncs {
+		newCol := &expression.Column{
+			UniqueID: b.sctx.GetSessionVars().AllocPlanColumnID(),
+			RetType:  agg.RetTp,
+		}
+		schema.Append(newCol)
+	}
+	for _, expr := range groupBys {
+		newCol := &expression.Column{
+			UniqueID: b.sctx.GetSessionVars().AllocPlanColumnID(),
+			RetType:  expr.GetType(),
+		}
+		schema.Append(newCol)
+	}
+	return schema
+}
+
+func (b *pbPlanBuilder) getAggInfo(executor *tipb.Executor) ([]*aggregation.AggFuncDesc, []expression.Expression, error) {
+	aggFuncs := make([]*aggregation.AggFuncDesc, 0, len(executor.Aggregation.AggFunc))
+	sc := b.sctx.GetSessionVars().StmtCtx
+	var err error
+	for _, expr := range executor.Aggregation.AggFunc {
+		aggFunc, err := aggregation.PBExprToAggFuncDesc(sc, expr, b.tps)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+		aggFuncs = append(aggFuncs, aggFunc)
+	}
+	groupBys, err := convertToExprs(b.sctx.GetSessionVars().StmtCtx, b.tps, executor.Aggregation.GetGroupBy())
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	return aggFuncs, groupBys, nil
+}
+
+func convertColumnInfo(tblInfo *model.TableInfo, memTbl *tipb.MemTableScan) ([]*model.ColumnInfo, error) {
 	columns := make([]*model.ColumnInfo, 0, len(memTbl.Columns))
-	tps := make([]*types.FieldType, 0, len(memTbl.Columns))
 	for _, col := range memTbl.Columns {
 		found := false
 		for _, colInfo := range tblInfo.Columns {
 			if col.ColumnId == colInfo.ID {
 				columns = append(columns, colInfo)
-				tps = append(tps, colInfo.FieldType.Clone())
 				found = true
 				break
 			}
 		}
 		if !found {
-			return nil, nil, errors.Errorf("Column ID %v of table not found", col.ColumnId, "information_schema."+memTbl.TableName)
+			return nil, errors.Errorf("Column ID %v of table not found", col.ColumnId, "information_schema."+memTbl.TableName)
 		}
 	}
-	return columns, tps, nil
+	return columns, nil
 }
 
 func convertToExprs(sc *stmtctx.StatementContext, fieldTps []*types.FieldType, pbExprs []*tipb.Expr) ([]expression.Expression, error) {
-	exprs := make([]expression.Expression, 0, len(pbExprs))
-	for _, expr := range pbExprs {
-		e, err := expression.PBToExpr(expr, fieldTps, sc)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		exprs = append(exprs, e)
-	}
-	return exprs, nil
+	return expression.PBToExprs(pbExprs, fieldTps, sc)
 }
