@@ -39,7 +39,7 @@ func SetGlobalDomain(do *domain.Domain) {
 func CreateTiDBRPCServer() *grpc.Server {
 	defer func() {
 		if v := recover(); v != nil {
-			logutil.BgLogger().Error("panic in TiDB RPC server", zap.Any("stack", v))
+			logutil.BgLogger().Error("panic in RPC server", zap.Any("stack", v))
 		}
 	}()
 	s := grpc.NewServer()
@@ -63,6 +63,7 @@ func (c *tidbRPCServer) Coprocessor(ctx context.Context, in *coprocessor.Request
 		}
 	}()
 	resp = c.handleCopDAGRequest(ctx, in)
+	fmt.Printf("rpc server handle cop request succ\n-------------\n")
 	return resp, nil
 }
 

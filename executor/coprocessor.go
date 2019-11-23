@@ -17,6 +17,7 @@ import (
 	"time"
 )
 
+// HandleCopDAGRequest handles the coprocessor request.
 func HandleCopDAGRequest(ctx context.Context, sctx sessionctx.Context, req *coprocessor.Request) *coprocessor.Response {
 	resp := &coprocessor.Response{}
 	e, dagReq, err := buildDAGExecutor(sctx, req)
@@ -32,7 +33,6 @@ func HandleCopDAGRequest(ctx context.Context, sctx sessionctx.Context, req *copr
 	}
 
 	selResp := &tipb.SelectResponse{}
-
 	chk := newFirstChunk(e)
 	tps := e.base().retFieldTypes
 	for {
@@ -48,14 +48,49 @@ func HandleCopDAGRequest(ctx context.Context, sctx sessionctx.Context, req *copr
 		if err != nil {
 			break
 		}
+	}
+	return buildResp(selResp, err)
+}
 
+func buildDAGExecutor(sctx sessionctx.Context, req *coprocessor.Request) (Executor, *tipb.DAGRequest, error) {
+	if len(req.Ranges) == 0 && req.Context.GetRegionId() != 0 {
+		return nil, nil, errors.New("request range is null")
+	}
+	if req.GetTp() != kv.ReqTypeDAG {
+		return nil, nil, errors.Errorf("unsupported request type %d", req.GetTp())
+	}
+	dagReq := new(tipb.DAGRequest)
+	err := proto.Unmarshal(req.Data, dagReq)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
 	}
 
-	//selResp := h.initSelectResponse(err, dagCtx.evalCtx.sc.GetWarnings(), e.Counts())
-	// FIXME: some err such as (overflow) will be include in Response.OtherError with calling this buildResp.
-	//  Such err should only be marshal in the data but not in OtherError.
-	//  However, we can not distinguish such err now.
-	return buildResp(selResp, err)
+	sctx.GetSessionVars().StmtCtx.SetFlagsFromPBFlag(dagReq.Flags)
+	sctx.GetSessionVars().StmtCtx.TimeZone, err = timeutil.ConstructTimeZone(dagReq.TimeZoneName, int(dagReq.TimeZoneOffset))
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	e, err := buildDAG(sctx, dagReq.Executors)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	return e, dagReq, nil
+}
+
+func buildDAG(sctx sessionctx.Context, executors []*tipb.Executor) (Executor, error) {
+	var src core.PhysicalPlan
+	is := sctx.GetSessionVars().TxnCtx.InfoSchema.(infoschema.InfoSchema)
+	bp := core.NewPBPlanBuilder(sctx, is)
+	for i := 0; i < len(executors); i++ {
+		curr, err := bp.PBToPhysicalPlan(executors[i])
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		curr.SetChildren(src)
+		src = curr
+	}
+	b := newExecutorBuilder(sctx, is)
+	return b.build(src), nil
 }
 
 func fillUpData4SelectResponse(selResp *tipb.SelectResponse, dagReq *tipb.DAGRequest, sctx sessionctx.Context, chk *chunk.Chunk, tps []*types.FieldType) error {
@@ -70,6 +105,20 @@ func fillUpData4SelectResponse(selResp *tipb.SelectResponse, dagReq *tipb.DAGReq
 		}
 	}
 	return nil
+}
+
+func buildResp(selResp *tipb.SelectResponse, err error) *coprocessor.Response {
+	resp := &coprocessor.Response{}
+	if err != nil {
+		resp.OtherError = err.Error()
+	}
+	data, err := proto.Marshal(selResp)
+	if err != nil {
+		resp.OtherError = err.Error()
+		return resp
+	}
+	resp.Data = data
+	return resp
 }
 
 func encodeChunk(selResp *tipb.SelectResponse, chk *chunk.Chunk, colTypes []*types.FieldType, colOrdinal []uint32, loc *time.Location) error {
@@ -88,21 +137,6 @@ func encodeChunk(selResp *tipb.SelectResponse, chk *chunk.Chunk, colTypes []*typ
 	selResp.Chunks = chunks
 	selResp.EncodeType = tipb.EncodeType_TypeChunk
 	return nil
-}
-
-func buildResp(selResp *tipb.SelectResponse, err error) *coprocessor.Response {
-	resp := &coprocessor.Response{}
-
-	if err != nil {
-		resp.OtherError = err.Error()
-	}
-	data, err := proto.Marshal(selResp)
-	if err != nil {
-		resp.OtherError = err.Error()
-		return resp
-	}
-	resp.Data = data
-	return resp
 }
 
 func encodeDefault(sctx sessionctx.Context, selResp *tipb.SelectResponse, chk *chunk.Chunk, tps []*types.FieldType, colOrdinal []uint32) error {
@@ -133,48 +167,4 @@ func appendRow(chunks []tipb.Chunk, data []byte, rowCnt int) []tipb.Chunk {
 	cur := &chunks[len(chunks)-1]
 	cur.RowsData = append(cur.RowsData, data...)
 	return chunks
-}
-
-func buildDAGExecutor(sctx sessionctx.Context, req *coprocessor.Request) (Executor, *tipb.DAGRequest, error) {
-	if len(req.Ranges) == 0 && req.Context.GetRegionId() != 0 {
-		return nil, nil, errors.New("request range is null")
-	}
-	if req.GetTp() != kv.ReqTypeDAG {
-		return nil, nil, errors.Errorf("unsupported request type %d", req.GetTp())
-	}
-
-	dagReq := new(tipb.DAGRequest)
-	err := proto.Unmarshal(req.Data, dagReq)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	sctx.GetSessionVars().StmtCtx.SetFlagsFromPBFlag(dagReq.Flags)
-	sctx.GetSessionVars().StmtCtx.TimeZone, err = timeutil.ConstructTimeZone(dagReq.TimeZoneName, int(dagReq.TimeZoneOffset))
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	e, err := buildDAG(sctx, dagReq.Executors)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	return e, dagReq, nil
-}
-
-func buildDAG(sctx sessionctx.Context, executors []*tipb.Executor) (Executor, error) {
-	var last, curr core.PhysicalPlan
-	var err error
-	is := sctx.GetSessionVars().TxnCtx.InfoSchema.(infoschema.InfoSchema)
-	bp := core.NewPBPlanBuilder(sctx, is)
-
-	for i := 0; i < len(executors); i++ {
-		curr, err = bp.PBToPhysicalPlan(executors[i])
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		curr.SetChildren(last)
-		last = curr
-	}
-	b := newExecutorBuilder(sctx, is)
-	return b.build(curr), nil
 }
