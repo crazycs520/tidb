@@ -9,7 +9,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
@@ -150,12 +149,11 @@ func buildDAGExecutor(sctx sessionctx.Context, req *coprocessor.Request) (Execut
 		return nil, nil, errors.Trace(err)
 	}
 
-	sc := stmtctx.FlagsToStatementContext(dagReq.Flags)
-	sc.TimeZone, err = constructTimeZone(dagReq.TimeZoneName, int(dagReq.TimeZoneOffset))
+	sctx.GetSessionVars().StmtCtx.SetFlagsFromPBFlag(dagReq.Flags)
+	sctx.GetSessionVars().StmtCtx.TimeZone, err = constructTimeZone(dagReq.TimeZoneName, int(dagReq.TimeZoneOffset))
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	sctx.GetSessionVars().StmtCtx = sc
 	e, err := buildDAG(sctx, dagReq.Executors)
 	if err != nil {
 		return nil, nil, errors.Trace(err)

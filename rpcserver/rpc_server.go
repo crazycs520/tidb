@@ -23,6 +23,8 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
+	"github.com/pingcap/tidb/util/memory"
+	"github.com/pingcap/tidb/util/stringutil"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -57,7 +59,7 @@ func (c *tidbRPCServer) Coprocessor(ctx context.Context, in *coprocessor.Request
 	defer func() {
 		if v := recover(); v != nil {
 			logutil.BgLogger().Error("panic in TiDB RPC server coprocessor", zap.Any("stack", v))
-			resp.OtherError = "rpc coprocessor panic"
+			resp.OtherError = fmt.Sprintf("rpc coprocessor panic, :%v", v)
 		}
 	}()
 	fmt.Printf("rpc server handle coprocessor\n------------\n")
@@ -78,6 +80,7 @@ func (c *tidbRPCServer) handleCopDAGRequest(ctx context.Context, req *coprocesso
 	is := do.InfoSchema()
 	sctx.GetSessionVars().TxnCtx.InfoSchema = is
 	sctx.GetSessionVars().InRestrictedSQL = true
+	sctx.GetSessionVars().StmtCtx.MemTracker = memory.NewTracker(stringutil.StringerStr("coprocessor"), -1)
 	sctx.SetSessionManager(util.GetglobalSessionManager())
 	return executor.HandleCopDAGRequest(ctx, sctx, req)
 }

@@ -28,6 +28,10 @@ func (b *pbPlanBuilder) PBToPhysicalPlan(e *tipb.Executor) (p PhysicalPlan, err 
 		p, err = b.pbToMemTableScan(e)
 	case tipb.ExecType_TypeSelection:
 		p, err = b.pbToSelection(e)
+	case tipb.ExecType_TypeTopN:
+		p, err = b.pbToTopN(e)
+	case tipb.ExecType_TypeLimit:
+		p, err = b.pbToLimit(e)
 	default:
 		// TODO: Support other types.
 		err = errors.Errorf("this exec type %v doesn't support yet.", e.GetTp())
@@ -77,6 +81,31 @@ func (b *pbPlanBuilder) pbToSelection(e *tipb.Executor) (PhysicalPlan, error) {
 	}
 	p := PhysicalSelection{
 		Conditions: conds,
+	}.Init(b.sctx, nil, 0)
+	return p, nil
+}
+
+func (b *pbPlanBuilder) pbToTopN(e *tipb.Executor) (PhysicalPlan, error) {
+	topN := e.TopN
+	sc := b.sctx.GetSessionVars().StmtCtx
+	byItems := make([]*ByItems, 0, len(topN.OrderBy))
+	for _, item := range topN.OrderBy {
+		expr, err := expression.PBToExpr(item.Expr, b.tps, sc)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		byItems = append(byItems, &ByItems{Expr: expr, Desc: item.Desc})
+	}
+	p := PhysicalTopN{
+		ByItems: byItems,
+		Count:   topN.Limit,
+	}.Init(b.sctx, nil, 0)
+	return p, nil
+}
+
+func (b *pbPlanBuilder) pbToLimit(e *tipb.Executor) (PhysicalPlan, error) {
+	p := PhysicalLimit{
+		Count: e.Limit.Limit,
 	}.Init(b.sctx, nil, 0)
 	return p, nil
 }

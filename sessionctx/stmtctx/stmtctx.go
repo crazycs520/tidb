@@ -538,8 +538,7 @@ func (sc *StatementContext) CopTasksDetails() *CopTasksDetails {
 }
 
 // FlagsToStatementContext creates a StatementContext from a `tipb.SelectRequest.Flags`.
-func FlagsToStatementContext(flags uint64) *StatementContext {
-	sc := new(StatementContext)
+func (sc *StatementContext) SetFlagsFromPBFlag(flags uint64) {
 	sc.IgnoreTruncate = (flags & model.FlagIgnoreTruncate) > 0
 	sc.TruncateAsWarning = (flags & model.FlagTruncateAsWarning) > 0
 	sc.PadCharToFullLength = (flags & model.FlagPadCharToFullLength) > 0
@@ -549,7 +548,6 @@ func FlagsToStatementContext(flags uint64) *StatementContext {
 	sc.IgnoreZeroInDate = (flags & model.FlagIgnoreZeroInDate) > 0
 	sc.DividedByZeroAsWarning = (flags & model.FlagDividedByZeroAsWarning) > 0
 	// TODO set FlagInUpdateOrDeleteStmt, FlagInUnionStmt,
-	return sc
 }
 
 //CopTasksDetails collects some useful information of cop-tasks during execution.
