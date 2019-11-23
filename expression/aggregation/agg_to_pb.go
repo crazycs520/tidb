@@ -110,3 +110,17 @@ func PBExprToAggFuncDesc(sc *stmtctx.StatementContext, aggFunc *tipb.Expr, field
 		HasDistinct:  false,
 	}, nil
 }
+
+// FirstRowAggFuncDesc
+func FirstRowAggFuncDesc(arg expression.Expression) *AggFuncDesc {
+	base := baseFuncDesc{
+		Name:  ast.AggFuncFirstRow,
+		Args:  []expression.Expression{arg},
+		RetTp: arg.GetType(),
+	}
+	return &AggFuncDesc{
+		baseFuncDesc: base,
+		Mode:         Partial1Mode,
+		HasDistinct:  false,
+	}
+}

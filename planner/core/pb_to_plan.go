@@ -160,13 +160,6 @@ func (b *pbPlanBuilder) buildAggSchema(aggFuncs []*aggregation.AggFuncDesc, grou
 		}
 		schema.Append(newCol)
 	}
-	for _, expr := range groupBys {
-		newCol := &expression.Column{
-			UniqueID: b.sctx.GetSessionVars().AllocPlanColumnID(),
-			RetType:  expr.GetType(),
-		}
-		schema.Append(newCol)
-	}
 	return schema
 }
 
@@ -184,6 +177,13 @@ func (b *pbPlanBuilder) getAggInfo(executor *tipb.Executor) ([]*aggregation.AggF
 	groupBys, err := convertToExprs(b.sctx.GetSessionVars().StmtCtx, b.tps, executor.Aggregation.GetGroupBy())
 	if err != nil {
 		return nil, nil, errors.Trace(err)
+	}
+
+	// Attention: palatial aggregation result need the `group by` expression value, Since we reuse the agg executor in executor pkg,
+	// the result of agg executor won't contain the `group by` expression value, so just add a first_row aggregation function
+	// to get the `group by` expression value.
+	for _, groupBy := range groupBys {
+		aggFuncs = append(aggFuncs, aggregation.FirstRowAggFuncDesc(groupBy))
 	}
 	return aggFuncs, groupBys, nil
 }

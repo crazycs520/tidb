@@ -63,7 +63,6 @@ func (c *tidbRPCServer) Coprocessor(ctx context.Context, in *coprocessor.Request
 		}
 	}()
 	resp = c.handleCopDAGRequest(ctx, in)
-	fmt.Printf("rpc server handle cop request succ\n-------------\n")
 	return resp, nil
 }
 
