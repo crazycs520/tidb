@@ -18,6 +18,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/pingcap/tidb/rpcserver"
+	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"os"
 	"runtime"
 	"strconv"
@@ -226,6 +227,7 @@ func registerStores() {
 	tikv.NewGCHandlerFunc = gcworker.NewGCWorker
 	err = kvstore.Register("mocktikv", mockstore.MockDriver{})
 	terror.MustNil(err)
+	mocktikv.TiDBRPCServerCoprocessorHandler = rpcserver.HandleCopDAGRequest
 }
 
 func registerMetrics() {

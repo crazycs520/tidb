@@ -14,7 +14,6 @@
 package types
 
 import (
-	"github.com/pingcap/tipb/go-tipb"
 	"strconv"
 
 	"github.com/pingcap/parser/charset"
@@ -39,18 +38,6 @@ func NewFieldType(tp byte) *FieldType {
 		Tp:      tp,
 		Flen:    UnspecifiedLength,
 		Decimal: UnspecifiedLength,
-	}
-}
-
-// FieldTypeFromPBColumn creates a types.FieldType from tipb.ColumnInfo.
-func FieldTypeFromPBColumn(col *tipb.ColumnInfo) *FieldType {
-	return &FieldType{
-		Tp:      byte(col.GetTp()),
-		Flag:    uint(col.Flag),
-		Flen:    int(col.GetColumnLen()),
-		Decimal: int(col.GetDecimal()),
-		Elems:   col.Elems,
-		Collate: mysql.Collations[uint8(col.GetCollation())],
 	}
 }
 

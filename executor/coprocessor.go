@@ -2,6 +2,8 @@ package executor
 
 import (
 	"context"
+	"time"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/coprocessor"
@@ -14,7 +16,6 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tipb/go-tipb"
-	"time"
 )
 
 // HandleCopDAGRequest handles the coprocessor request.

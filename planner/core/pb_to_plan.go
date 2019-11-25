@@ -44,7 +44,7 @@ func (b *pbPlanBuilder) PBToPhysicalPlan(e *tipb.Executor) (p PhysicalPlan, err 
 
 func (b *pbPlanBuilder) pbToMemTableScan(e *tipb.Executor) (PhysicalPlan, error) {
 	memTbl := e.MemTblScan
-	if !infoschema.IsClusterTable(memTbl.TableName) {
+	if !infoschema.IsClusterTable(memTbl.DbName, memTbl.TableName) {
 		return nil, errors.Errorf("table %s is not a tidb memory table", memTbl.TableName)
 	}
 	dbName := model.NewCIStr(memTbl.DbName)
@@ -184,7 +184,7 @@ func convertColumnInfo(tblInfo *model.TableInfo, memTbl *tipb.MemTableScan) ([]*
 			}
 		}
 		if !found {
-			return nil, errors.Errorf("Column ID %v of table not found", col.ColumnId, "information_schema."+memTbl.TableName)
+			return nil, errors.Errorf("Column ID %v of table %v.%v not found", col.ColumnId, "information_schema", memTbl.TableName)
 		}
 	}
 	return columns, nil

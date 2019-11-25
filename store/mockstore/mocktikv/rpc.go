@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/rpcserver"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 )
 
@@ -723,6 +722,8 @@ func (c *RPCClient) checkArgs(ctx context.Context, addr string) (*rpcHandler, er
 	return handler, nil
 }
 
+var TiDBRPCServerCoprocessorHandler func(context.Context, *coprocessor.Request) *coprocessor.Response
+
 // SendRequest sends a request to mock cluster.
 func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.Request, timeout time.Duration) (*tikvrpc.Response, error) {
 	if span := opentracing.SpanFromContext(ctx); span != nil && span.Tracer() != nil {
@@ -741,8 +742,8 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 	resp := &tikvrpc.Response{}
 	// For memory table scan, the region Id will be 0.
 	// This request should handle over to rpc server to handle.
-	if req.Type == tikvrpc.CmdCop && reqCtx.GetRegionId() == 0 {
-		resp.Resp = rpcserver.HandleCopDAGRequest(context.Background(), req.Cop())
+	if req.Type == tikvrpc.CmdCop && reqCtx.GetRegionId() == 0 && TiDBRPCServerCoprocessorHandler != nil {
+		resp.Resp = TiDBRPCServerCoprocessorHandler(context.Background(), req.Cop())
 		return resp, nil
 	}
 

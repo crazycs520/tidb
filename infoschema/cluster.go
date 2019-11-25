@@ -63,7 +63,10 @@ func init() {
 }
 
 // IsClusterTable used to check whether the table is a cluster memory table.
-func IsClusterTable(tableName string) bool {
+func IsClusterTable(dbName, tableName string) bool {
+	if !IsMemoryDB(dbName) {
+		return false
+	}
 	tableName = strings.ToUpper(tableName)
 	_, ok := clusterTableMap[tableName]
 	return ok

@@ -2312,7 +2312,6 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 	// Data for cluster memory table.
 	case clusterTableSlowLog, clusterTableProcesslist:
 		fullRows, err = getClusterMemTableRows(ctx, it.meta.Name.O)
-
 	}
 	if err != nil {
 		return nil, err

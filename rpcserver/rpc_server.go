@@ -70,6 +70,7 @@ func (c *tidbRPCServer) handleCopDAGRequest(ctx context.Context, req *coprocesso
 	return HandleCopDAGRequest(ctx, req)
 }
 
+// HandleCopDAGRequest handles the cop dag request. It's export for mockTiKV to redirect request.
 func HandleCopDAGRequest(ctx context.Context, req *coprocessor.Request) *coprocessor.Response {
 	resp := &coprocessor.Response{}
 	se, err := createSession()
@@ -77,6 +78,7 @@ func HandleCopDAGRequest(ctx context.Context, req *coprocessor.Request) *coproce
 		resp.OtherError = err.Error()
 		return resp
 	}
+	defer se.Close()
 	return executor.HandleCopDAGRequest(ctx, se, req)
 }
 
