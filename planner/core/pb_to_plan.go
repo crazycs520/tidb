@@ -7,7 +7,6 @@ import (
 	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tipb/go-tipb"
 )
@@ -33,9 +32,9 @@ func (b *pbPlanBuilder) PBToPhysicalPlan(e *tipb.Executor) (p PhysicalPlan, err 
 	case tipb.ExecType_TypeLimit:
 		p, err = b.pbToLimit(e)
 	case tipb.ExecType_TypeAggregation:
-		p, err = b.pbToHashAgg(e)
+		p, err = b.pbToAgg(e, false)
 	case tipb.ExecType_TypeStreamAgg:
-		p, err = b.pbToStreamAgg(e)
+		p, err = b.pbToAgg(e, true)
 	default:
 		// TODO: Support other types.
 		err = errors.Errorf("this exec type %v doesn't support yet.", e.GetTp())
@@ -88,7 +87,7 @@ func (b *pbPlanBuilder) buildMemTableScanSchema(tblInfo *model.TableInfo, column
 }
 
 func (b *pbPlanBuilder) pbToSelection(e *tipb.Executor) (PhysicalPlan, error) {
-	conds, err := convertToExprs(b.sctx.GetSessionVars().StmtCtx, b.tps, e.Selection.Conditions)
+	conds, err := expression.PBToExprs(e.Selection.Conditions, b.tps, b.sctx.GetSessionVars().StmtCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -123,31 +122,23 @@ func (b *pbPlanBuilder) pbToLimit(e *tipb.Executor) (PhysicalPlan, error) {
 	return p, nil
 }
 
-func (b *pbPlanBuilder) pbToHashAgg(e *tipb.Executor) (PhysicalPlan, error) {
+func (b *pbPlanBuilder) pbToAgg(e *tipb.Executor, isStreamAgg bool) (PhysicalPlan, error) {
 	aggFuncs, groupBys, err := b.getAggInfo(e)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	schema := b.buildAggSchema(aggFuncs, groupBys)
-	partialAgg := basePhysicalAgg{
+	baseAgg := basePhysicalAgg{
 		AggFuncs:     aggFuncs,
 		GroupByItems: groupBys,
-	}.initForHash(b.sctx, nil, 0)
-	partialAgg.schema = schema
-	return partialAgg, nil
-}
-
-func (b *pbPlanBuilder) pbToStreamAgg(e *tipb.Executor) (PhysicalPlan, error) {
-	aggFuncs, groupBys, err := b.getAggInfo(e)
-	if err != nil {
-		return nil, errors.Trace(err)
 	}
-	schema := b.buildAggSchema(aggFuncs, groupBys)
-	partialAgg := basePhysicalAgg{
-		AggFuncs:     aggFuncs,
-		GroupByItems: groupBys,
-	}.initForStream(b.sctx, nil, 0)
-	partialAgg.schema = schema
+	baseAgg.schema = schema
+	var partialAgg PhysicalPlan
+	if isStreamAgg {
+		partialAgg = baseAgg.initForHash(b.sctx, nil, 0)
+	} else {
+		partialAgg = baseAgg.initForStream(b.sctx, nil, 0)
+	}
 	return partialAgg, nil
 }
 
@@ -164,9 +155,9 @@ func (b *pbPlanBuilder) buildAggSchema(aggFuncs []*aggregation.AggFuncDesc, grou
 }
 
 func (b *pbPlanBuilder) getAggInfo(executor *tipb.Executor) ([]*aggregation.AggFuncDesc, []expression.Expression, error) {
+	var err error
 	aggFuncs := make([]*aggregation.AggFuncDesc, 0, len(executor.Aggregation.AggFunc))
 	sc := b.sctx.GetSessionVars().StmtCtx
-	var err error
 	for _, expr := range executor.Aggregation.AggFunc {
 		aggFunc, err := aggregation.PBExprToAggFuncDesc(sc, expr, b.tps)
 		if err != nil {
@@ -174,7 +165,7 @@ func (b *pbPlanBuilder) getAggInfo(executor *tipb.Executor) ([]*aggregation.AggF
 		}
 		aggFuncs = append(aggFuncs, aggFunc)
 	}
-	groupBys, err := convertToExprs(b.sctx.GetSessionVars().StmtCtx, b.tps, executor.Aggregation.GetGroupBy())
+	groupBys, err := expression.PBToExprs(executor.Aggregation.GetGroupBy(), b.tps, b.sctx.GetSessionVars().StmtCtx)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -204,8 +195,4 @@ func convertColumnInfo(tblInfo *model.TableInfo, memTbl *tipb.MemTableScan) ([]*
 		}
 	}
 	return columns, nil
-}
-
-func convertToExprs(sc *stmtctx.StatementContext, fieldTps []*types.FieldType, pbExprs []*tipb.Expr) ([]expression.Expression, error) {
-	return expression.PBToExprs(pbExprs, fieldTps, sc)
 }
