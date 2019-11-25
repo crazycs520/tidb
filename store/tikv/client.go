@@ -288,6 +288,7 @@ func (c *rpcClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 	}
 
 	// req.GetRegionId() == 0 means its a TiDB RPC request, TiDB RPC server not support stream now.
+	// TODO: remove this check after TiDB RPC Server support stream.
 	if config.GetGlobalConfig().TiKVClient.MaxBatchSize > 0 && req.GetRegionId() != 0 {
 		if batchReq := req.ToBatchCommandsRequest(); batchReq != nil {
 			return sendBatchRequest(ctx, addr, connArray.batchConn, batchReq, timeout)

@@ -67,6 +67,10 @@ func (c *tidbRPCServer) Coprocessor(ctx context.Context, in *coprocessor.Request
 }
 
 func (c *tidbRPCServer) handleCopDAGRequest(ctx context.Context, req *coprocessor.Request) *coprocessor.Response {
+	return HandleCopDAGRequest(ctx, req)
+}
+
+func HandleCopDAGRequest(ctx context.Context, req *coprocessor.Request) *coprocessor.Response {
 	resp := &coprocessor.Response{}
 	se, err := createSession()
 	if err != nil {

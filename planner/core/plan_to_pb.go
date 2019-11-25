@@ -199,6 +199,7 @@ func SupportStreaming(p PhysicalPlan) bool {
 	case *PhysicalIndexScan, *PhysicalSelection:
 		return true
 	case *PhysicalTableScan:
+		// TODO: remove this after TiDB coprocessor support stream.
 		tp := p.(*PhysicalTableScan).StoreType
 		return tp != kv.TiDBMem
 	}
