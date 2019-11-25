@@ -31,6 +31,7 @@ import (
 
 var globalDomain *domain.Domain
 
+// SetGlobalDomain uses to set global domain, it's for avoid cycle import.
 func SetGlobalDomain(do *domain.Domain) {
 	globalDomain = do
 }

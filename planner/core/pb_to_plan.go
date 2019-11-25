@@ -17,6 +17,7 @@ type pbPlanBuilder struct {
 	is   infoschema.InfoSchema
 }
 
+// NewPBPlanBuilder creates a new pb plan builder.
 func NewPBPlanBuilder(sctx sessionctx.Context, is infoschema.InfoSchema) *pbPlanBuilder {
 	return &pbPlanBuilder{sctx: sctx, is: is}
 }
@@ -44,7 +45,7 @@ func (b *pbPlanBuilder) PBToPhysicalPlan(e *tipb.Executor) (p PhysicalPlan, err 
 
 func (b *pbPlanBuilder) pbToMemTableScan(e *tipb.Executor) (PhysicalPlan, error) {
 	memTbl := e.MemTblScan
-	if !infoschema.IsClusterTable(memTbl.DbName, memTbl.TableName) {
+	if !infoschema.IsClusterMemTable(memTbl.DbName, memTbl.TableName) {
 		return nil, errors.Errorf("table %s is not a tidb memory table", memTbl.TableName)
 	}
 	dbName := model.NewCIStr(memTbl.DbName)

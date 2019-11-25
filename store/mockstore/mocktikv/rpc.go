@@ -722,6 +722,7 @@ func (c *RPCClient) checkArgs(ctx context.Context, addr string) (*rpcHandler, er
 	return handler, nil
 }
 
+// TiDBRPCServerCoprocessorHandler is the TiDB rpc server coprocessor handler.
 var TiDBRPCServerCoprocessorHandler func(context.Context, *coprocessor.Request) *coprocessor.Response
 
 // SendRequest sends a request to mock cluster.
@@ -740,9 +741,8 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 
 	reqCtx := &req.Context
 	resp := &tikvrpc.Response{}
-	// For memory table scan, the region Id will be 0.
-	// This request should handle over to rpc server to handle.
-	if req.Type == tikvrpc.CmdCop && reqCtx.GetRegionId() == 0 && TiDBRPCServerCoprocessorHandler != nil {
+	// When the store type is TiDBMem, the request should handle over to TiDB rpc server to handle.
+	if req.Type == tikvrpc.CmdCop && req.StoreTp == kv.TiDBMem && TiDBRPCServerCoprocessorHandler != nil {
 		resp.Resp = TiDBRPCServerCoprocessorHandler(context.Background(), req.Cop())
 		return resp, nil
 	}

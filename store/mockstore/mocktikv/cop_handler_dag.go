@@ -93,7 +93,7 @@ func (h *rpcHandler) handleCopDAGRequest(req *coprocessor.Request) *coprocessor.
 }
 
 func (h *rpcHandler) buildDAGExecutor(req *coprocessor.Request) (*dagContext, executor, *tipb.DAGRequest, error) {
-	if len(req.Ranges) == 0 && req.Context.GetRegionId() != 0 {
+	if len(req.Ranges) == 0 {
 		return nil, nil, nil, errors.New("request range is null")
 	}
 	if req.GetTp() != kv.ReqTypeDAG {

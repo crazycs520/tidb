@@ -1038,6 +1038,7 @@ func newDistSQLFunctionBySig(sc *stmtctx.StatementContext, sigCode tipb.ScalarFu
 	}, nil
 }
 
+// PBToExprs converts pb structures to expressions.
 func PBToExprs(pbExprs []*tipb.Expr, fieldTps []*types.FieldType, sc *stmtctx.StatementContext) ([]Expression, error) {
 	exprs := make([]Expression, 0, len(pbExprs))
 	for _, expr := range pbExprs {

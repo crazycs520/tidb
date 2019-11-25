@@ -195,13 +195,12 @@ func SetPBColumnsDefaultValue(ctx sessionctx.Context, pbColumns []*tipb.ColumnIn
 // Some plans are difficult (if possible) to implement streaming, and some are pointless to do so.
 // TODO: Support more kinds of physical plan.
 func SupportStreaming(p PhysicalPlan) bool {
-	switch p.(type) {
+	switch x := p.(type) {
 	case *PhysicalIndexScan, *PhysicalSelection:
 		return true
 	case *PhysicalTableScan:
 		// TODO: remove this after TiDB coprocessor support stream.
-		tp := p.(*PhysicalTableScan).StoreType
-		return tp != kv.TiDBMem
+		return x.StoreType != kv.TiDBMem
 	}
 	return false
 }

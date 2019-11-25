@@ -62,8 +62,8 @@ func init() {
 	}
 }
 
-// IsClusterTable used to check whether the table is a cluster memory table.
-func IsClusterTable(dbName, tableName string) bool {
+// IsClusterMemTable used to check whether the table is a cluster memory table.
+func IsClusterMemTable(dbName, tableName string) bool {
 	if !IsMemoryDB(dbName) {
 		return false
 	}
