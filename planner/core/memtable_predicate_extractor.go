@@ -466,3 +466,33 @@ func (e *ClusterLogTableExtractor) Extract(
 	e.Patterns = patterns
 	return remained
 }
+
+// SlowQueryExtractor is used to extract some predicates of `slow_query`
+type SlowQueryExtractor struct {
+	extractHelper
+
+	SkipRequest bool
+	StartTime   time.Time
+	EndTime     time.Time
+	enable      bool
+}
+
+// Extract implements the MemTablePredicateExtractor Extract interface
+func (e *SlowQueryExtractor) Extract(
+	ctx sessionctx.Context,
+	schema *expression.Schema,
+	names []*types.FieldName,
+	predicates []expression.Expression,
+) []expression.Expression {
+	remained, startTime, endTime := e.extractTimeRange(ctx, schema, names, predicates, "time")
+	if endTime == 0 {
+		endTime = math.MaxInt64
+	}
+	//e.StartTime = startTime
+	//e.EndTime = endTime
+	e.SkipRequest = startTime > endTime
+	if e.SkipRequest {
+		return nil
+	}
+	return remained
+}
