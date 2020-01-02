@@ -35,7 +35,7 @@ const (
 
 // memTableToClusterTables means add memory table to cluster table.
 var memTableToClusterTables = map[string]string{
-	tableSlowLog:     clusterTableSlowLog,
+	TableSlowLog:     clusterTableSlowLog,
 	tableProcesslist: clusterTableProcesslist,
 }
 

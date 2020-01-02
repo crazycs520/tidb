@@ -84,13 +84,14 @@ const (
 	tableCollationCharacterSetApplicability = "COLLATION_CHARACTER_SET_APPLICABILITY"
 	tableProcesslist                        = "PROCESSLIST"
 	tableTiDBIndexes                        = "TIDB_INDEXES"
-	tableSlowLog                            = "SLOW_QUERY"
 	tableTiDBHotRegions                     = "TIDB_HOT_REGIONS"
 	tableTiKVStoreStatus                    = "TIKV_STORE_STATUS"
 	tableAnalyzeStatus                      = "ANALYZE_STATUS"
 	tableTiKVRegionStatus                   = "TIKV_REGION_STATUS"
 	tableTiKVRegionPeers                    = "TIKV_REGION_PEERS"
 	tableTiDBServersInfo                    = "TIDB_SERVERS_INFO"
+	// TableSlowLog is the string constant of slow query memory table
+	TableSlowLog = "SLOW_QUERY"
 	// TableClusterInfo is the string constant of cluster info memory table
 	TableClusterInfo = "CLUSTER_INFO"
 	// TableClusterConfig is the string constant of cluster configuration memory table
@@ -143,7 +144,7 @@ var tableIDMap = map[string]int64{
 	tableCollationCharacterSetApplicability: autoid.InformationSchemaDBID + 32,
 	tableProcesslist:                        autoid.InformationSchemaDBID + 33,
 	tableTiDBIndexes:                        autoid.InformationSchemaDBID + 34,
-	tableSlowLog:                            autoid.InformationSchemaDBID + 35,
+	TableSlowLog:                            autoid.InformationSchemaDBID + 35,
 	tableTiDBHotRegions:                     autoid.InformationSchemaDBID + 36,
 	tableTiKVStoreStatus:                    autoid.InformationSchemaDBID + 37,
 	tableAnalyzeStatus:                      autoid.InformationSchemaDBID + 38,
@@ -2213,7 +2214,7 @@ var tableNameToColumns = map[string][]columnInfo{
 	tableCollationCharacterSetApplicability: tableCollationCharacterSetApplicabilityCols,
 	tableProcesslist:                        tableProcesslistCols,
 	tableTiDBIndexes:                        tableTiDBIndexesCols,
-	tableSlowLog:                            slowQueryCols,
+	TableSlowLog:                            slowQueryCols,
 	tableTiDBHotRegions:                     tableTiDBHotRegionsCols,
 	tableTiKVStoreStatus:                    tableTiKVStoreStatusCols,
 	tableAnalyzeStatus:                      tableAnalyzeStatusCols,
@@ -2318,7 +2319,7 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 		fullRows = dataForCollationCharacterSetApplicability()
 	case tableProcesslist:
 		fullRows = dataForProcesslist(ctx)
-	case tableSlowLog:
+	case TableSlowLog:
 		fullRows, err = dataForSlowLog(ctx)
 	case tableTiDBHotRegions:
 		fullRows, err = dataForTiDBHotRegions(ctx)
