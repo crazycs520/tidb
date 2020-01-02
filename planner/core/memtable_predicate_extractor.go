@@ -621,11 +621,8 @@ func (e *SlowQueryExtractor) Extract(
 	predicates []expression.Expression,
 ) []expression.Expression {
 	remained, startTime, endTime := e.extractTimeRange(ctx, schema, names, predicates, "time", ctx.GetSessionVars().StmtCtx.TimeZone)
-	if startTime == 0 && endTime == 0 {
-		return remained
-	}
-
-	e.SkipRequest = startTime > endTime
+	e.setTimeRange(startTime, endTime)
+	e.SkipRequest = e.enable && e.StartTime.After(e.EndTime)
 	if e.SkipRequest {
 		return nil
 	}
@@ -652,6 +649,10 @@ func (e *SlowQueryExtractor) setTimeRange(start, end int64) {
 	}
 	e.StartTime, e.EndTime = startTime, endTime
 	e.enable = true
+}
+
+func (e *SlowQueryExtractor) IsEnabled() bool {
+	return e.enable
 }
 
 func (e *SlowQueryExtractor) CheckTimeInvalid(t time.Time) bool {

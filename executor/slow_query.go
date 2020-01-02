@@ -41,54 +41,96 @@ import (
 
 //SlowQueryRetriever uses to read slow log data.
 type SlowQueryRetriever struct {
-	table      *model.TableInfo
-	outputCols []*model.ColumnInfo
-	retrieved  bool
-	extractor  *plannercore.SlowQueryExtractor
+	table       *model.TableInfo
+	outputCols  []*model.ColumnInfo
+	retrieved   bool
+	extractor   *plannercore.SlowQueryExtractor
+	initialized bool
+	files       []logFile
+	fileIdx     int
+	fileLine    int
 }
 
-func (e *SlowQueryRetriever) retrieve(ctx context.Context, sctx sessionctx.Context) (fullRows [][]types.Datum, err error) {
+func (e *SlowQueryRetriever) retrieve(ctx context.Context, sctx sessionctx.Context) ([][]types.Datum, error) {
 	if e.retrieved {
 		return nil, nil
 	}
-
-	return nil, nil
-}
-
-func dataForSlowLog(ctx sessionctx.Context) ([][]types.Datum, error) {
-	return parseSlowLogFile(ctx.GetSessionVars().Location(), ctx.GetSessionVars().SlowQueryFile)
-}
-
-// parseSlowLogFile uses to parse slow log file.
-// TODO: Support parse multiple log-files.
-func parseSlowLogFile(tz *time.Location, filePath string) ([][]types.Datum, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	defer func() {
-		if err = file.Close(); err != nil {
-			logutil.BgLogger().Error("close slow log file failed.", zap.String("file", filePath), zap.Error(err))
+	if !e.initialized {
+		err := e.initialize(sctx)
+		if err != nil {
+			return nil, err
 		}
-	}()
-	return ParseSlowLog(tz, bufio.NewReader(file))
+	}
+	if len(e.files) == 0 {
+		e.retrieved = true
+		return nil, nil
+	}
+	return e.dataForSlowLog(sctx)
+}
+
+func (e *SlowQueryRetriever) initialize(sctx sessionctx.Context) error {
+	var err error
+	if e.extractor.IsEnabled() {
+		e.files, err = GetAllFiles(sctx.GetSessionVars().SlowQueryFile, e.extractor.StartTime, e.extractor.EndTime)
+	} else {
+		file, err1 := os.Open(sctx.GetSessionVars().SlowQueryFile)
+		if err1 == nil {
+			e.files = []logFile{{file: file}}
+		}
+		err = err1
+	}
+	e.initialized = true
+	return err
+}
+
+func (e *SlowQueryRetriever) close() error {
+	for _, f := range e.files {
+		name := f.file.Name()
+		err := f.file.Close()
+		if err != nil {
+			logutil.BgLogger().Error("close slow log file failed.", zap.String("file", name), zap.Error(err))
+		}
+	}
+	return nil
+}
+
+func (e *SlowQueryRetriever) dataForSlowLog(ctx sessionctx.Context) ([][]types.Datum, error) {
+	reader := bufio.NewReader(e.files[e.fileIdx].file)
+	checkTimeInvalid := e.extractor.CheckTimeInvalid
+	if !e.extractor.IsEnabled() {
+		checkTimeInvalid = nil
+	}
+	rows, fileLine, err := ParseSlowLog(ctx, ctx.GetSessionVars().Location(), reader, e.fileLine, 1024, checkTimeInvalid)
+	if err != nil {
+		if err == io.EOF {
+			e.fileIdx++
+			e.fileLine = 0
+			if e.fileIdx >= len(e.files) {
+				e.retrieved = true
+			}
+			return rows, nil
+		}
+		return rows, err
+	}
+	e.fileLine = fileLine
+	return rows, nil
 }
 
 // ParseSlowLog exports for testing.
 // TODO: optimize for parse huge log-file.
-func ParseSlowLog(tz *time.Location, reader *bufio.Reader) ([][]types.Datum, error) {
+func ParseSlowLog(ctx sessionctx.Context, tz *time.Location, reader *bufio.Reader, fileLine, maxRow int, checkTimeInvalid func(time.Time) bool) ([][]types.Datum, int, error) {
 	var rows [][]types.Datum
 	startFlag := false
 	var st *slowQueryTuple
-	lineNum := 0
+	lineNum := fileLine
 	for {
+		if len(rows) >= maxRow {
+			return rows, lineNum, nil
+		}
 		lineNum++
 		lineByte, err := getOneLine(reader)
 		if err != nil {
-			if err == io.EOF {
-				return rows, nil
-			}
-			return rows, err
+			return rows, lineNum, err
 		}
 		line := string(hack.String(lineByte))
 		// Check slow log entry start flag.
@@ -96,9 +138,14 @@ func ParseSlowLog(tz *time.Location, reader *bufio.Reader) ([][]types.Datum, err
 			st = &slowQueryTuple{}
 			err = st.setFieldValue(tz, variable.SlowLogTimeStr, line[len(variable.SlowLogStartPrefixStr):], lineNum)
 			if err != nil {
-				return rows, err
+				ctx.GetSessionVars().StmtCtx.AppendWarning(err)
+				continue
 			}
-			startFlag = true
+			if checkTimeInvalid != nil && checkTimeInvalid(st.time) {
+				startFlag = false
+			} else {
+				startFlag = true
+			}
 			continue
 		}
 
@@ -117,7 +164,8 @@ func ParseSlowLog(tz *time.Location, reader *bufio.Reader) ([][]types.Datum, err
 						}
 						err = st.setFieldValue(tz, field, fieldValues[i+1], lineNum)
 						if err != nil {
-							return rows, err
+							ctx.GetSessionVars().StmtCtx.AppendWarning(err)
+							continue
 						}
 					}
 				}
@@ -125,7 +173,8 @@ func ParseSlowLog(tz *time.Location, reader *bufio.Reader) ([][]types.Datum, err
 				// Get the sql string, and mark the start flag to false.
 				err = st.setFieldValue(tz, variable.SlowLogQuerySQLStr, string(hack.Slice(line)), lineNum)
 				if err != nil {
-					return rows, err
+					ctx.GetSessionVars().StmtCtx.AppendWarning(err)
+					continue
 				}
 				rows = append(rows, st.convertToDatumRow())
 				startFlag = false
@@ -321,7 +370,7 @@ func (st *slowQueryTuple) setFieldValue(tz *time.Location, field, value string, 
 		st.sql = value
 	}
 	if err != nil {
-		return errors.Wrap(err, "Parse slow log at line "+strconv.FormatInt(int64(lineNum), 10)+" failed. Field: `"+field+"`, error")
+		return errors.Errorf("Parse slow log at line %v failed. Field: %v, err: %v", lineNum, field, err)
 	}
 	return nil
 }
@@ -426,6 +475,7 @@ func (l *logFile) EndTime() time.Time {
 }
 
 func GetAllFiles(logFilePath string, beginTime, endTime time.Time) ([]logFile, error) {
+	fmt.Printf("get all file, start: %v, end: %v-------------\n", beginTime, endTime)
 	var logFiles []logFile
 	logDir := filepath.Dir(logFilePath)
 	ext := filepath.Ext(logFilePath)
@@ -459,7 +509,7 @@ func GetAllFiles(logFilePath string, beginTime, endTime time.Time) ([]logFile, e
 		if err != nil {
 			return err
 		}
-		fmt.Printf("get start time: %v---------\n\n", time.Since(now))
+		fmt.Printf("get start time: %v,   %v---------\n\n", time.Since(now), fileBeginTime)
 
 		if fileBeginTime.After(endTime) {
 			return nil
@@ -470,7 +520,7 @@ func GetAllFiles(logFilePath string, beginTime, endTime time.Time) ([]logFile, e
 		if err != nil {
 			return err
 		}
-		fmt.Printf("get end time: %v---------\n\n", time.Since(now))
+		fmt.Printf("get end time: %v,       %v---------\n\n", time.Since(now), fileEndTime)
 		if fileEndTime.Before(beginTime) {
 			return nil
 		}
