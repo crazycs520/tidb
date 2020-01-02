@@ -191,6 +191,7 @@ type slowQueryTuple struct {
 	processTime        float64
 	waitTime           float64
 	backOffTime        float64
+	lockKeysTime       float64
 	requestCount       uint64
 	totalKeys          uint64
 	processKeys        uint64
@@ -274,6 +275,8 @@ func (st *slowQueryTuple) setFieldValue(tz *time.Location, field, value string, 
 		st.waitTime, err = strconv.ParseFloat(value, 64)
 	case execdetails.BackoffTimeStr:
 		st.backOffTime, err = strconv.ParseFloat(value, 64)
+	case execdetails.LockKeysTimeStr:
+		st.lockKeysTime, err = strconv.ParseFloat(value, 64)
 	case execdetails.RequestCountStr:
 		st.requestCount, err = strconv.ParseUint(value, 10, 64)
 	case execdetails.TotalKeysStr:
@@ -325,11 +328,7 @@ func (st *slowQueryTuple) setFieldValue(tz *time.Location, field, value string, 
 
 func (st *slowQueryTuple) convertToDatumRow() []types.Datum {
 	record := make([]types.Datum, 0, 64)
-	record = append(record, types.NewTimeDatum(types.Time{
-		Time: types.FromGoTime(st.time),
-		Type: mysql.TypeDatetime,
-		Fsp:  types.MaxFsp,
-	}))
+	record = append(record, types.NewTimeDatum(types.NewTime(types.FromGoTime(st.time), mysql.TypeDatetime, types.MaxFsp)))
 	record = append(record, types.NewUintDatum(st.txnStartTs))
 	record = append(record, types.NewStringDatum(st.user))
 	record = append(record, types.NewStringDatum(st.host))
@@ -352,6 +351,7 @@ func (st *slowQueryTuple) convertToDatumRow() []types.Datum {
 	record = append(record, types.NewFloat64Datum(st.processTime))
 	record = append(record, types.NewFloat64Datum(st.waitTime))
 	record = append(record, types.NewFloat64Datum(st.backOffTime))
+	record = append(record, types.NewFloat64Datum(st.lockKeysTime))
 	record = append(record, types.NewUintDatum(st.requestCount))
 	record = append(record, types.NewUintDatum(st.totalKeys))
 	record = append(record, types.NewUintDatum(st.processKeys))

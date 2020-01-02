@@ -43,7 +43,7 @@ import (
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/parser_driver"
+	driver "github.com/pingcap/tidb/types/parser_driver"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/domainutil"
@@ -451,7 +451,7 @@ func checkColumnDefaultValue(ctx sessionctx.Context, col *table.Column, value in
 			if err != nil {
 				return hasDefaultValue, value, errors.Trace(err)
 			}
-			if timeValue.GetMysqlTime().Time == types.ZeroTime {
+			if timeValue.GetMysqlTime().CoreTime() == types.ZeroCoreTime {
 				return hasDefaultValue, value, types.ErrInvalidDefault.GenWithStackByArgs(col.Name.O)
 			}
 		}
@@ -1148,19 +1148,10 @@ func convertAutoRandomBitsToUnsigned(autoRandomBits int) (uint64, error) {
 	return uint64(autoRandomBits), nil
 }
 
-func buildTableInfo(ctx sessionctx.Context, d *ddl, tableName model.CIStr, cols []*table.Column, constraints []*ast.Constraint) (tbInfo *model.TableInfo, err error) {
+func buildTableInfo(ctx sessionctx.Context, tableName model.CIStr, cols []*table.Column, constraints []*ast.Constraint) (tbInfo *model.TableInfo, err error) {
 	tbInfo = &model.TableInfo{
 		Name:    tableName,
 		Version: model.CurrLatestTableInfoVersion,
-	}
-	// When this function is called by MockTableInfo, we should set a particular table id.
-	// So the `ddl` structure may be nil.
-	if d != nil {
-		genIDs, err := d.genGlobalIDs(1)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		tbInfo.ID = genIDs[0]
 	}
 	for _, v := range cols {
 		v.ID = allocateColumnID(tbInfo)
@@ -1329,13 +1320,14 @@ func buildTableInfoWithLike(ident ast.Ident, referTblInfo *model.TableInfo) mode
 }
 
 // BuildTableInfoFromAST builds model.TableInfo from a SQL statement.
-// The SQL string should be a create table statement.
-// Don't use this function to build a partitioned table.
+// Note: TableID and PartitionID are left as uninitialized value.
 func BuildTableInfoFromAST(s *ast.CreateTableStmt) (*model.TableInfo, error) {
-	return buildTableInfoWithCheck(mock.NewContext(), nil, s, mysql.DefaultCharset, "")
+	return buildTableInfoWithCheck(mock.NewContext(), s, mysql.DefaultCharset, "")
 }
 
-func buildTableInfoWithCheck(ctx sessionctx.Context, d *ddl, s *ast.CreateTableStmt, dbCharset, dbCollate string) (*model.TableInfo, error) {
+// buildTableInfoWithCheck builds model.TableInfo from a SQL statement.
+// Note: TableID and PartitionIDs are left as uninitialized value.
+func buildTableInfoWithCheck(ctx sessionctx.Context, s *ast.CreateTableStmt, dbCharset, dbCollate string) (*model.TableInfo, error) {
 	ident := ast.Ident{Schema: s.Table.Schema, Name: s.Table.Name}
 	colDefs := s.Cols
 	colObjects := make([]interface{}, 0, len(colDefs))
@@ -1379,7 +1371,7 @@ func buildTableInfoWithCheck(ctx sessionctx.Context, d *ddl, s *ast.CreateTableS
 	}
 
 	var tbInfo *model.TableInfo
-	tbInfo, err = buildTableInfo(ctx, d, ident.Name, cols, newConstraints)
+	tbInfo, err = buildTableInfo(ctx, ident.Name, cols, newConstraints)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1390,7 +1382,7 @@ func buildTableInfoWithCheck(ctx sessionctx.Context, d *ddl, s *ast.CreateTableS
 		return nil, errors.Trace(err)
 	}
 
-	pi, err := buildTablePartitionInfo(ctx, d, s)
+	pi, err := buildTablePartitionInfo(ctx, s)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1426,6 +1418,30 @@ func buildTableInfoWithCheck(ctx sessionctx.Context, d *ddl, s *ast.CreateTableS
 	return tbInfo, nil
 }
 
+func (d *ddl) assignTableID(tbInfo *model.TableInfo) error {
+	genIDs, err := d.genGlobalIDs(1)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	tbInfo.ID = genIDs[0]
+	return nil
+}
+
+func (d *ddl) assignPartitionIDs(tbInfo *model.TableInfo) error {
+	if tbInfo.Partition == nil {
+		return nil
+	}
+	partitionDefs := tbInfo.Partition.Definitions
+	genIDs, err := d.genGlobalIDs(len(partitionDefs))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for i := range partitionDefs {
+		partitionDefs[i].ID = genIDs[i]
+	}
+	return nil
+}
+
 func (d *ddl) CreateTable(ctx sessionctx.Context, s *ast.CreateTableStmt) (err error) {
 	ident := ast.Ident{Schema: s.Table.Schema, Name: s.Table.Name}
 	if s.ReferTable != nil {
@@ -1446,10 +1462,17 @@ func (d *ddl) CreateTable(ctx sessionctx.Context, s *ast.CreateTableStmt) (err e
 		return err
 	}
 
-	tbInfo, err := buildTableInfoWithCheck(ctx, d, s, schema.Charset, schema.Collate)
+	tbInfo, err := buildTableInfoWithCheck(ctx, s, schema.Charset, schema.Collate)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if err := d.assignTableID(tbInfo); err != nil {
+		return errors.Trace(err)
+	}
+	if err := d.assignPartitionIDs(tbInfo); err != nil {
+		return errors.Trace(err)
+	}
+
 	tbInfo.State = model.StatePublic
 	err = checkTableInfoValid(tbInfo)
 	if err != nil {
@@ -1586,8 +1609,11 @@ func (d *ddl) CreateView(ctx sessionctx.Context, s *ast.CreateViewStmt) (err err
 		return err
 	}
 
-	tbInfo, err := buildTableInfo(ctx, d, ident.Name, cols, nil)
+	tbInfo, err := buildTableInfo(ctx, ident.Name, cols, nil)
 	if err != nil {
+		return err
+	}
+	if err := d.assignTableID(tbInfo); err != nil {
 		return err
 	}
 	tbInfo.View = viewInfo
@@ -3389,6 +3415,10 @@ func getAnonymousIndex(t table.Table, colName model.CIStr) model.CIStr {
 	id := 2
 	l := len(t.Indices())
 	indexName := colName
+	if strings.EqualFold(indexName.L, mysql.PrimaryKeyName) {
+		indexName = model.NewCIStr(fmt.Sprintf("%s_%d", colName.O, id))
+		id = 3
+	}
 	for i := 0; i < l; i++ {
 		if t.Indices()[i].Meta().Name.L == indexName.L {
 			indexName = model.NewCIStr(fmt.Sprintf("%s_%d", colName.O, id))
@@ -4051,12 +4081,12 @@ func (d *ddl) RepairTable(ctx sessionctx.Context, table *ast.TableName, createSt
 	if createStmt.Table.Schema.L != oldDBInfo.Name.L {
 		return ErrRepairTableFail.GenWithStack("Repaired table should in same database with the old one")
 	}
+
 	// It is necessary to specify the table.ID and partition.ID manually.
-	newTableInfo, err := buildTableInfoWithCheck(ctx, d, createStmt, oldTableInfo.Charset, oldTableInfo.Collate)
+	newTableInfo, err := buildTableInfoWithCheck(ctx, createStmt, oldTableInfo.Charset, oldTableInfo.Collate)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	// Override newTableInfo with oldTableInfo's element necessary.
 	// TODO: There may be more element assignments here, and the new TableInfo should be verified with the actual data.
 	newTableInfo.ID = oldTableInfo.ID
