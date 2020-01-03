@@ -16,17 +16,17 @@ package executor_test
 import (
 	"bufio"
 	"bytes"
-	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/mock"
 	"io"
 	"strings"
 	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/executor"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/logutil"
+	"github.com/pingcap/tidb/util/mock"
 )
 
 func (s *testSuite) TestParseSlowLogFile(c *C) {
@@ -128,8 +128,10 @@ select * from t;
 `)
 	reader = bufio.NewReader(slowLog)
 	_, _, err = parseSlowLog(s.ctx, loc, reader, 0, 1024)
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "Parse slow log at line 2 failed. Field: `Succ`, error: strconv.ParseBool: parsing \"abc\": invalid syntax")
+	c.Assert(err, IsNil)
+	warnings := s.ctx.GetSessionVars().StmtCtx.GetWarnings()
+	c.Assert(len(warnings), Equals, 1)
+	c.Assert(warnings[0].Err.Error(), Equals, "Parse slow log at line 2 failed. Field: `Succ`, error: strconv.ParseBool: parsing \"abc\": invalid syntax")
 }
 
 func (s *testSuite) TestSlowLogParseTime(c *C) {

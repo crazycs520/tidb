@@ -16,24 +16,24 @@ package executor
 import (
 	"bufio"
 	"context"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/util/execdetails"
-	"github.com/pingcap/tidb/util/hack"
-	"github.com/pingcap/tidb/util/logutil"
-	"github.com/pingcap/tidb/util/plancodec"
-	"go.uber.org/zap"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/execdetails"
+	"github.com/pingcap/tidb/util/hack"
+	"github.com/pingcap/tidb/util/logutil"
+	"github.com/pingcap/tidb/util/plancodec"
+	"go.uber.org/zap"
 )
 
 //SlowQueryRetriever uses to read slow log data.
@@ -89,7 +89,7 @@ func (e *SlowQueryRetriever) retrieveWithoutPrune(ctx context.Context, sctx sess
 }
 
 func (e *SlowQueryRetriever) pruneColumn(fullRows [][]types.Datum) [][]types.Datum {
-	if len(fullRows) == len(e.outputCols) {
+	if len(fullRows) == 0 || len(fullRows[0]) == len(e.outputCols) {
 		return fullRows
 	}
 	rows := make([][]types.Datum, len(fullRows))
