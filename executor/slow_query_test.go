@@ -11,21 +11,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package infoschema_test
+package executor_test
 
 import (
 	"bufio"
 	"bytes"
+	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/mock"
+	"io"
 	"strings"
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/logutil"
 )
 
 func (s *testSuite) TestParseSlowLogFile(c *C) {
+	s.ctx = mock.NewContext()
 	slowLog := bytes.NewBufferString(
 		`# Time: 2019-04-28T15:24:04.309074+08:00
 # Txn_start_ts: 405888132465033227
@@ -44,7 +49,7 @@ select * from t;`)
 	reader := bufio.NewReader(slowLog)
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	c.Assert(err, IsNil)
-	rows, err := infoschema.ParseSlowLog(loc, reader)
+	rows, _, err := parseSlowLog(s.ctx, loc, reader, 0, 1024)
 	c.Assert(err, IsNil)
 	c.Assert(len(rows), Equals, 1)
 	recordString := ""
@@ -74,7 +79,7 @@ select a# from t;
 select * from t;
 `)
 	reader = bufio.NewReader(slowLog)
-	_, err = infoschema.ParseSlowLog(loc, reader)
+	_, _, err = parseSlowLog(s.ctx, loc, reader, 0, 1024)
 	c.Assert(err, IsNil)
 
 	// test for time format compatibility.
@@ -85,7 +90,7 @@ select * from t;
 select * from t;
 `)
 	reader = bufio.NewReader(slowLog)
-	rows, err = infoschema.ParseSlowLog(loc, reader)
+	rows, _, err = parseSlowLog(s.ctx, loc, reader, 0, 1024)
 	c.Assert(err, IsNil)
 	c.Assert(len(rows) == 2, IsTrue)
 	t0Str, err := rows[0][0].ToString()
@@ -106,13 +111,13 @@ select * from t;
 	sql := strings.Repeat("x", int(variable.MaxOfMaxAllowedPacket+1))
 	slowLog.WriteString(sql)
 	reader = bufio.NewReader(slowLog)
-	_, err = infoschema.ParseSlowLog(loc, reader)
+	_, _, err = parseSlowLog(s.ctx, loc, reader, 0, 1024)
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "single line length exceeds limit: 65536")
 
 	variable.MaxOfMaxAllowedPacket = originValue
 	reader = bufio.NewReader(slowLog)
-	_, err = infoschema.ParseSlowLog(loc, reader)
+	_, _, err = parseSlowLog(s.ctx, loc, reader, 0, 1024)
 	c.Assert(err, IsNil)
 
 	// Add parse error check.
@@ -122,7 +127,7 @@ select * from t;
 select * from t;
 `)
 	reader = bufio.NewReader(slowLog)
-	_, err = infoschema.ParseSlowLog(loc, reader)
+	_, _, err = parseSlowLog(s.ctx, loc, reader, 0, 1024)
 	c.Assert(err, NotNil)
 	c.Assert(err.Error(), Equals, "Parse slow log at line 2 failed. Field: `Succ`, error: strconv.ParseBool: parsing \"abc\": invalid syntax")
 }
@@ -130,7 +135,7 @@ select * from t;
 func (s *testSuite) TestSlowLogParseTime(c *C) {
 	t1Str := "2019-01-24T22:32:29.313255+08:00"
 	t2Str := "2019-01-24T22:32:29.313255"
-	t1, err := infoschema.ParseTime(t1Str)
+	t1, err := executor.ParseTime(t1Str)
 	c.Assert(err, IsNil)
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	c.Assert(err, IsNil)
@@ -145,6 +150,7 @@ func (s *testSuite) TestSlowLogParseTime(c *C) {
 // sql select * from INFORMATION_SCHEMA.SLOW_QUERY limit 1;
 // ERROR 1105 (HY000): string "2019-05-12-11:23:29.61474688" doesn't has a prefix that matches format "2006-01-02-15:04:05.999999999 -0700", err: parsing time "2019-05-12-11:23:29.61474688" as "2006-01-02-15:04:05.999999999 -0700": cannot parse "" as "-0700"
 func (s *testSuite) TestFixParseSlowLogFile(c *C) {
+	s.ctx = mock.NewContext()
 	slowLog := bytes.NewBufferString(
 		`# Time: 2019-05-12-11:23:29.614327491 +0800
 # Txn_start_ts: 405888132465033227
@@ -172,7 +178,7 @@ select * from t;`)
 	scanner := bufio.NewReader(slowLog)
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	c.Assert(err, IsNil)
-	_, err = infoschema.ParseSlowLog(loc, scanner)
+	_, _, err = parseSlowLog(s.ctx, loc, scanner, 0, 1024)
 	c.Assert(err, IsNil)
 
 	// Test parser error.
@@ -182,8 +188,17 @@ select * from t;`)
 `)
 
 	scanner = bufio.NewReader(slowLog)
-	_, err = infoschema.ParseSlowLog(loc, scanner)
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "Parse slow log at line 2 failed. Field: `Txn_start_ts`, error: strconv.ParseUint: parsing \"405888132465033227#\": invalid syntax")
+	_, _, err = parseSlowLog(s.ctx, loc, scanner, 0, 1024)
+	c.Assert(err, IsNil)
+	warnings := s.ctx.GetSessionVars().StmtCtx.GetWarnings()
+	c.Assert(len(warnings), Equals, 1)
+	c.Assert(warnings[0].Err.Error(), Equals, "Parse slow log at line 2 failed. Field: `Txn_start_ts`, error: strconv.ParseUint: parsing \"405888132465033227#\": invalid syntax")
+}
 
+func parseSlowLog(ctx sessionctx.Context, tz *time.Location, reader *bufio.Reader, fileLine, maxRow int) ([][]types.Datum, int, error) {
+	rows, line, err := executor.ParseSlowLog(ctx, tz, reader, fileLine, maxRow)
+	if err == io.EOF {
+		err = nil
+	}
+	return rows, line, err
 }

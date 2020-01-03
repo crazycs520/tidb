@@ -44,6 +44,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	binaryJson "github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util"
+	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/pdapi"
 	"github.com/pingcap/tidb/util/set"
 	"github.com/pingcap/tidb/util/sqlexec"
@@ -155,7 +156,7 @@ var tableIDMap = map[string]int64{
 	TableClusterConfig:                      autoid.InformationSchemaDBID + 43,
 	TableClusterLoad:                        autoid.InformationSchemaDBID + 44,
 	tableTiFlashReplica:                     autoid.InformationSchemaDBID + 45,
-	clusterTableSlowLog:                     autoid.InformationSchemaDBID + 46,
+	ClusterTableSlowLog:                     autoid.InformationSchemaDBID + 46,
 	clusterTableProcesslist:                 autoid.InformationSchemaDBID + 47,
 	TableClusterLog:                         autoid.InformationSchemaDBID + 48,
 	TableClusterHardware:                    autoid.InformationSchemaDBID + 49,
@@ -772,6 +773,55 @@ var tableClusterSystemInfoCols = []columnInfo{
 	{"SYSTEM_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
 	{"NAME", mysql.TypeVarchar, 256, 0, nil, nil},
 	{"VALUE", mysql.TypeVarchar, 128, 0, nil, nil},
+}
+
+var slowQueryCols = []columnInfo{
+	{variable.SlowLogTimeStr, mysql.TypeTimestamp, 26, 0, nil, nil},
+	{variable.SlowLogTxnStartTSStr, mysql.TypeLonglong, 20, mysql.UnsignedFlag, nil, nil},
+	{variable.SlowLogUserStr, mysql.TypeVarchar, 64, 0, nil, nil},
+	{variable.SlowLogHostStr, mysql.TypeVarchar, 64, 0, nil, nil},
+	{variable.SlowLogConnIDStr, mysql.TypeLonglong, 20, mysql.UnsignedFlag, nil, nil},
+	{variable.SlowLogQueryTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{variable.SlowLogParseTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{variable.SlowLogCompileTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.PreWriteTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.BinlogPrewriteTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.CommitTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.GetCommitTSTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.CommitBackoffTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.BackoffTypesStr, mysql.TypeVarchar, 64, 0, nil, nil},
+	{execdetails.ResolveLockTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.LocalLatchWaitTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.WriteKeysStr, mysql.TypeLonglong, 22, 0, nil, nil},
+	{execdetails.WriteSizeStr, mysql.TypeLonglong, 22, 0, nil, nil},
+	{execdetails.PrewriteRegionStr, mysql.TypeLonglong, 22, 0, nil, nil},
+	{execdetails.TxnRetryStr, mysql.TypeLonglong, 22, 0, nil, nil},
+	{execdetails.ProcessTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.WaitTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.BackoffTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.LockKeysTimeStr, mysql.TypeDouble, 22, 0, nil, nil},
+	{execdetails.RequestCountStr, mysql.TypeLonglong, 20, mysql.UnsignedFlag, nil, nil},
+	{execdetails.TotalKeysStr, mysql.TypeLonglong, 20, mysql.UnsignedFlag, nil, nil},
+	{execdetails.ProcessKeysStr, mysql.TypeLonglong, 20, mysql.UnsignedFlag, nil, nil},
+	{variable.SlowLogDBStr, mysql.TypeVarchar, 64, 0, nil, nil},
+	{variable.SlowLogIndexNamesStr, mysql.TypeVarchar, 100, 0, nil, nil},
+	{variable.SlowLogIsInternalStr, mysql.TypeTiny, 1, 0, nil, nil},
+	{variable.SlowLogDigestStr, mysql.TypeVarchar, 64, 0, nil, nil},
+	{variable.SlowLogStatsInfoStr, mysql.TypeVarchar, 512, 0, nil, nil},
+	{variable.SlowLogCopProcAvg, mysql.TypeDouble, 22, 0, nil, nil},
+	{variable.SlowLogCopProcP90, mysql.TypeDouble, 22, 0, nil, nil},
+	{variable.SlowLogCopProcMax, mysql.TypeDouble, 22, 0, nil, nil},
+	{variable.SlowLogCopProcAddr, mysql.TypeVarchar, 64, 0, nil, nil},
+	{variable.SlowLogCopWaitAvg, mysql.TypeDouble, 22, 0, nil, nil},
+	{variable.SlowLogCopWaitP90, mysql.TypeDouble, 22, 0, nil, nil},
+	{variable.SlowLogCopWaitMax, mysql.TypeDouble, 22, 0, nil, nil},
+	{variable.SlowLogCopWaitAddr, mysql.TypeVarchar, 64, 0, nil, nil},
+	{variable.SlowLogMemMax, mysql.TypeLonglong, 20, 0, nil, nil},
+	{variable.SlowLogSucc, mysql.TypeTiny, 1, 0, nil, nil},
+	{variable.SlowLogPlan, mysql.TypeLongBlob, types.UnspecifiedLength, 0, nil, nil},
+	{variable.SlowLogPlanDigest, mysql.TypeVarchar, 128, 0, nil, nil},
+	{variable.SlowLogPrevStmt, mysql.TypeLongBlob, types.UnspecifiedLength, 0, nil, nil},
+	{variable.SlowLogQuerySQLStr, mysql.TypeLongBlob, types.UnspecifiedLength, 0, nil, nil},
 }
 
 func dataForTiKVRegionStatus(ctx sessionctx.Context) (records [][]types.Datum, err error) {
@@ -2319,8 +2369,6 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 		fullRows = dataForCollationCharacterSetApplicability()
 	case tableProcesslist:
 		fullRows = dataForProcesslist(ctx)
-	case TableSlowLog:
-		fullRows, err = dataForSlowLog(ctx)
 	case tableTiDBHotRegions:
 		fullRows, err = dataForTiDBHotRegions(ctx)
 	case tableTiKVStoreStatus:
@@ -2338,7 +2386,7 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 	case tableTiFlashReplica:
 		fullRows = dataForTableTiFlashReplica(dbs)
 	// Data for cluster memory table.
-	case clusterTableSlowLog, clusterTableProcesslist:
+	case clusterTableProcesslist:
 		fullRows, err = getClusterMemTableRows(ctx, it.meta.Name.O)
 	}
 	if err != nil {

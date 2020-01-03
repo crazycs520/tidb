@@ -16,9 +16,9 @@ package executor
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/hack"
@@ -27,14 +27,11 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"os"
-	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pingcap/parser/model"
-	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 )
@@ -44,14 +41,37 @@ type SlowQueryRetriever struct {
 	table       *model.TableInfo
 	outputCols  []*model.ColumnInfo
 	retrieved   bool
-	extractor   *plannercore.SlowQueryExtractor
 	initialized bool
-	files       []logFile
-	fileIdx     int
+	file        *os.File
 	fileLine    int
 }
 
+//ClusterSlowQueryRetriever uses to read cluster slow log data.
+type ClusterSlowQueryRetriever struct {
+	*SlowQueryRetriever
+}
+
+func (e *ClusterSlowQueryRetriever) retrieve(ctx context.Context, sctx sessionctx.Context) ([][]types.Datum, error) {
+	fullRows, err := e.SlowQueryRetriever.retrieveWithoutPrune(ctx, sctx)
+	if err != nil {
+		return nil, err
+	}
+	fullRows, err = infoschema.AppendHostInfoToRows(fullRows)
+	if err != nil {
+		return nil, err
+	}
+	return e.pruneColumn(fullRows), nil
+}
+
 func (e *SlowQueryRetriever) retrieve(ctx context.Context, sctx sessionctx.Context) ([][]types.Datum, error) {
+	fullRows, err := e.retrieveWithoutPrune(ctx, sctx)
+	if err != nil {
+		return nil, err
+	}
+	return e.pruneColumn(fullRows), nil
+}
+
+func (e *SlowQueryRetriever) retrieveWithoutPrune(ctx context.Context, sctx sessionctx.Context) ([][]types.Datum, error) {
 	if e.retrieved {
 		return nil, nil
 	}
@@ -61,32 +81,41 @@ func (e *SlowQueryRetriever) retrieve(ctx context.Context, sctx sessionctx.Conte
 			return nil, err
 		}
 	}
-	if len(e.files) == 0 {
+	if e.file == nil {
 		e.retrieved = true
 		return nil, nil
 	}
 	return e.dataForSlowLog(sctx)
 }
 
-func (e *SlowQueryRetriever) initialize(sctx sessionctx.Context) error {
-	var err error
-	if e.extractor.IsEnabled() {
-		e.files, err = GetAllFiles(sctx.GetSessionVars().SlowQueryFile, e.extractor.StartTime, e.extractor.EndTime)
-	} else {
-		file, err1 := os.Open(sctx.GetSessionVars().SlowQueryFile)
-		if err1 == nil {
-			e.files = []logFile{{file: file}}
+func (e *SlowQueryRetriever) pruneColumn(fullRows [][]types.Datum) [][]types.Datum {
+	if len(fullRows) == len(e.outputCols) {
+		return fullRows
+	}
+	rows := make([][]types.Datum, len(fullRows))
+	for i, fullRow := range fullRows {
+		row := make([]types.Datum, len(e.outputCols))
+		for j, col := range e.outputCols {
+			row[j] = fullRow[col.Offset]
 		}
-		err = err1
+		rows[i] = row
+	}
+	return rows
+}
+
+func (e *SlowQueryRetriever) initialize(sctx sessionctx.Context) error {
+	file, err := os.Open(sctx.GetSessionVars().SlowQueryFile)
+	if err == nil {
+		e.file = file
 	}
 	e.initialized = true
 	return err
 }
 
 func (e *SlowQueryRetriever) close() error {
-	for _, f := range e.files {
-		name := f.file.Name()
-		err := f.file.Close()
+	if e.file != nil {
+		name := e.file.Name()
+		err := e.file.Close()
 		if err != nil {
 			logutil.BgLogger().Error("close slow log file failed.", zap.String("file", name), zap.Error(err))
 		}
@@ -95,19 +124,11 @@ func (e *SlowQueryRetriever) close() error {
 }
 
 func (e *SlowQueryRetriever) dataForSlowLog(ctx sessionctx.Context) ([][]types.Datum, error) {
-	reader := bufio.NewReader(e.files[e.fileIdx].file)
-	checkTimeInvalid := e.extractor.CheckTimeInvalid
-	if !e.extractor.IsEnabled() {
-		checkTimeInvalid = nil
-	}
-	rows, fileLine, err := ParseSlowLog(ctx, ctx.GetSessionVars().Location(), reader, e.fileLine, 1024, checkTimeInvalid)
+	reader := bufio.NewReader(e.file)
+	rows, fileLine, err := ParseSlowLog(ctx, ctx.GetSessionVars().Location(), reader, e.fileLine, 1024)
 	if err != nil {
 		if err == io.EOF {
-			e.fileIdx++
-			e.fileLine = 0
-			if e.fileIdx >= len(e.files) {
-				e.retrieved = true
-			}
+			e.retrieved = true
 			return rows, nil
 		}
 		return rows, err
@@ -118,7 +139,7 @@ func (e *SlowQueryRetriever) dataForSlowLog(ctx sessionctx.Context) ([][]types.D
 
 // ParseSlowLog exports for testing.
 // TODO: optimize for parse huge log-file.
-func ParseSlowLog(ctx sessionctx.Context, tz *time.Location, reader *bufio.Reader, fileLine, maxRow int, checkTimeInvalid func(time.Time) bool) ([][]types.Datum, int, error) {
+func ParseSlowLog(ctx sessionctx.Context, tz *time.Location, reader *bufio.Reader, fileLine, maxRow int) ([][]types.Datum, int, error) {
 	var rows [][]types.Datum
 	startFlag := false
 	var st *slowQueryTuple
@@ -141,11 +162,7 @@ func ParseSlowLog(ctx sessionctx.Context, tz *time.Location, reader *bufio.Reade
 				ctx.GetSessionVars().StmtCtx.AppendWarning(err)
 				continue
 			}
-			if checkTimeInvalid != nil && checkTimeInvalid(st.time) {
-				startFlag = false
-			} else {
-				startFlag = true
-			}
+			startFlag = true
 			continue
 		}
 
@@ -370,7 +387,7 @@ func (st *slowQueryTuple) setFieldValue(tz *time.Location, field, value string, 
 		st.sql = value
 	}
 	if err != nil {
-		return errors.Errorf("Parse slow log at line %v failed. Field: %v, err: %v", lineNum, field, err)
+		return errors.Errorf("Parse slow log at line %v failed. Field: `%v`, error: %v", lineNum, field, err)
 	}
 	return nil
 }
@@ -455,156 +472,4 @@ func ParseTime(s string) (time.Time, error) {
 		}
 	}
 	return t, err
-}
-
-type logFile struct {
-	file       *os.File  // The opened file handle
-	begin, end time.Time // The start/end time of the log file
-}
-
-func (l *logFile) File() *os.File {
-	return l.file
-}
-
-func (l *logFile) BeginTime() time.Time {
-	return l.begin
-}
-
-func (l *logFile) EndTime() time.Time {
-	return l.end
-}
-
-func GetAllFiles(logFilePath string, beginTime, endTime time.Time) ([]logFile, error) {
-	fmt.Printf("get all file, start: %v, end: %v-------------\n", beginTime, endTime)
-	var logFiles []logFile
-	logDir := filepath.Dir(logFilePath)
-	ext := filepath.Ext(logFilePath)
-	prefix := logFilePath[:len(logFilePath)-len(ext)]
-	fmt.Printf("dir: %v, prefix: %v, ext: %v\n", logDir, prefix, ext)
-	err := filepath.Walk(logDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		//All rotated log files have the same prefix with the original file
-		if !strings.HasPrefix(path, prefix) {
-			return nil
-		}
-		fmt.Printf("path: %v, info: %v\n", path, info.Name())
-		file, err := os.OpenFile(path, os.O_RDONLY, os.ModePerm)
-		if err != nil {
-			return err
-		}
-		skip := false
-		defer func() {
-			if !skip {
-				fmt.Printf("close file: %v-------------\n", file.Name())
-				_ = file.Close()
-			}
-		}()
-		now := time.Now()
-		fileBeginTime, err := getFileStartTime(file)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("get start time: %v,   %v---------\n\n", time.Since(now), fileBeginTime)
-
-		if fileBeginTime.After(endTime) {
-			return nil
-		}
-
-		now = time.Now()
-		fileEndTime, err := getFileEndTime(file)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("get end time: %v,       %v---------\n\n", time.Since(now), fileEndTime)
-		if fileEndTime.Before(beginTime) {
-			return nil
-		}
-		_, err = file.Seek(0, io.SeekStart)
-		if err != nil {
-			return err
-		}
-		logFiles = append(logFiles, logFile{
-			file:  file,
-			begin: fileBeginTime,
-			end:   fileEndTime,
-		})
-		skip = true
-		return nil
-	})
-	// Sort by start time
-	sort.Slice(logFiles, func(i, j int) bool {
-		return logFiles[i].begin.Before(logFiles[j].begin)
-	})
-	return logFiles, err
-}
-
-func getFileStartTime(file *os.File) (time.Time, error) {
-	var t time.Time
-	_, err := file.Seek(0, io.SeekStart)
-	if err != nil {
-		return t, err
-	}
-	reader := bufio.NewReader(file)
-	maxNum := 128
-	for {
-		lineByte, err := getOneLine(reader)
-		if err != nil {
-			return t, err
-		}
-		line := string(lineByte)
-		if strings.HasPrefix(line, variable.SlowLogStartPrefixStr) {
-			return ParseTime(line[len(variable.SlowLogStartPrefixStr):])
-		}
-		maxNum -= 1
-		if maxNum <= 0 {
-			break
-		}
-	}
-	return t, errors.Errorf("can't found start time")
-}
-func getFileEndTime(file *os.File) (time.Time, error) {
-	var t time.Time
-	stat, err := file.Stat()
-	if err != nil {
-		return t, err
-	}
-	fileSize := stat.Size()
-	cursor := int64(0)
-	line := make([]byte, 0, 64)
-	maxNum := 128
-	for {
-		cursor -= 1
-		_, err := file.Seek(cursor, io.SeekEnd)
-		if err != nil {
-			return t, err
-		}
-
-		char := make([]byte, 1)
-		_, err = file.Read(char)
-		if err != nil {
-			return t, err
-		}
-		// If find a line.
-		if cursor != -1 && (char[0] == 10 || char[0] == 13) {
-			for i, j := 0, len(line)-1; i < j; i, j = i+1, j-1 {
-				line[i], line[j] = line[j], line[i]
-			}
-			lineStr := string(line)
-			lineStr = strings.TrimSpace(lineStr)
-			if strings.HasPrefix(lineStr, variable.SlowLogStartPrefixStr) {
-				return ParseTime(lineStr[len(variable.SlowLogStartPrefixStr):])
-			}
-			line = line[:0]
-			maxNum -= 1
-		}
-		line = append(line, char[0])
-		if cursor == -fileSize || maxNum <= 0 {
-			return t, errors.Errorf("can't found end time")
-		}
-	}
 }

@@ -5151,20 +5151,3 @@ func (s *testSuite1) TestPartitionHashCode(c *C) {
 	}
 	wg.Wait()
 }
-
-func (s *testSuite1) TestFileCS(c *C) {
-	startTime, err := executor.ParseTime("2019-12-14T00:15:27.438708708+08:00")
-	c.Assert(err, IsNil)
-	endTime, err := executor.ParseTime("2019-12-20T00:10:28.488427431+08:00")
-	c.Assert(err, IsNil)
-
-	start := time.Now()
-	files, err := executor.GetAllFiles("/Users/cs/code/goread/src/github.com/pingcap/tidb/tidb-slow.log", startTime, endTime)
-	fmt.Printf("spend %v\n-----------------------\n\n", time.Since(start))
-	c.Assert(err, IsNil)
-	for _, f := range files {
-		fmt.Printf("file: %v, start: %v, end: %v\n", f.File().Name(), f.BeginTime().Format(logutil.SlowLogTimeFormat), f.EndTime().Format(logutil.SlowLogTimeFormat))
-		err = f.File().Close()
-		c.Assert(err, IsNil)
-	}
-}
