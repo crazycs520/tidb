@@ -465,9 +465,10 @@ const (
 
 // Process global variables.
 var (
-	ProcessGeneralLog      uint32
-	ddlReorgWorkerCounter  int32 = DefTiDBDDLReorgWorkerCount
-	maxDDLReorgWorkerCount int32 = 128
+	ProcessGeneralLog     uint32
+	ddlReorgWorkerCounter int32 = DefTiDBDDLReorgWorkerCount
+	// MaxDDLReorgWorkerCount export for ddl pkg.
+	MaxDDLReorgWorkerCount int32 = 128
 	ddlReorgBatchSize      int32 = DefTiDBDDLReorgBatchSize
 	ddlErrorCountlimit     int64 = DefTiDBDDLErrorCountLimit
 	maxDeltaSchemaCount    int64 = DefTiDBMaxDeltaSchemaCount
