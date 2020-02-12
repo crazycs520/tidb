@@ -14,6 +14,8 @@
 package core
 
 import (
+	"fmt"
+	"github.com/pingcap/tipb/go-tipb"
 	"math"
 	"regexp"
 	"sort"
@@ -278,6 +280,23 @@ func (helper extractHelper) findColumn(schema *expression.Schema, names []*types
 	return extractCols
 }
 
+func (helper extractHelper) getFunctionName(fn *expression.ScalarFunction) string {
+	switch fn.Function.PbCode() {
+	case tipb.ScalarFuncSig_GTTime:
+		return ast.GT
+	case tipb.ScalarFuncSig_GETime:
+		return ast.GE
+	case tipb.ScalarFuncSig_LTTime:
+		return ast.LT
+	case tipb.ScalarFuncSig_LETime:
+		return ast.LE
+	case tipb.ScalarFuncSig_EQTime:
+		return ast.EQ
+	default:
+		return fn.FuncName.L
+	}
+}
+
 // extracts the time range column, e.g:
 // SELECT * FROM t WHERE time='2019-10-10 10:10:10'
 // SELECT * FROM t WHERE time>'2019-10-10 10:10:10' AND time<'2019-10-11 10:10:10'
@@ -309,7 +328,9 @@ func (helper extractHelper) extractTimeRange(
 
 		var colName string
 		var datums []types.Datum
-		switch fn.FuncName.L {
+		fnName := helper.getFunctionName(fn)
+		fmt.Printf("func name: %v---------\n", fnName)
+		switch fnName {
 		case ast.GT, ast.GE, ast.LT, ast.LE, ast.EQ:
 			colName, datums = helper.extractColBinaryOpConsExpr(extractCols, fn)
 		}
@@ -334,7 +355,7 @@ func (helper extractHelper) extractTimeRange(
 				timezone,
 			).UnixNano() / int64(time.Millisecond)
 
-			switch fn.FuncName.L {
+			switch fnName {
 			case ast.EQ:
 				startTime = mathutil.MaxInt64(startTime, timestamp)
 				if endTime == 0 {

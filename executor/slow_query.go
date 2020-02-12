@@ -65,7 +65,22 @@ func (e *SlowQueryRetriever) retrieve(ctx context.Context, sctx sessionctx.Conte
 		e.retrieved = true
 		return nil, nil
 	}
-	return e.dataForSlowLog(sctx)
+	fullRows, err := e.dataForSlowLog(sctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(e.outputCols) == len(e.table.Columns) {
+		return fullRows, nil
+	}
+	rows := make([][]types.Datum, len(fullRows))
+	for i, fullRow := range fullRows {
+		row := make([]types.Datum, len(e.outputCols))
+		for j, col := range e.outputCols {
+			row[j] = fullRow[col.Offset]
+		}
+		rows[i] = row
+	}
+	return rows, nil
 }
 
 func (e *SlowQueryRetriever) initialize(sctx sessionctx.Context) error {

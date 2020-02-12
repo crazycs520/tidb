@@ -14,6 +14,7 @@
 package core
 
 import (
+	"fmt"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/expression"
@@ -22,6 +23,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tipb/go-tipb"
+	"strings"
 )
 
 // PBPlanBuilder uses to build physical plan from dag protocol buffers.
@@ -47,7 +49,59 @@ func (b *PBPlanBuilder) Build(executors []*tipb.Executor) (p PhysicalPlan, err e
 		curr.SetChildren(src)
 		src = curr
 	}
+	_, src = b.PredicatePushDown(src, nil)
 	return src, nil
+}
+
+func (b *PBPlanBuilder) PredicatePushDown(p PhysicalPlan, predicates []expression.Expression) ([]expression.Expression, PhysicalPlan) {
+	if p == nil {
+		return predicates, p
+	}
+	switch p.(type) {
+	case *PhysicalMemTable:
+		memTable := p.(*PhysicalMemTable)
+		fmt.Printf("mem table1 -------\n")
+		if memTable.Extractor == nil {
+			return predicates, p
+		}
+		names := make([]*types.FieldName, 0, len(memTable.Columns))
+		for _, col := range memTable.Columns {
+			names = append(names, &types.FieldName{
+				TblName:     memTable.Table.Name,
+				ColName:     col.Name,
+				OrigTblName: memTable.Table.Name,
+				OrigColName: col.Name,
+			})
+		}
+		// Set the expression column unique ID.
+		//Since the expression is build from PB, It has not set the expression column ID yet.
+		schemaCols := memTable.schema.Columns
+		cols := expression.ExtractColumnsFromExpressions([]*expression.Column{}, predicates, nil)
+		for i := range cols {
+			cols[i].UniqueID = schemaCols[cols[i].Index].UniqueID
+		}
+		before := len(predicates)
+		predicates = memTable.Extractor.Extract(b.sctx, memTable.schema, names, predicates)
+		fmt.Printf("mem table2 %v, %v-------\n", before, len(predicates))
+		return predicates, memTable
+	case *PhysicalSelection:
+		fmt.Printf("select -------\n")
+		selection := p.(*PhysicalSelection)
+		conds, child := b.PredicatePushDown(p.Children()[0], selection.Conditions)
+		if len(conds) > 0 {
+			selection.Conditions = conds
+			selection.SetChildren(child)
+			return predicates, selection
+		}
+		return predicates, child
+	default:
+		fmt.Printf("other -------\n")
+		if childen := p.Children(); len(childen) > 0 {
+			_, child := b.PredicatePushDown(childen[0], nil)
+			p.SetChildren(child)
+		}
+		return predicates, p
+	}
 }
 
 func (b *PBPlanBuilder) pbToPhysicalPlan(e *tipb.Executor) (p PhysicalPlan, err error) {
@@ -77,6 +131,10 @@ func (b *PBPlanBuilder) pbToTableScan(e *tipb.Executor) (PhysicalPlan, error) {
 	if !ok {
 		return nil, infoschema.ErrTableNotExists.GenWithStack("Table which ID = %d does not exist.", tblScan.TableId)
 	}
+	dbInfo, ok := b.is.SchemaByTable(tbl.Meta())
+	if !ok {
+		return nil, infoschema.ErrDatabaseNotExists.GenWithStack("Database of table ID = %d does not exist.", tblScan.TableId)
+	}
 	// Currently only support cluster table.
 	if !tbl.Type().IsClusterTable() {
 		return nil, errors.Errorf("table %s is not a cluster table", tbl.Meta().Name.L)
@@ -87,10 +145,15 @@ func (b *PBPlanBuilder) pbToTableScan(e *tipb.Executor) (PhysicalPlan, error) {
 	}
 	schema := b.buildTableScanSchema(tbl.Meta(), columns)
 	p := PhysicalMemTable{
+		DBName:  dbInfo.Name,
 		Table:   tbl.Meta(),
 		Columns: columns,
 	}.Init(b.sctx, nil, 0)
 	p.SetSchema(schema)
+	switch strings.ToUpper(p.Table.Name.O) {
+	case infoschema.ClusterTableSlowLog:
+		p.Extractor = &SlowQueryExtractor{}
+	}
 	return p, nil
 }
 

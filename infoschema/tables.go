@@ -145,22 +145,22 @@ var tableIDMap = map[string]int64{
 	tableProcesslist:                        autoid.InformationSchemaDBID + 33,
 	tableTiDBIndexes:                        autoid.InformationSchemaDBID + 34,
 	TableSlowLog:                            autoid.InformationSchemaDBID + 35,
-	tableTiDBHotRegions:                     autoid.InformationSchemaDBID + 36,
-	tableTiKVStoreStatus:                    autoid.InformationSchemaDBID + 37,
-	tableAnalyzeStatus:                      autoid.InformationSchemaDBID + 38,
-	tableTiKVRegionStatus:                   autoid.InformationSchemaDBID + 39,
-	tableTiKVRegionPeers:                    autoid.InformationSchemaDBID + 40,
-	tableTiDBServersInfo:                    autoid.InformationSchemaDBID + 41,
-	TableClusterInfo:                        autoid.InformationSchemaDBID + 42,
-	TableClusterConfig:                      autoid.InformationSchemaDBID + 43,
-	TableClusterLoad:                        autoid.InformationSchemaDBID + 44,
-	tableTiFlashReplica:                     autoid.InformationSchemaDBID + 45,
-	clusterTableSlowLog:                     autoid.InformationSchemaDBID + 46,
-	clusterTableProcesslist:                 autoid.InformationSchemaDBID + 47,
-	TableClusterLog:                         autoid.InformationSchemaDBID + 48,
-	TableClusterHardware:                    autoid.InformationSchemaDBID + 49,
-	TableClusterSystemInfo:                  autoid.InformationSchemaDBID + 50,
-	TableInspectionResult:                   autoid.InformationSchemaDBID + 51,
+	tableTiDBHotRegions:     autoid.InformationSchemaDBID + 36,
+	tableTiKVStoreStatus:    autoid.InformationSchemaDBID + 37,
+	tableAnalyzeStatus:      autoid.InformationSchemaDBID + 38,
+	tableTiKVRegionStatus:   autoid.InformationSchemaDBID + 39,
+	tableTiKVRegionPeers:    autoid.InformationSchemaDBID + 40,
+	tableTiDBServersInfo:    autoid.InformationSchemaDBID + 41,
+	TableClusterInfo:        autoid.InformationSchemaDBID + 42,
+	TableClusterConfig:      autoid.InformationSchemaDBID + 43,
+	TableClusterLoad:        autoid.InformationSchemaDBID + 44,
+	tableTiFlashReplica:     autoid.InformationSchemaDBID + 45,
+	ClusterTableSlowLog:     autoid.InformationSchemaDBID + 46,
+	clusterTableProcesslist: autoid.InformationSchemaDBID + 47,
+	TableClusterLog:         autoid.InformationSchemaDBID + 48,
+	TableClusterHardware:    autoid.InformationSchemaDBID + 49,
+	TableClusterSystemInfo:  autoid.InformationSchemaDBID + 50,
+	TableInspectionResult:   autoid.InformationSchemaDBID + 51,
 }
 
 type columnInfo struct {
@@ -2338,7 +2338,7 @@ func (it *infoschemaTable) getRows(ctx sessionctx.Context, cols []*table.Column)
 	case tableTiFlashReplica:
 		fullRows = dataForTableTiFlashReplica(dbs)
 	// Data for cluster memory table.
-	case clusterTableSlowLog, clusterTableProcesslist:
+	case ClusterTableSlowLog, clusterTableProcesslist:
 		fullRows, err = getClusterMemTableRows(ctx, it.meta.Name.O)
 	}
 	if err != nil {
