@@ -22,6 +22,16 @@ var MetricTableMap = map[string]MetricTableDef{
 		Quantile: 0.90,
 		Comment:  "The quantile of TiDB query durations(second)",
 	},
+	"tidb_query_total_time": {
+		PromQL:  `60 * sum(rate(tidb_server_handle_query_duration_seconds_sum[60s])) by (sql_type, instance)`,
+		Labels:  []string{"instance", "sql_type"},
+		Comment: "The total time of TiDB query durations(second)",
+	},
+	"tidb_query_total_count": {
+		PromQL:  `60 * sum(rate(tidb_server_handle_query_duration_seconds_count[60s])) by (sql_type, instance)`,
+		Labels:  []string{"instance", "sql_type"},
+		Comment: "The total count of TiDB query",
+	},
 	"tidb_qps": {
 		PromQL:  `sum(rate(tidb_server_query_total{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (result,type,instance)`,
 		Labels:  []string{"instance", "type", "result"},
@@ -144,6 +154,16 @@ var MetricTableMap = map[string]MetricTableDef{
 		Quantile: 0.99,
 		Comment:  " The quantile of Duration (us) for getting token, it should be small until concurrency limit is reached(second)",
 	},
+	"tidb_get_token_total_time": {
+		PromQL:  `60 * sum(rate(tidb_server_get_token_duration_seconds_sum[60s])) by (instance)`,
+		Labels:  []string{"instance"},
+		Comment: " The total time (s) of getting token",
+	},
+	"tidb_get_token_total_count": {
+		PromQL:  `60 * sum(rate(tidb_server_get_token_duration_seconds_count[60s])) by (instance)`,
+		Labels:  []string{"instance"},
+		Comment: " The total count of getting token",
+	},
 	"tidb_handshake_error_ops": {
 		PromQL:  "sum(increase(tidb_server_handshake_error_total{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (instance)",
 		Labels:  []string{"instance"},
@@ -189,11 +209,31 @@ var MetricTableMap = map[string]MetricTableDef{
 		Quantile: 0.95,
 		Comment:  "The quantile time cost of parsing SQL to AST(second)",
 	},
+	"tidb_parse_total_time": {
+		PromQL:  `60 * sum(rate(tidb_session_parse_duration_seconds_sum[60s])) by (instance)`,
+		Labels:  []string{"instance"},
+		Comment: "The total time cost of parsing SQL to AST(second)",
+	},
+	"tidb_parse_total_count": {
+		PromQL:  `60 * sum(rate(tidb_session_parse_duration_seconds_count[60s])) by (instance)`,
+		Labels:  []string{"instance", "type", "sql_type"},
+		Comment: "The total count of parsing SQL to AST",
+	},
 	"tidb_compile_duration": {
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_session_compile_duration_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le, sql_type,instance))",
 		Labels:   []string{"instance", "sql_type"},
 		Quantile: 0.95,
 		Comment:  "The quantile time cost of building the query plan(second)",
+	},
+	"tidb_compile_total_time": {
+		PromQL:  `60 * sum(rate(tidb_session_compile_duration_seconds_sum[60s])) by (sql_type,instance)`,
+		Labels:  []string{"instance", "sql_type"},
+		Comment: "The total time cost of building the query plan(second)",
+	},
+	"tidb_compile_total_count": {
+		PromQL:  `60 * sum(rate(tidb_session_compile_duration_seconds_count[60s])) by (sql_type,instance)`,
+		Labels:  []string{"instance", "sql_type"},
+		Comment: "The total count of building the query plan",
 	},
 	"tidb_execute_duration": {
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_session_execute_duration_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le, sql_type, instance))",
@@ -217,9 +257,19 @@ var MetricTableMap = map[string]MetricTableDef{
 		Quantile: 0.95,
 		Comment:  "The quantile durations of distsql execution(second)",
 	},
-	"tidb_distsql_qps": {
-		PromQL:  "sum(rate(tidb_distsql_handle_query_duration_seconds_count{$LABEL_CONDITIONS}[$RANGE_DURATION]))",
+	"tidb_distsql_execution_total_time": {
+		PromQL:  `60 * sum(rate(tidb_distsql_handle_query_duration_seconds_sum[60s])) by (type,instance)`,
 		Labels:  []string{"instance", "type"},
+		Comment: "The total time of distsql execution(second)",
+	},
+	"tidb_distsql_execution_total_count": {
+		PromQL:  `60 * sum(rate(tidb_distsql_handle_query_duration_seconds_count[60s])) by (instance,type,sql_type)`,
+		Labels:  []string{"instance", "type", "sql_type"},
+		Comment: "The total count of distsql execution",
+	},
+	"tidb_distsql_qps": {
+		PromQL:  "sum(rate(tidb_distsql_handle_query_duration_seconds_count{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (instance,type,sql_type)",
+		Labels:  []string{"instance", "type", "sql_type"},
 		Comment: "distsql query handling durations per second",
 	},
 	"tidb_distsql_partial_qps": {
@@ -232,6 +282,11 @@ var MetricTableMap = map[string]MetricTableDef{
 		Labels:   []string{"instance"},
 		Quantile: 0.95,
 		Comment:  "The quantile numebr of distsql scan numbers",
+	},
+	"tidb_distsql_scan_key_total_num": {
+		PromQL:  `60 * sum(rate(tidb_distsql_scan_keys_num_sum[60s])) by (instance)`,
+		Labels:  []string{"instance"},
+		Comment: "The total numebr of distsql scan numbers",
 	},
 	"tidb_distsql_partial_scan_key_num": {
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_distsql_scan_keys_partial_num_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le,instance))",
@@ -251,11 +306,34 @@ var MetricTableMap = map[string]MetricTableDef{
 		Quantile: 0.95,
 		Comment:  "The quantile of kv storage coprocessor processing durations",
 	},
+	"tidb_cop_total_time": {
+		PromQL:   `60 * sum(rate(tidb_tikvclient_cop_duration_seconds_sum[60s])) by (instance)`,
+		Labels:   []string{"instance"},
+		Quantile: 0.95,
+		Comment:  "The total time of kv storage coprocessor processing durations",
+	},
+	"tidb_cop_total_count": {
+		PromQL:   `60 * sum(rate(tidb_tikvclient_cop_duration_seconds_count[60s])) by (instance)`,
+		Labels:   []string{"instance"},
+		Quantile: 0.95,
+		Comment:  "The total count of kv storage coprocessor processing durations",
+	},
 	"tidb_kv_backoff_duration": {
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_tikvclient_backoff_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le,type,instance))",
 		Labels:   []string{"instance", "type"},
 		Quantile: 0.95,
 		Comment:  "The quantile of kv backoff time durations(second)",
+	},
+	"tidb_kv_backoff_total_time": {
+		PromQL:   `60 * sum(rate(tidb_tikvclient_backoff_seconds_sum[60s])) by (instance,type)`,
+		Labels:   []string{"instance", "type"},
+		Quantile: 0.95,
+		Comment:  "The cost of backoff time durations(second)",
+	},
+	"tidb_kv_backoff_total_count": {
+		PromQL:  "60 * sum(rate(tidb_tikvclient_backoff_seconds_count[60s])) by (instance,type)",
+		Labels:  []string{"instance", "type"},
+		Comment: "The total count of kv storage backoff",
 	},
 	"tidb_kv_backoff_ops": {
 		PromQL:  "sum(rate(tidb_tikvclient_backoff_seconds_count{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (type,instance)",
@@ -292,6 +370,17 @@ var MetricTableMap = map[string]MetricTableDef{
 		Labels:   []string{"instance", "type", "store"},
 		Quantile: 0.95,
 		Comment:  "The quantile of kv requests durations by store",
+	},
+	"tidb_kv_request_total_time": {
+		PromQL:   `60 * sum(rate(tidb_tikvclient_request_seconds_sum[60s])) by (instance,type,store)`,
+		Labels:   []string{"instance", "type", "store"},
+		Quantile: 0.95,
+		Comment:  "The total time of kv requests durations by store",
+	},
+	"tidb_kv_request_total_count": {
+		PromQL:  "60 * sum(rate(tidb_tikvclient_request_seconds_count{$LABEL_CONDITIONS}[60s])) by (instance, type, store)",
+		Labels:  []string{"instance", "type"},
+		Comment: "The total count of kv requests durations by store",
 	},
 	"tidb_kv_txn_ops": {
 		Comment: "TiDB total kv transaction counts",
@@ -354,14 +443,36 @@ var MetricTableMap = map[string]MetricTableDef{
 		Quantile: 0.999,
 	},
 	"pd_tso_wait_duration": {
-		PromQL:   "histogram_quantile($QUANTILE, sum(rate(pd_client_cmd_handle_cmds_duration_seconds_bucket{type=\"wait\"}[$RANGE_DURATION])) by (le))",
+		PromQL:   "histogram_quantile($QUANTILE, sum(rate(pd_client_cmd_handle_cmds_duration_seconds_bucket{type=\"wait\"}[$RANGE_DURATION])) by (le,instance))",
 		Quantile: 0.999,
+		Labels:   []string{"instance"},
 		Comment:  "The quantile duration of a client starting to wait for the TS until received the TS result.",
+	},
+	"pd_tso_wait_total_time": {
+		PromQL:  "60 * sum(rate(pd_client_cmd_handle_cmds_duration_seconds_sum{type=\"wait\"}[60s])) by (instance)",
+		Labels:  []string{"instance"},
+		Comment: "The total time of a client starting to wait for the TS until received the TS result.",
+	},
+	"pd_tso_wait_total_count": {
+		PromQL:  "60 * sum(rate(pd_client_cmd_handle_cmds_duration_seconds_count{type=\"wait\"}[60s])) by (instance)",
+		Labels:  []string{"instance"},
+		Comment: "The total count of a client starting to wait for the TS until received the TS result.",
 	},
 	"pd_tso_rpc_duration": {
 		Comment:  "The quantile duration of a client sending TSO request until received the response.",
-		PromQL:   "histogram_quantile($QUANTILE, sum(rate(pd_client_request_handle_requests_duration_seconds_bucket{type=\"tso\"}[$RANGE_DURATION])) by (le))",
+		PromQL:   "histogram_quantile($QUANTILE, sum(rate(pd_client_request_handle_requests_duration_seconds_bucket{type=\"tso\"}[$RANGE_DURATION])) by (le,instance))",
+		Labels:   []string{"instance"},
 		Quantile: 0.999,
+	},
+	"pd_tso_rpc_total_time": {
+		PromQL:  "60 * sum(rate(pd_client_request_handle_requests_duration_seconds_sum{type=\"tso\"}[60s])) by (instance)",
+		Labels:  []string{"instance"},
+		Comment: "The total time of a client starting to wait for the TS until received the TS result.",
+	},
+	"pd_tso_rpc_total_count": {
+		PromQL:  "60 * sum(rate(pd_client_request_handle_requests_duration_seconds_count{type=\"tso\"}[60s])) by (instance)",
+		Labels:  []string{"instance"},
+		Comment: "The total count of a client starting to wait for the TS until received the TS result.",
 	},
 	"pd_start_tso_wait_duration": {
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_pdclient_ts_future_wait_seconds_bucket[$RANGE_DURATION])) by (le))",
@@ -373,6 +484,17 @@ var MetricTableMap = map[string]MetricTableDef{
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_domain_load_schema_duration_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le, instance))",
 		Labels:   []string{"instance"},
 		Quantile: 0.99,
+	},
+	"tidb_load_schema_total_time": {
+		Comment:  "The total time of TiDB loading schema time durations by instance",
+		PromQL:   "60 * sum(rate(tidb_domain_load_schema_duration_seconds_sum[60s])) by (instance)",
+		Labels:   []string{"instance"},
+		Quantile: 0.99,
+	},
+	"tidb_load_schema_total_count": {
+		Comment: "The total count of TiDB loading schema",
+		PromQL:  "60 * sum(rate(tidb_domain_load_schema_duration_seconds_count[60s])) by (instance)",
+		Labels:  []string{"instance"},
 	},
 	"tidb_load_schema_ops": {
 		Comment: "TiDB loading schema times including both failed and successful ones",
@@ -392,6 +514,18 @@ var MetricTableMap = map[string]MetricTableDef{
 	"tidb_ddl_duration": {
 		Comment:  "The quantile of TiDB DDL duration statistics",
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_ddl_handle_job_duration_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le, type,instance))",
+		Labels:   []string{"instance", "type"},
+		Quantile: 0.95,
+	},
+	"tidb_ddl_total_time": {
+		Comment:  "The total time of TiDB handle DDL jobs",
+		PromQL:   "60 * sum(rate(tidb_ddl_handle_job_duration_seconds_sum[60s])) by (instance,type)",
+		Labels:   []string{"instance", "type"},
+		Quantile: 0.95,
+	},
+	"tidb_ddl_total_count": {
+		Comment:  "The total count of TiDB handle DDL jobs",
+		PromQL:   "60 * sum(rate(tidb_ddl_handle_job_duration_seconds_sum[60s])) by (instance,type)",
 		Labels:   []string{"instance", "type"},
 		Quantile: 0.95,
 	},
@@ -421,6 +555,16 @@ var MetricTableMap = map[string]MetricTableDef{
 		Labels:   []string{"instance", "type", "result", "action"},
 		Quantile: 0.95,
 	},
+	"tidb_ddl_worker_total_time": {
+		Comment: "The total time of TiDB ddl worker cost",
+		PromQL:  "60 * sum(rate(tidb_ddl_worker_operation_duration_seconds_sum[60s])) by (type, result, action, instance)",
+		Labels:  []string{"instance", "type", "result", "action"},
+	},
+	"tidb_ddl_worker_total_count": {
+		Comment: "The total count of TiDB ddl worker cost",
+		PromQL:  "60 * sum(rate(tidb_ddl_worker_operation_duration_seconds_count[60s])) by (type, result, action, instance)",
+		Labels:  []string{"instance", "type", "result", "action"},
+	},
 	"tidb_ddl_deploy_syncer_duration": {
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_ddl_deploy_syncer_duration_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le, type, result,instance))",
 		Labels:   []string{"instance", "type", "result"},
@@ -432,6 +576,16 @@ var MetricTableMap = map[string]MetricTableDef{
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_ddl_owner_handle_syncer_duration_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le, type, result,instance))",
 		Labels:   []string{"instance", "type", "result"},
 		Quantile: 0.95,
+	},
+	"tidb_owner_handle_syncer_total_time": {
+		Comment: "The total time of TiDB ddl owner time operations on etcd duration statistics ",
+		PromQL:  "60 * sum(rate(tidb_ddl_owner_handle_syncer_duration_seconds_sum[60s])) by (type, result,instance)",
+		Labels:  []string{"instance", "type", "result"},
+	},
+	"tidb_owner_handle_syncer_total_count": {
+		Comment: "The total time of TiDB ddl owner time operations on etcd duration statistics ",
+		PromQL:  "60 * sum(rate(tidb_ddl_owner_handle_syncer_duration_seconds_count[60s])) by (type, result,instance)",
+		Labels:  []string{"instance", "type", "result"},
 	},
 	"tidb_ddl_update_self_version_duration": {
 		Comment:  "The quantile of TiDB schema syncer version update time duration",
@@ -449,6 +603,16 @@ var MetricTableMap = map[string]MetricTableDef{
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_statistics_auto_analyze_duration_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le,instance))",
 		Labels:   []string{"instance"},
 		Quantile: 0.95,
+	},
+	"tidb_statistics_auto_analyze_total_time": {
+		Comment: "The quantile of TiDB auto analyze time durations within 95 percent histogram buckets",
+		PromQL:  "60 * sum(rate(tidb_statistics_auto_analyze_duration_seconds_sum[60s])) by (instance)",
+		Labels:  []string{"instance"},
+	},
+	"tidb_statistics_auto_analyze_total_count": {
+		Comment: "The total count of TiDB auto analyze time durations within 95 percent histogram buckets",
+		PromQL:  "60 * sum(rate(tidb_statistics_auto_analyze_duration_seconds_count[60s])) by (instance)",
+		Labels:  []string{"instance"},
 	},
 	"tidb_statistics_auto_analyze_ops": {
 		Comment: "TiDB auto analyze query per second",
@@ -511,6 +675,18 @@ var MetricTableMap = map[string]MetricTableDef{
 	"tidb_auto_id_request_duration": {
 		Comment:  "The quantile of TiDB auto id requests durations",
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_autoid_operation_duration_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le, type,instance))",
+		Labels:   []string{"instance", "type"},
+		Quantile: 0.95,
+	},
+	"tidb_auto_id_request_total_time": {
+		Comment:  "The total time of TiDB auto id requests durations",
+		PromQL:   "60 * sum(rate(tidb_autoid_operation_duration_seconds_sum[60s])) by (instance,type)",
+		Labels:   []string{"instance", "type"},
+		Quantile: 0.95,
+	},
+	"tidb_auto_id_request_total_count": {
+		Comment:  "The total time of TiDB auto id requests durations",
+		PromQL:   "60 * sum(rate(tidb_autoid_operation_duration_seconds_count[60s])) by (instance,type)",
 		Labels:   []string{"instance", "type"},
 		Quantile: 0.95,
 	},

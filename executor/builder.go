@@ -1337,6 +1337,14 @@ func (b *executorBuilder) buildMemTable(v *plannercore.PhysicalMemTable) Executo
 					extractor: v.Extractor.(*plannercore.MetricTableExtractor),
 				},
 			}
+		case strings.ToLower(infoschema.TableMetricTotalTime):
+			return &ClusterReaderExec{
+				baseExecutor: newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
+				retriever: &MetricTotalTimeRetriever{
+					table:     v.Table,
+					extractor: v.Extractor.(*plannercore.MetricTableExtractor),
+				},
+			}
 		}
 	}
 	tb, _ := b.is.TableByID(v.Table.ID)

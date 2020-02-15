@@ -329,3 +329,80 @@ func (e *MetricSummaryByLabelRetriever) genMetricQuerySQLS(name, startTime, endT
 	}
 	return sqls
 }
+
+type MetricTotalTimeRetriever struct {
+	dummyCloser
+	table     *model.TableInfo
+	extractor *plannercore.MetricTableExtractor
+	retrieved bool
+}
+
+func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx.Context) ([][]types.Datum, error) {
+	if e.retrieved || e.extractor.SkipRequest {
+		return nil, nil
+	}
+
+	totalTimeMetrics := []struct {
+		name string
+		tbl  string
+	}{
+		{name: "user_query", tbl: "tidb_query"},
+		{name: "get_token(us)", tbl: "tidb_get_token"},
+		{name: "parse", tbl: "tidb_parse"},
+		{name: "compile", tbl: "tidb_compile"},
+		{name: "distsql_execution", tbl: "tidb_distsql_execution"},
+		{name: "cop_send", tbl: "tidb_cop"},
+		{name: "kv_request", tbl: "tidb_kv_request"},
+		{name: "kv_backoff", tbl: "tidb_kv_backoff"},
+		{name: "tso_wait", tbl: "pd_tso_wait"},
+		{name: "tso_rpc", tbl: "pd_tso_rpc"},
+		{name: "load_schema", tbl: "tidb_load_schema"},
+		{name: "do_ddl_job", tbl: "tidb_ddl"},
+		{name: "ddl_worker", tbl: "tidb_ddl_worker"},
+		{name: "ddl_owner_handle_syncer", tbl: "tidb_owner_handle_syncer"},
+		{name: "auto_analyze", tbl: "tidb_statistics_auto_analyze"},
+		{name: "auto_id_request", tbl: "tidb_auto_id_request"},
+	}
+
+	e.retrieved = true
+	totalRows := make([][]types.Datum, 0, len(totalTimeMetrics))
+	tps := make([]*types.FieldType, 0, len(e.table.Columns))
+	for _, col := range e.table.Columns {
+		tps = append(tps, &col.FieldType)
+	}
+	quantiles := []float64{0.999, 0.99, 0.90, 0.80}
+	startTime := e.extractor.StartTime.Format(plannercore.MetricTableTimeFormat)
+	endTime := e.extractor.EndTime.Format(plannercore.MetricTableTimeFormat)
+	for _, t := range totalTimeMetrics {
+		sqls := []string{
+			fmt.Sprintf("select '%s', min(time), sum(value) from metric_schema.%s_total_time where time > '%s' and time < '%s'",
+				t.name, t.tbl, startTime, endTime),
+			fmt.Sprintf("select sum(value) from metric_schema.%s_total_count where time > '%s' and time < '%s'",
+				t.tbl, startTime, endTime),
+		}
+		for _, quantile := range quantiles {
+			sql := fmt.Sprintf("select max(value) as max_value from metric_schema.%s_duration where time > '%s' and time < '%s' and quantile=%f",
+				t.tbl, startTime, endTime, quantile)
+			sqls = append(sqls, sql)
+		}
+		row := make([]types.Datum, 0, len(e.table.Columns))
+		tpIdx := 0
+		for _, sql := range sqls {
+			rows, _, err := sctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(sql)
+			if err != nil {
+				sctx.GetSessionVars().StmtCtx.AppendWarning(fmt.Errorf("execute '%s' failed: %v", sql, err))
+				break
+			}
+			if len(rows) != 1 {
+				sctx.GetSessionVars().StmtCtx.AppendWarning(fmt.Errorf("execute '%s' return %v rows, should never hapen", sql, len(rows)))
+				break
+			}
+			row = append(row, rows[0].GetDatumRow(tps[tpIdx:tpIdx+rows[0].Len()])...)
+			tpIdx += rows[0].Len()
+		}
+		if len(row) == len(tps) {
+			totalRows = append(totalRows, row)
+		}
+	}
+	return totalRows, nil
+}

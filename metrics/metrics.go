@@ -157,4 +157,5 @@ func RegisterMetrics() {
 	prometheus.MustRegister(TiKVTxnHeartBeatHistogram)
 	prometheus.MustRegister(GRPCConnTransientFailureCounter)
 	prometheus.MustRegister(TiKVTTLLifeTimeReachCounter)
+	prometheus.MustRegister(TotalCSHistogram)
 }

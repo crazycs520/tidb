@@ -2793,7 +2793,7 @@ func (b *PlanBuilder) buildMemTable(ctx context.Context, dbName model.CIStr, tab
 			p.Extractor = &ClusterLogTableExtractor{}
 		case infoschema.TableInspectionResult:
 			p.Extractor = &InspectionResultTableExtractor{}
-		case infoschema.TableMetricSummary, infoschema.TableMetricSummaryByLabel:
+		case infoschema.TableMetricSummary, infoschema.TableMetricSummaryByLabel, infoschema.TableMetricTotalTime:
 			p.Extractor = newMetricTableExtractor()
 		}
 	}

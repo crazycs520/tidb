@@ -168,6 +168,37 @@ func main() {
 		fmt.Println("config check successful")
 		os.Exit(0)
 	}
+
+	go func() {
+		cs1 := metrics.TotalCSHistogram.WithLabelValues("cs1")
+		cs2 := metrics.TotalCSHistogram.WithLabelValues("cs2")
+		cs3 := metrics.TotalCSHistogram.WithLabelValues("cs3")
+		tick := time.NewTicker(time.Second)
+		t1 := float64(0)
+		t2 := float64(0)
+		t3 := float64(0)
+		cnt := 0
+		for {
+			cnt++
+			select {
+			case <-tick.C:
+				t := 1.0
+				t1 += t
+				cs1.Observe(t)
+
+				t = 2.0
+				t2 += t
+				cs2.Observe(t)
+
+				t = 3.0
+				t3 += t
+				cs3.Observe(t)
+
+				//log.Info("metric cs ---------", zap.Float64("t1", t1), zap.Float64("t2", t2), zap.Float64("t3", t3), zap.Int("cnt", cnt))
+			}
+		}
+	}()
+
 	setGlobalVars()
 	setCPUAffinity()
 	setupLog()

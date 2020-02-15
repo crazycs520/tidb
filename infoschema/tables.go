@@ -112,6 +112,8 @@ const (
 	TableMetricSummary = "METRICS_SUMMARY"
 	// TableMetricSummaryByLabel is a metric table that contains all metrics that group by label info.
 	TableMetricSummaryByLabel = "METRICS_SUMMARY_BY_LABEL"
+
+	TableMetricTotalTime = "METRICS_TOTAL_TIME"
 )
 
 var tableIDMap = map[string]int64{
@@ -169,6 +171,7 @@ var tableIDMap = map[string]int64{
 	TableMetricSummary:                      autoid.InformationSchemaDBID + 52,
 	TableMetricSummaryByLabel:               autoid.InformationSchemaDBID + 53,
 	TableMetricTables:                       autoid.InformationSchemaDBID + 54,
+	TableMetricTotalTime:                    autoid.InformationSchemaDBID + 55,
 }
 
 type columnInfo struct {
@@ -1143,6 +1146,17 @@ var tableMetricTablesCols = []columnInfo{
 	{"LABELS", mysql.TypeVarchar, 64, 0, nil, nil},
 	{"QUANTILE", mysql.TypeDouble, 22, 0, nil, nil},
 	{"COMMENT", mysql.TypeVarchar, 256, 0, nil, nil},
+}
+
+var tableMetricTotalTimeCols = []columnInfo{
+	{"METRIC_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
+	{"TIME", mysql.TypeDatetime, -1, 0, nil, nil},
+	{"TOTAL_TIME", mysql.TypeDouble, 22, 0, nil, nil},
+	{"TOTAL_COUNT", mysql.TypeDouble, 22, 0, nil, nil},
+	{"P999", mysql.TypeDouble, 22, 0, nil, nil},
+	{"P99", mysql.TypeDouble, 22, 0, nil, nil},
+	{"P90", mysql.TypeDouble, 22, 0, nil, nil},
+	{"P80", mysql.TypeDouble, 22, 0, nil, nil},
 }
 
 var tableMetricSummaryCols = []columnInfo{
@@ -2429,6 +2443,7 @@ var tableNameToColumns = map[string][]columnInfo{
 	TableMetricSummary:                      tableMetricSummaryCols,
 	TableMetricSummaryByLabel:               tableMetricSummaryByLabelCols,
 	TableMetricTables:                       tableMetricTablesCols,
+	TableMetricTotalTime:                    tableMetricTotalTimeCols,
 }
 
 func createInfoSchemaTable(_ autoid.Allocators, meta *model.TableInfo) (table.Table, error) {

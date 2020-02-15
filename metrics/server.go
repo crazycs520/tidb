@@ -157,6 +157,14 @@ var (
 			Help:      "Bucketed histogram of all cop waiting time (s) of of slow queries.",
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 22), // 1ms ~ 4096s
 		})
+	TotalCSHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "tidb",
+			Subsystem: "server",
+			Name:      "total_cs_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of handled queries.",
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 22), // 500us ~ 2097s
+		}, []string{LblType})
 )
 
 // ExecuteErrorToLabel converts an execute error to label.
