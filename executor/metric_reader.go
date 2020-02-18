@@ -343,25 +343,26 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 	}
 
 	totalTimeMetrics := []struct {
-		name string
-		tbl  string
+		name  string
+		tbl   string
+		label string
 	}{
-		{name: "user_query", tbl: "tidb_query"},
+		{name: "user_query", tbl: "tidb_query", label: "sql_type"}, // sql_type
 		{name: "get_token(us)", tbl: "tidb_get_token"},
-		{name: "parse", tbl: "tidb_parse"},
-		{name: "compile", tbl: "tidb_compile"},
-		{name: "distsql_execution", tbl: "tidb_distsql_execution"},
+		{name: "parse", tbl: "tidb_parse"},                                        // no
+		{name: "compile", tbl: "tidb_compile", label: "sql_type"},                 // sql_type
+		{name: "distsql_execution", tbl: "tidb_distsql_execution", label: "type"}, //-- type
 		{name: "cop_send", tbl: "tidb_cop"},
-		{name: "kv_request", tbl: "tidb_kv_request"},
-		{name: "kv_backoff", tbl: "tidb_kv_backoff"},
+		{name: "kv_request", tbl: "tidb_kv_request", label: "type"},
+		{name: "kv_backoff", tbl: "tidb_kv_backoff", label: "type"},
 		{name: "tso_wait", tbl: "pd_tso_wait"},
 		{name: "tso_rpc", tbl: "pd_tso_rpc"},
 		{name: "load_schema", tbl: "tidb_load_schema"},
-		{name: "do_ddl_job", tbl: "tidb_ddl"},
-		{name: "ddl_worker", tbl: "tidb_ddl_worker"},
-		{name: "ddl_owner_handle_syncer", tbl: "tidb_owner_handle_syncer"},
+		{name: "do_ddl_job", tbl: "tidb_ddl", label: "type"},
+		{name: "ddl_worker", tbl: "tidb_ddl_worker", label: "action"},
+		{name: "ddl_owner_handle_syncer", tbl: "tidb_owner_handle_syncer", label: "type"},
 		{name: "auto_analyze", tbl: "tidb_statistics_auto_analyze"},
-		{name: "auto_id_request", tbl: "tidb_auto_id_request"},
+		{name: "auto_id_request", tbl: "tidb_auto_id_request", label: "type"},
 	}
 
 	e.retrieved = true
@@ -373,15 +374,16 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 	quantiles := []float64{0.999, 0.99, 0.90, 0.80}
 	startTime := e.extractor.StartTime.Format(plannercore.MetricTableTimeFormat)
 	endTime := e.extractor.EndTime.Format(plannercore.MetricTableTimeFormat)
+	fmt.Printf("%v, %v---------\n\n", startTime, endTime)
 	for _, t := range totalTimeMetrics {
 		sqls := []string{
-			fmt.Sprintf("select '%s', min(time), sum(value) from metric_schema.%s_total_time where time > '%s' and time < '%s'",
+			fmt.Sprintf("select '%s', min(time),'' , sum(value) from metric_schema.%s_total_time where time >= '%s' and time < '%s'",
 				t.name, t.tbl, startTime, endTime),
-			fmt.Sprintf("select sum(value) from metric_schema.%s_total_count where time > '%s' and time < '%s'",
+			fmt.Sprintf("select sum(value) from metric_schema.%s_total_count where time >= '%s' and time < '%s'",
 				t.tbl, startTime, endTime),
 		}
 		for _, quantile := range quantiles {
-			sql := fmt.Sprintf("select max(value) as max_value from metric_schema.%s_duration where time > '%s' and time < '%s' and quantile=%f",
+			sql := fmt.Sprintf("select max(value) as max_value from metric_schema.%s_duration where time >= '%s' and time < '%s' and quantile=%f",
 				t.tbl, startTime, endTime, quantile)
 			sqls = append(sqls, sql)
 		}
@@ -400,7 +402,56 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 			row = append(row, rows[0].GetDatumRow(tps[tpIdx:tpIdx+rows[0].Len()])...)
 			tpIdx += rows[0].Len()
 		}
-		if len(row) == len(tps) {
+		if len(row) != len(tps) {
+			continue
+		}
+		totalRows = append(totalRows, row)
+		if len(t.label) == 0 {
+			continue
+		}
+		joinSql := "select t0.*,t1.count"
+		sqls = []string{
+			fmt.Sprintf("select '%[1]s', min(time), `%[5]s` , sum(value) as total from metric_schema.%[2]s_total_time where time >= '%[3]s' and time < '%[4]s' group by `%[5]s`",
+				t.name, t.tbl, startTime, endTime, t.label),
+			fmt.Sprintf("select `%[4]s`, sum(value) as count from metric_schema.%[1]s_total_count where time >= '%[2]s' and time < '%[3]s' group by `%[4]s`",
+				t.tbl, startTime, endTime, t.label),
+		}
+		for i, quantile := range quantiles {
+			sql := fmt.Sprintf("select `%[5]s`, max(value) as max_value from metric_schema.%[1]s_duration where time >= '%[2]s' and time < '%[3]s' and quantile=%[4]f group by `%[5]s`",
+				t.tbl, startTime, endTime, quantile, t.label)
+			sqls = append(sqls, sql)
+			joinSql += fmt.Sprintf(",t%v.max_value", i+2)
+		}
+		joinSql += " from "
+		for i, sql := range sqls {
+			joinSql += fmt.Sprintf(" (%s) as t%v ", sql, i)
+			if i != len(sqls)-1 {
+				joinSql += "join "
+			}
+		}
+		joinSql += " where "
+		for i := 0; i < len(sqls)-1; i++ {
+			if i > 0 {
+				joinSql += "and "
+			}
+			joinSql += fmt.Sprintf(" t%v.%s = t%v.%s ", i, t.label, i+1, t.label)
+		}
+		joinSql += " order by t0.total desc"
+		fmt.Printf("%v\n-------------\n", joinSql)
+
+		rows, _, err := sctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(joinSql)
+		if err != nil {
+			sctx.GetSessionVars().StmtCtx.AppendWarning(fmt.Errorf("execute '%s' failed: %v", joinSql, err))
+			continue
+		}
+		if len(rows) == 0 {
+			continue
+		}
+		for i := range rows {
+			row := rows[i].GetDatumRow(tps)
+			if len(row) != len(tps) {
+				continue
+			}
 			totalRows = append(totalRows, row)
 		}
 	}
