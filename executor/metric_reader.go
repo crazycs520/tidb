@@ -437,10 +437,10 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 			joinSql += fmt.Sprintf(" t%v.%s = t%v.%s ", i, t.label, i+1, t.label)
 		}
 		joinSql += " order by t0.total desc"
-		fmt.Printf("%v\n-------------\n", joinSql)
 
 		rows, _, err := sctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(joinSql)
 		if err != nil {
+			fmt.Printf("%v\n-------------\n", joinSql)
 			sctx.GetSessionVars().StmtCtx.AppendWarning(fmt.Errorf("execute '%s' failed: %v", joinSql, err))
 			continue
 		}

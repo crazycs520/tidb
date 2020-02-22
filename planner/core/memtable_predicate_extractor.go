@@ -514,6 +514,7 @@ func (e *MetricTableExtractor) Extract(
 		return nil
 	}
 
+	allRemained := remained
 	// Extract the label columns.
 	for _, name := range names {
 		switch name.ColName.L {
@@ -534,7 +535,7 @@ func (e *MetricTableExtractor) Extract(
 		}
 		e.LabelConditions[name.ColName.L] = values
 	}
-	return remained
+	return allRemained
 }
 
 func (e *MetricTableExtractor) getTimeRange(start, end int64) (time.Time, time.Time) {
