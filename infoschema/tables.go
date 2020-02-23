@@ -1223,6 +1223,7 @@ var tableMetricTotalTimeCols = []columnInfo{
 	{"METRIC_NAME", mysql.TypeVarchar, 64, 0, nil, nil},
 	{"TIME", mysql.TypeDatetime, -1, 0, nil, nil},
 	{"LABEL", mysql.TypeVarchar, 64, 0, nil, nil},
+	{"TIME_RATIO", mysql.TypeDouble, 22, 0, nil, nil},
 	{"TOTAL_TIME", mysql.TypeDouble, 22, 0, nil, nil},
 	{"TOTAL_COUNT", mysql.TypeDouble, 22, 0, nil, nil},
 	{"P999", mysql.TypeDouble, 22, 0, nil, nil},

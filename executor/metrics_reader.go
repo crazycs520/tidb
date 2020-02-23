@@ -469,12 +469,14 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 		name := row[0].GetString()
 		switch name {
 		case "get_token(us)":
-			if row[3].IsNull() {
+			if row[4].IsNull() {
 				return row
 			}
 			v := row[3].GetFloat64()
 			row[3].SetFloat64(v / 10e5)
-			for i := 5; i < len(row); i++ {
+			v = row[4].GetFloat64()
+			row[4].SetFloat64(v / 10e5)
+			for i := 6; i < len(row); i++ {
 				v := row[i].GetFloat64()
 				row[i].SetFloat64(v / 10e5)
 			}
@@ -493,10 +495,11 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 	startTime := e.extractor.StartTime.Format(plannercore.MetricTableTimeFormat)
 	endTime := e.extractor.EndTime.Format(plannercore.MetricTableTimeFormat)
 	fmt.Printf("%v, %v---------\n\n", startTime, endTime)
-	for _, t := range totalTimeMetrics {
+	totalTime := float64(0)
+	for i, t := range totalTimeMetrics {
 		sqls := []string{
-			fmt.Sprintf("select '%s', min(time),'' , sum(value) from metrics_schema.%s_total_time where time >= '%s' and time < '%s'",
-				t.name, t.tbl, startTime, endTime),
+			fmt.Sprintf("select '%[1]s', min(time),'', if(%[2]v>0,sum(value)/%[2]v,1) , sum(value) from metrics_schema.%[3]s_total_time where time >= '%[4]s' and time < '%[5]s'",
+				t.name, totalTime, t.tbl, startTime, endTime),
 			fmt.Sprintf("select sum(value) from metrics_schema.%s_total_count where time >= '%s' and time < '%s'",
 				t.tbl, startTime, endTime),
 		}
@@ -505,33 +508,39 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 				t.tbl, startTime, endTime, quantile)
 			sqls = append(sqls, sql)
 		}
-		row := make([]types.Datum, 0, len(e.table.Columns))
-		tpIdx := 0
-		for _, sql := range sqls {
-			rows, _, err := sctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(sql)
-			if err != nil {
-				sctx.GetSessionVars().StmtCtx.AppendWarning(fmt.Errorf("execute '%s' failed: %v", sql, err))
-				break
+		fields := ""
+		tbls := ""
+		for i, sql := range sqls {
+			if i > 0 {
+				fields += ","
+				tbls += "join "
 			}
-			if len(rows) != 1 {
-				sctx.GetSessionVars().StmtCtx.AppendWarning(fmt.Errorf("execute '%s' return %v rows, should never hapen", sql, len(rows)))
-				break
-			}
-			row = append(row, rows[0].GetDatumRow(tps[tpIdx:tpIdx+rows[0].Len()])...)
-			tpIdx += rows[0].Len()
+			fields += fmt.Sprintf("t%v.*", i)
+			tbls += fmt.Sprintf(" (%s) as t%v ", sql, i)
 		}
-		if len(row) != len(tps) {
-			continue
+		joinSql := fmt.Sprintf("select %v from %v", fields, tbls)
+		rows, _, err := sctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(joinSql)
+		if err != nil {
+			sctx.GetSessionVars().StmtCtx.AppendWarning(fmt.Errorf("execute '%s' failed: %v", joinSql, err))
+			break
 		}
-		row = specialHandle(row, tps)
+		if len(rows) != 1 {
+			sctx.GetSessionVars().StmtCtx.AppendWarning(fmt.Errorf("execute '%s' return %v rows, should never hapen", joinSql, len(rows)))
+			break
+		}
+		fmt.Printf("%v \n---%f-----\n", joinSql, totalTime)
+		row := specialHandle(rows[0].GetDatumRow(tps), tps)
 		totalRows = append(totalRows, row)
+		if i == 0 {
+			totalTime = row[4].GetFloat64()
+		}
 		if len(t.label) == 0 {
 			continue
 		}
-		joinSql := "select t0.*,t1.count"
+		joinSql = "select t0.*,t1.count"
 		sqls = []string{
-			fmt.Sprintf("select '%[1]s', min(time), `%[5]s` , sum(value) as total from metrics_schema.%[2]s_total_time where time >= '%[3]s' and time < '%[4]s' group by `%[5]s`",
-				t.name, t.tbl, startTime, endTime, t.label),
+			fmt.Sprintf("select '%[1]s', min(time), `%[6]s`, if(%[2]v>0,sum(value)/%[2]v,1) , sum(value) as total from metrics_schema.%[3]s_total_time where time >= '%[4]s' and time < '%[5]s' group by `%[6]s`",
+				t.name, totalTime, t.tbl, startTime, endTime, t.label),
 			fmt.Sprintf("select `%[4]s`, sum(value) as count from metrics_schema.%[1]s_total_count where time >= '%[2]s' and time < '%[3]s' group by `%[4]s`",
 				t.tbl, startTime, endTime, t.label),
 		}
@@ -557,7 +566,7 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 		}
 		joinSql += " order by t0.total desc"
 
-		rows, _, err := sctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(joinSql)
+		rows, _, err = sctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(joinSql)
 		if err != nil {
 			fmt.Printf("%v\n-------------\n", joinSql)
 			sctx.GetSessionVars().StmtCtx.AppendWarning(fmt.Errorf("execute '%s' failed: %v", joinSql, err))
