@@ -395,8 +395,13 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 	}{
 		{name: "user_query", tbl: "tidb_query", label: "sql_type"}, // sql_type
 		{name: "get_token(us)", tbl: "tidb_get_token"},
-		{name: "parse", tbl: "tidb_parse"},                                        // no
-		{name: "compile", tbl: "tidb_compile", label: "sql_type"},                 // sql_type
+		{name: "parse", tbl: "tidb_parse"},                                                           // no
+		{name: "compile", tbl: "tidb_compile", label: "sql_type"},                                    // sql_type
+		{name: "tidb_execute", tbl: "tidb_execute", label: "sql_type"},                               // sql_type
+		{name: "tidb_slow_query", tbl: "tidb_slow_query", label: "instance"},                         // sql_type
+		{name: "tidb_slow_query_cop_process", tbl: "tidb_slow_query_cop_process", label: "instance"}, // sql_type
+		{name: "tidb_slow_query_cop_wait", tbl: "tidb_slow_query_cop_wait", label: "instance"},       // sql_type
+		{name: "tidb_transaction_local_latch_wait", tbl: "tidb_transaction_local_latch_wait"},
 		{name: "distsql_execution", tbl: "tidb_distsql_execution", label: "type"}, //-- type
 		{name: "cop_send", tbl: "tidb_cop"},
 		{name: "kv_request", tbl: "tidb_kv_request", label: "type"},
@@ -409,6 +414,55 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 		{name: "ddl_owner_handle_syncer", tbl: "tidb_owner_handle_syncer", label: "type"},
 		{name: "auto_analyze", tbl: "tidb_statistics_auto_analyze"},
 		{name: "auto_id_request", tbl: "tidb_auto_id_request", label: "type"},
+
+		// PD
+		{name: "pd_client_cmd", tbl: "pd_client_cmd", label: "type"},
+		{name: "etcd_wal_fsync", tbl: "etcd_wal_fsync", label: "instance"},
+
+		// TiKV
+		{name: "tikv_ingest_sst", tbl: "tikv_ingest_sst", label: "db"},
+
+		{name: "pd_grpc_completed_commands", tbl: "pd_grpc_completed_commands", label: "instance"},
+		{name: "pd_handle_request", tbl: "pd_handle_request", label: "type"},
+		{name: "pd_handle_requests", tbl: "pd_handle_requests", label: "type"},
+		{name: "pd_handle_transactions", tbl: "pd_handle_transactions", label: "instance"},
+		{name: "pd_operator_finish", tbl: "pd_operator_finish", label: "type"},
+		{name: "pd_operator_step_finish", tbl: "pd_operator_step_finish", label: "type"},
+		{name: "pd_peer_round_trip", tbl: "pd_peer_round_trip", label: "instance"},
+		{name: "pd_start_tso_wait", tbl: "pd_start_tso_wait", label: "instance"},
+		{name: "tidb_batch_client_unavailable", tbl: "tidb_batch_client_unavailable", label: "instance"},
+		{name: "tidb_batch_client_wait", tbl: "tidb_batch_client_wait", label: "instance"},
+		{name: "tidb_ddl_batch_add_index", tbl: "tidb_ddl_batch_add_index", label: "type"},
+		{name: "tidb_ddl_deploy_syncer", tbl: "tidb_ddl_deploy_syncer", label: "type"},
+		{name: "tidb_ddl_update_self_version", tbl: "tidb_ddl_update_self_version", label: "instance"},
+		{name: "tidb_gc_push_task", tbl: "tidb_gc_push_task", label: "type"},
+		{name: "tidb_gc", tbl: "tidb_gc", label: "instance"},
+		{name: "tidb_meta_operation", tbl: "tidb_meta_operation", label: "type"},
+		{name: "tidb_new_etcd_session", tbl: "tidb_new_etcd_session", label: "type"},
+		{name: "tidb_slow_query_cop_wait", tbl: "tidb_slow_query_cop_wait", label: "instance"},
+		{name: "tidb_transaction", tbl: "tidb_transaction", label: "type"},
+		{name: "tikv_append_log", tbl: "tikv_append_log", label: "instance"},
+		{name: "tikv_apply_log", tbl: "tikv_apply_log", label: "instance"},
+		{name: "tikv_apply_wait", tbl: "tikv_apply_wait", label: "instance"},
+		{name: "tikv_backup_range", tbl: "tikv_backup_range", label: "type"},
+		{name: "tikv_backup", tbl: "tikv_backup", label: "instance"},
+		{name: "tikv_check_split", tbl: "tikv_check_split", label: "instance"},
+		{name: "tikv_commit_log", tbl: "tikv_commit_log", label: "instance"},
+		{name: "tikv_cop_handle", tbl: "tikv_cop_handle", label: "instance"},
+		{name: "tikv_cop_request", tbl: "tikv_cop_request", label: "instance"},
+		{name: "tikv_cop_wait", tbl: "tikv_cop_wait", label: "instance"},
+		{name: "tikv_gc_tasks", tbl: "tikv_gc_tasks", label: "instance"},
+		{name: "tikv_grpc_messge", tbl: "tikv_grpc_messge", label: "type"},
+		{name: "tikv_handle_snapshot", tbl: "tikv_handle_snapshot", label: "type"},
+		{name: "tikv_lock_manager_deadlock_detect", tbl: "tikv_lock_manager_deadlock_detect", label: "instance"},
+		{name: "tikv_lock_manager_waiter_lifetime", tbl: "tikv_lock_manager_waiter_lifetime", label: "instance"},
+		{name: "tikv_process", tbl: "tikv_process", label: "type"},
+		{name: "tikv_propose_wait", tbl: "tikv_propose_wait", label: "instance"},
+		{name: "tikv_raft_store_events", tbl: "tikv_raft_store_events", label: "type"},
+		{name: "tikv_scheduler_command", tbl: "tikv_scheduler_command", label: "type"},
+		{name: "tikv_scheduler_latch_wait", tbl: "tikv_scheduler_latch_wait", label: "type"},
+		{name: "tikv_send_snapshot", tbl: "tikv_send_snapshot", label: "instance"},
+		{name: "tikv_storage_async_request", tbl: "tikv_storage_async_request", label: "type"},
 	}
 
 	e.retrieved = true
