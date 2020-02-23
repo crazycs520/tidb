@@ -465,6 +465,24 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 		{name: "tikv_storage_async_request", tbl: "tikv_storage_async_request", label: "type"},
 	}
 
+	specialHandle := func(row []types.Datum, tps []*types.FieldType) []types.Datum {
+		name := row[0].GetString()
+		switch name {
+		case "get_token(us)":
+			if row[3].IsNull() {
+				return row
+			}
+			v := row[3].GetFloat64()
+			row[3].SetFloat64(v / 10e5)
+			for i := 5; i < len(row); i++ {
+				v := row[i].GetFloat64()
+				row[i].SetFloat64(v / 10e5)
+			}
+			row[0].SetString(name[:len(name)-4], tps[0].Collate, tps[0].Flen)
+		}
+		return row
+	}
+
 	e.retrieved = true
 	totalRows := make([][]types.Datum, 0, len(totalTimeMetrics))
 	tps := make([]*types.FieldType, 0, len(e.table.Columns))
@@ -505,6 +523,7 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 		if len(row) != len(tps) {
 			continue
 		}
+		row = specialHandle(row, tps)
 		totalRows = append(totalRows, row)
 		if len(t.label) == 0 {
 			continue
@@ -552,6 +571,7 @@ func (e *MetricTotalTimeRetriever) retrieve(ctx context.Context, sctx sessionctx
 			if len(row) != len(tps) {
 				continue
 			}
+			row = specialHandle(row, tps)
 			totalRows = append(totalRows, row)
 		}
 	}
