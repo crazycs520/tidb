@@ -335,8 +335,13 @@ func (p *MySQLPrivilege) LoadUserTable(ctx sessionctx.Context) error {
 	for _, v := range mysql.Priv2UserCol {
 		userPrivCols = append(userPrivCols, v)
 	}
-	query := fmt.Sprintf("select HIGH_PRIORITY Host,User,Password,%s,account_locked from mysql.user;", strings.Join(userPrivCols, ", "))
+
+	query := fmt.Sprintf("select HIGH_PRIORITY Host,User,authentication_string,%s,account_locked from mysql.user;", strings.Join(userPrivCols, ", "))
 	err := p.loadTable(ctx, query, p.decodeUserTableRow)
+	if err != nil && strings.Contains(err.Error(), "[planner:1054]") {
+		query := fmt.Sprintf("select HIGH_PRIORITY Host,User,password,%s,account_locked from mysql.user;", strings.Join(userPrivCols, ", "))
+		err = p.loadTable(ctx, query, p.decodeUserTableRow)
+	}
 	if err != nil {
 		return errors.Trace(err)
 	}
