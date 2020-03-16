@@ -744,12 +744,13 @@ const MetricTableTimeFormat = "2006-01-02 15:04:05.999"
 
 // ExplainInfo implements Plan interface.
 func (p *PhysicalMemTable) ExplainInfo() string {
-	explain := "table:" + p.Table.Name.O
+	var buf strings.Builder
+	buf.WriteString("table:")
+	buf.WriteString(p.Table.Name.O)
 	if p.Extractor != nil {
 		info := p.Extractor.explainInfo(p)
-		if len(info) > 0 {
-			return explain + ", " + info
-		}
+		buf.WriteString(", ")
+		buf.WriteString(info)
 	}
-	return explain
+	return buf.String()
 }
