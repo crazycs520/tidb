@@ -56,6 +56,9 @@ type batchConn struct {
 }
 
 func newBatchConn(connCount, maxBatchSize uint, dieNotify *uint32) *batchConn {
+	printOnce.Do(func() {
+		go printMetric()
+	})
 	return &batchConn{
 		batchCommandsCh:        make(chan *batchCommandsEntry, maxBatchSize),
 		batchCommandsClients:   make([]*batchCommandsClient, 0, connCount),
@@ -226,6 +229,7 @@ func (c *batchCommandsClient) isStopped() bool {
 }
 
 func (c *batchCommandsClient) send(request *tikvpb.BatchCommandsRequest, entries []*batchCommandsEntry) {
+	start := time.Now()
 	for i, requestID := range request.RequestIds {
 		c.batched.Store(requestID, entries[i])
 	}
@@ -245,7 +249,8 @@ func (c *batchCommandsClient) send(request *tikvpb.BatchCommandsRequest, entries
 			failpoint.Return()
 		})
 	}
-	start := time.Now()
+	atomic.AddInt64(&sendBeforeTime, time.Since(start).Nanoseconds())
+	start = time.Now()
 	if err := c.client.Send(request); err != nil {
 		logutil.BgLogger().Info(
 			"sending batch commands meets error",
@@ -255,6 +260,8 @@ func (c *batchCommandsClient) send(request *tikvpb.BatchCommandsRequest, entries
 		c.failPendingRequests(err)
 		return
 	}
+	atomic.AddInt64(&sendCnt, 1)
+	atomic.AddInt64(&sendToStream, time.Since(start).Nanoseconds())
 	metrics.TiKVBatchSendReqHistogram.Observe(time.Since(start).Seconds())
 	return
 }
@@ -264,7 +271,10 @@ func (c *batchCommandsClient) recv() (*tikvpb.BatchCommandsResponse, error) {
 		return nil, errors.New("injected error in batchRecvLoop")
 	})
 	start := time.Now()
-	defer metrics.TiKVBatchRecvReqHistogram.Observe(time.Since(start).Seconds())
+	defer func() {
+		atomic.AddInt64(&recvFromStream, time.Since(start).Nanoseconds())
+		metrics.TiKVBatchRecvReqHistogram.Observe(time.Since(start).Seconds())
+	}()
 	// When `conn.Close()` is called, `client.Recv()` will return an error.
 	return c.client.Recv()
 }
@@ -429,6 +439,7 @@ type batchCommandsEntry struct {
 	canceled  int32
 	err       error
 	heartbeat bool
+	start     time.Time
 }
 
 func (b *batchCommandsEntry) isCanceled() bool {
@@ -478,7 +489,7 @@ func (a *batchConn) batchSendLoop(cfg config.TiKVClient) {
 		entries = resetEntries(entries)
 		requests = resetRequests(requests)
 		requestIDs = requestIDs[:0]
-
+		start := time.Now()
 		a.pendingRequests.Set(float64(len(a.batchCommandsCh)))
 		a.fetchAllPendingRequests(int(cfg.MaxBatchSize), &entries, &requests)
 
@@ -501,7 +512,7 @@ func (a *batchConn) batchSendLoop(cfg config.TiKVClient) {
 		} else if uint(length) > bestBatchWaitSize+4 && bestBatchWaitSize < cfg.MaxBatchSize {
 			bestBatchWaitSize++
 		}
-
+		atomic.AddInt64(&fetchReqFromCh, time.Since(start).Nanoseconds())
 		entries, requests = removeCanceledRequests(entries, requests)
 		if len(entries) == 0 {
 			continue // All requests are canceled.
@@ -517,6 +528,7 @@ func (a *batchConn) getClientAndSend(entries []*batchCommandsEntry, requests []*
 		cli    *batchCommandsClient
 		target string
 	)
+	start := time.Now()
 	for i := 0; i < len(a.batchCommandsClients); i++ {
 		a.index = (a.index + 1) % uint32(len(a.batchCommandsClients))
 		target = a.batchCommandsClients[a.index].target
@@ -561,7 +573,7 @@ func (a *batchConn) getClientAndSend(entries []*batchCommandsEntry, requests []*
 		Requests:   requests,
 		RequestIds: requestIDs,
 	}
-
+	atomic.AddInt64(&getClientTime, time.Since(start).Nanoseconds())
 	cli.send(req, entries)
 }
 
@@ -611,6 +623,49 @@ func removeCanceledRequests(entries []*batchCommandsEntry,
 	return validEntries, validRequests
 }
 
+var (
+	sendToCh       int64 = 0
+	recvFromCh     int64
+	sendToStream   int64
+	recvFromStream int64
+	fetchReqFromCh int64
+	getClientTime  int64
+	sendBeforeTime int64
+	sendCnt        int64
+	reqCnt         int64
+
+	printOnce sync.Once
+)
+
+func printMetric() {
+	timer := time.NewTicker(10 * time.Second)
+	for {
+		select {
+		case _ = <-timer.C:
+			logutil.BgLogger().Warn("print metric",
+				zap.Float64("total", time.Duration(recvFromCh).Seconds()),
+				zap.Float64("sendToCh", float64(sendToCh)/float64(recvFromCh)),
+				zap.Float64("sendBeforeTime", float64(sendBeforeTime)/float64(recvFromCh)),
+				zap.Float64("sendToStream", float64(sendToStream)/float64(recvFromCh)),
+				zap.Float64("recvFromStream", float64(recvFromStream)/float64(recvFromCh)),
+				zap.Float64("fetchReqFromCh", float64(fetchReqFromCh)/float64(recvFromCh)),
+				zap.Float64("getClientTime", float64(getClientTime)/float64(recvFromCh)),
+				zap.Int64("count", sendCnt),
+				zap.Int64("req count", reqCnt),
+			)
+			atomic.StoreInt64(&sendToCh, 0)
+			atomic.StoreInt64(&recvFromCh, 0)
+			atomic.StoreInt64(&sendToStream, 0)
+			atomic.StoreInt64(&recvFromStream, 0)
+			atomic.StoreInt64(&fetchReqFromCh, 0)
+			atomic.StoreInt64(&getClientTime, 0)
+			atomic.StoreInt64(&sendCnt, 0)
+			atomic.StoreInt64(&reqCnt, 0)
+			atomic.StoreInt64(&sendBeforeTime, 0)
+		}
+	}
+}
+
 func sendBatchRequest(
 	ctx context.Context,
 	addr string,
@@ -624,15 +679,17 @@ func sendBatchRequest(
 		res:      make(chan *tikvpb.BatchCommandsResponse_Response, 1),
 		canceled: 0,
 		err:      nil,
+		start:    time.Now(),
 	}
 	failpoint.InjectContext(ctx, "sendIdleHeartbeatReq", func() {
 		entry.heartbeat = true
 	})
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
-
+	atomic.AddInt64(&reqCnt, 1)
 	select {
 	case batchConn.batchCommandsCh <- entry:
+		atomic.AddInt64(&sendToCh, time.Since(entry.start).Nanoseconds())
 	case <-ctx.Done():
 		logutil.BgLogger().Warn("send request is cancelled",
 			zap.String("to", addr), zap.String("cause", ctx.Err().Error()))
@@ -643,6 +700,7 @@ func sendBatchRequest(
 
 	select {
 	case res, ok := <-entry.res:
+		atomic.AddInt64(&recvFromCh, time.Since(entry.start).Nanoseconds())
 		if !ok {
 			return nil, errors.Trace(entry.err)
 		}
