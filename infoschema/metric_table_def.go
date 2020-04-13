@@ -46,6 +46,43 @@ var MetricTableMap = map[string]MetricTableDef{
 		Quantile: 0.90,
 		Comment:  "The quantile of TiDB slow query statistics with slow query time(second)",
 	},
+
+	"tidb_batch_client_send_duration": {
+		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_tikvclient_batch_request_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le,instance))",
+		Labels:   []string{"instance"},
+		Quantile: 0.90,
+		Comment:  "The quantile of TiDB slow query statistics with slow query time(second)",
+	},
+	"tidb_batch_client_send_total_count": {
+		PromQL:  "sum(increase(tidb_tikvclient_batch_request_seconds_count{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (instance)",
+		Labels:  []string{"instance"},
+		Comment: "The quantile of TiDB slow query statistics with slow query time(second)",
+	},
+	"tidb_batch_client_send_total_time": {
+		PromQL:   "sum(increase(tidb_tikvclient_batch_request_seconds_sum{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (instance)",
+		Labels:   []string{"instance"},
+		Quantile: 0.90,
+		Comment:  "The quantile of TiDB slow query statistics with slow query time(second)",
+	},
+
+	"tidb_batch_client_recv_duration": {
+		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_tikvclient_batch_recv_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le,instance))",
+		Labels:   []string{"instance"},
+		Quantile: 0.90,
+		Comment:  "The quantile of TiDB slow query statistics with slow query time(second)",
+	},
+	"tidb_batch_client_recv_total_count": {
+		PromQL:  "sum(increase(tidb_tikvclient_batch_recv_seconds_count{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (instance)",
+		Labels:  []string{"instance"},
+		Comment: "The quantile of TiDB slow query statistics with slow query time(second)",
+	},
+	"tidb_batch_client_recv_total_time": {
+		PromQL:   "sum(increase(tidb_tikvclient_batch_recv_seconds_sum{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (instance)",
+		Labels:   []string{"instance"},
+		Quantile: 0.90,
+		Comment:  "The quantile of TiDB slow query statistics with slow query time(second)",
+	},
+
 	"tidb_slow_query_cop_process_duration": {
 		PromQL:   "histogram_quantile($QUANTILE, sum(rate(tidb_server_slow_query_cop_duration_seconds_bucket{$LABEL_CONDITIONS}[$RANGE_DURATION])) by (le,instance))",
 		Labels:   []string{"instance"},
