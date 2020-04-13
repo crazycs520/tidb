@@ -245,6 +245,7 @@ func (c *batchCommandsClient) send(request *tikvpb.BatchCommandsRequest, entries
 			failpoint.Return()
 		})
 	}
+	start := time.Now()
 	if err := c.client.Send(request); err != nil {
 		logutil.BgLogger().Info(
 			"sending batch commands meets error",
@@ -254,6 +255,7 @@ func (c *batchCommandsClient) send(request *tikvpb.BatchCommandsRequest, entries
 		c.failPendingRequests(err)
 		return
 	}
+	metrics.TiKVBatchSendReqHistogram.Observe(time.Since(start).Seconds())
 	return
 }
 
@@ -261,6 +263,8 @@ func (c *batchCommandsClient) recv() (*tikvpb.BatchCommandsResponse, error) {
 	failpoint.Inject("gotErrorInRecvLoop", func(_ failpoint.Value) (*tikvpb.BatchCommandsResponse, error) {
 		return nil, errors.New("injected error in batchRecvLoop")
 	})
+	start := time.Now()
+	defer metrics.TiKVBatchRecvReqHistogram.Observe(time.Since(start).Seconds())
 	// When `conn.Close()` is called, `client.Recv()` will return an error.
 	return c.client.Recv()
 }
