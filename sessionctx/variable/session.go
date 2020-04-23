@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
+	"github.com/pingcap/parser/charset"
 	"math"
 	"sort"
 	"strconv"
@@ -1267,6 +1268,17 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 			config.GetGlobalConfig().CheckMb4ValueInUTF8 = TiDBOptOn(val)
 		} else {
 			s.StmtCtx.AppendWarning(errors.Errorf("cannot update %s when enabling dynamic configs", TiDBCheckMb4ValueInUTF8))
+		}
+	case CharsetDatabase:
+		ok := false
+		for _, c := range charset.GetSupportedCharsets() {
+			if strings.EqualFold(c.Name, val) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			logutil.BgLogger().Warn("Unsupported charset, used")
 		}
 	}
 	s.systems[name] = val
