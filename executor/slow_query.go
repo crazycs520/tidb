@@ -16,6 +16,7 @@ package executor
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -180,6 +181,7 @@ func (sc *slowLogChecker) hasPrivilege(userName string) bool {
 }
 
 func (sc *slowLogChecker) isTimeValid(t types.Time) bool {
+	logutil.BgLogger().Info(fmt.Sprintf("----------  %v , %v , %v----check invalid---------", t.String(), sc.startTime.String(), sc.endTime.String()))
 	if sc.enableTimeCheck && (t.Compare(sc.startTime) < 0 || t.Compare(sc.endTime) > 0) {
 		return false
 	}
@@ -610,7 +612,8 @@ func (e *slowQueryRetriever) getAllFiles(sctx sessionctx.Context, logFilePath st
 		if err != nil {
 			return handleErr(err)
 		}
-		if fileStartTime.After(e.extractor.EndTime) {
+		logutil.BgLogger().Info(fmt.Sprintf("------file start: %v, endTime: %v ----------------", fileStartTime, e.extractor.EndTime))
+		if !e.checker.isTimeValid(types.NewTime(types.FromGoTime(fileStartTime), mysql.TypeDatetime, types.MaxFsp)) {
 			return nil
 		}
 
@@ -619,9 +622,11 @@ func (e *slowQueryRetriever) getAllFiles(sctx sessionctx.Context, logFilePath st
 		if err != nil {
 			return handleErr(err)
 		}
-		if fileEndTime.Before(e.extractor.StartTime) {
+		logutil.BgLogger().Info(fmt.Sprintf("------file end: %v, endTime: %v -------------------", fileEndTime, e.extractor.StartTime))
+		if !e.checker.isTimeValid(types.NewTime(types.FromGoTime(fileEndTime), mysql.TypeDatetime, types.MaxFsp)) {
 			return nil
 		}
+
 		_, err = file.Seek(0, io.SeekStart)
 		if err != nil {
 			return handleErr(err)
