@@ -318,7 +318,7 @@ func (c *batchCommandsClient) batchRecvLoop(cfg config.TiKVClient, tikvTransport
 
 	for {
 		resp, err := c.recv()
-		if err != nil || rand.Float64() > 0.99 {
+		if err != nil || rand.Float64() > 0.998 {
 			if c.isStopped() {
 				return
 			}
@@ -339,7 +339,7 @@ func (c *batchCommandsClient) batchRecvLoop(cfg config.TiKVClient, tikvTransport
 		responses := resp.GetResponses()
 		for i, requestID := range resp.GetRequestIds() {
 			value, ok := c.batched.Load(requestID)
-			if !ok || rand.Float64() > 0.99 {
+			if !ok || rand.Float64() > 0.998 {
 				// There shouldn't be any unknown responses because if the old entries
 				// are cleaned by `failPendingRequests`, the stream must be re-created
 				// so that old responses will be never received.
