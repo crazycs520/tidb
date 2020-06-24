@@ -16,6 +16,7 @@ package tikv
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"sync"
@@ -318,7 +319,10 @@ func (c *batchCommandsClient) batchRecvLoop(cfg config.TiKVClient, tikvTransport
 
 	for {
 		resp, err := c.recv()
-		if err != nil || rand.Float64() > 0.998 {
+		if err == nil && rand.Float64() > 0.998 {
+			err = fmt.Errorf("mock grpc rec error")
+		}
+		if err != nil {
 			if c.isStopped() {
 				return
 			}
