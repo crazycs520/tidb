@@ -657,16 +657,16 @@ func checkRegionsStatus(store kv.SplittableStore, regions []regionMeta) error {
 }
 
 func decodeRegionsKey(regions []regionMeta, tablePrefix, recordPrefix, indexPrefix []byte, physicalTableID, indexID int64) {
-	d := &regionKeyDecoder{
-		physicalTableID: physicalTableID,
-		tablePrefix:     tablePrefix,
-		recordPrefix:    recordPrefix,
-		indexPrefix:     indexPrefix,
-		indexID:         indexID,
-	}
+	//d := &regionKeyDecoder{
+	//	physicalTableID: physicalTableID,
+	//	tablePrefix:     tablePrefix,
+	//	recordPrefix:    recordPrefix,
+	//	indexPrefix:     indexPrefix,
+	//	indexID:         indexID,
+	//}
 	for i := range regions {
-		regions[i].start = d.decodeRegionKey(regions[i].region.StartKey)
-		regions[i].end = d.decodeRegionKey(regions[i].region.EndKey)
+		regions[i].start = tablecodec.DecodeTableKey(regions[i].region.StartKey)
+		regions[i].end = tablecodec.DecodeTableKey(regions[i].region.EndKey)
 	}
 }
 

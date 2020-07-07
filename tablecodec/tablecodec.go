@@ -16,7 +16,10 @@ package tablecodec
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -105,6 +108,10 @@ func hasRecordPrefixSep(key kv.Key) bool {
 	return key[0] == recordPrefixSep[0] && key[1] == recordPrefixSep[1]
 }
 
+func hasIndexPrefixSep(key kv.Key) bool {
+	return key[0] == indexPrefixSep[0] && key[1] == indexPrefixSep[1]
+}
+
 // DecodeRecordKey decodes the key and gets the tableID, handle.
 func DecodeRecordKey(key kv.Key) (tableID int64, handle kv.Handle, err error) {
 	if len(key) <= prefixLen {
@@ -134,6 +141,63 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle kv.Handle, err error) {
 	}
 	handle = kv.IntHandle(intHandle)
 	return
+}
+
+func DecodeTableKey(key kv.Key) string {
+	buf := bytes.NewBuffer(make([]byte, 0, 16))
+	k := key
+	if !key.HasPrefix(tablePrefix) {
+		return fmt.Sprintf("%X", k)
+	}
+
+	key = key[tablePrefixLength:]
+	key, tableID, err := codec.DecodeInt(key)
+	if err != nil {
+		return fmt.Sprintf("%X", k)
+	}
+	buf.WriteString("tableID=" + strconv.FormatInt(tableID, 10))
+	if key.HasPrefix(recordPrefixSep) {
+		tmpKey := key
+		key = key[recordPrefixSepLength:]
+		var intHandle int64
+		key, intHandle, err = codec.DecodeInt(key)
+		if err != nil {
+			buf.WriteString(fmt.Sprintf(", rest: %X", tmpKey))
+			return buf.String()
+		}
+		buf.WriteString(", _tidb_rowid=" + strconv.FormatInt(intHandle, 10))
+	} else if key.HasPrefix(indexPrefixSep) {
+		tmpKey := key
+		key = key[len(indexPrefixSep):]
+		var indexID int64
+		key, indexID, err = codec.DecodeInt(key)
+		if err != nil {
+			buf.WriteString(fmt.Sprintf(", rest: %X", tmpKey))
+			return buf.String()
+		}
+		buf.WriteString(", indexID=" + strconv.FormatInt(indexID, 10))
+		indexKey := key
+		indexValues := make([]string, 0, 2)
+		for len(indexKey) > 0 {
+			tmpKey := indexKey
+			remain, d, e := codec.DecodeOne(indexKey)
+			if e != nil {
+				buf.WriteString(fmt.Sprintf(", rest: %X, err: %v", tmpKey, e))
+				return buf.String()
+			}
+			str, e1 := d.ToString()
+			if e1 != nil {
+				buf.WriteString(fmt.Sprintf(", rest: %X, err: %v", tmpKey, e))
+				return buf.String()
+			}
+			indexValues = append(indexValues, str)
+			indexKey = remain
+		}
+		buf.WriteString(", indexValues=" + strings.Join(indexValues, ","))
+	} else {
+		buf.WriteString(fmt.Sprintf(", rest: %X", key))
+	}
+	return buf.String()
 }
 
 // DecodeIndexKey decodes the key and gets the tableID, indexID, indexValues.
