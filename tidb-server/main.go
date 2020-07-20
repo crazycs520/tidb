@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/danjacques/gofslock/fslock"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
