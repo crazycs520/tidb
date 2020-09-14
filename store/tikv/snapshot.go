@@ -725,3 +725,7 @@ func (rs *SnapshotRuntimeStats) String() string {
 	}
 	return buf.String()
 }
+
+func (rs *SnapshotRuntimeStats) GetRPCStats() RegionRequestRuntimeStats {
+	return rs.rpcStats
+}

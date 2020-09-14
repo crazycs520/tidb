@@ -212,6 +212,10 @@ func (s *StmtRuntimeStats) Merge(other *StmtRuntimeStats) {
 const (
 	// CopTimeStr represents the sum of RPC request time.
 	RpcTimeStr = "Rpc_time"
+	// RpcCountStr represents the sum of RPC request time.
+	RpcCountStr = "Rpc_count"
+	// RpcDetailStr represents the sum of RPC request time.
+	RpcDetailStr = "Rpc_detail"
 	// CopTimeStr represents the sum of cop-task time spend in TiDB distSQL.
 	CopTimeStr = "Cop_time"
 	// ProcessTimeStr represents the sum of process time of all the coprocessor tasks.
@@ -257,6 +261,18 @@ const (
 // String implements the fmt.Stringer interface.
 func (d ExecDetails) String() string {
 	parts := make([]string, 0, 8)
+	if d.StmtStats != nil {
+		if len(d.StmtStats.RPCStats) > 0 {
+			total := int64(0)
+			count := int64(0)
+			for _, value := range d.StmtStats.RPCStats {
+				total += value.Consume
+				count += value.Count
+			}
+			parts = append(parts, RpcTimeStr+": "+strconv.FormatFloat(time.Duration(total).Seconds(), 'f', -1, 64))
+			parts = append(parts, RpcCountStr+": "+strconv.FormatInt(count, 10))
+		}
+	}
 	if d.CopTime > 0 {
 		parts = append(parts, CopTimeStr+": "+strconv.FormatFloat(d.CopTime.Seconds(), 'f', -1, 64))
 	}

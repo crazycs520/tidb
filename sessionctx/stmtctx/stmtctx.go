@@ -14,7 +14,6 @@
 package stmtctx
 
 import (
-	"github.com/pingcap/tidb/store/tikv"
 	"math"
 	"sort"
 	"strconv"
@@ -112,7 +111,6 @@ type StatementContext struct {
 		histogramsNotLoad bool
 		execDetails       execdetails.ExecDetails
 		allExecDetails    []*execdetails.ExecDetails
-		tikv.SnapshotRuntimeStats
 	}
 	// PrevAffectedRows is the affected-rows value(DDL is 0, DML is the number of affected rows).
 	PrevAffectedRows int64
