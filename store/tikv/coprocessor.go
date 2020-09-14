@@ -1030,7 +1030,7 @@ func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *RPCCon
 	if resp.detail == nil {
 		resp.detail = new(CopRuntimeStats)
 	}
-	resp.detail.Stats = worker.Stats
+	resp.detail.RegionRequestRuntimeStats.Stats = worker.Stats
 	resp.detail.BackoffTime = time.Duration(bo.totalSleep) * time.Millisecond
 	resp.detail.BackoffSleep = make(map[string]time.Duration, len(bo.backoffTimes))
 	resp.detail.BackoffTimes = make(map[string]int, len(bo.backoffTimes))
@@ -1089,6 +1089,7 @@ func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *RPCCon
 type CopRuntimeStats struct {
 	execdetails.ExecDetails
 	RegionRequestRuntimeStats
+	BackoffRuntimeStats
 
 	CoprCacheHit bool
 }

@@ -15,6 +15,7 @@ package tikv
 
 import (
 	"context"
+	"github.com/pingcap/tidb/util/execdetails"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -415,13 +416,15 @@ func (b *batchCopIterator) handleBatchCopResponse(bo *Backoffer, response *copro
 	}
 
 	resp.detail.BackoffTime = time.Duration(bo.totalSleep) * time.Millisecond
-	resp.detail.BackoffSleep = make(map[string]time.Duration, len(bo.backoffTimes))
+	//resp.detail.BackoffSleep = make(map[string]time.Duration, len(bo.backoffTimes))
 	resp.detail.BackoffTimes = make(map[string]int, len(bo.backoffTimes))
-	for backoff := range bo.backoffTimes {
-		backoffName := backoff.String()
-		resp.detail.BackoffTimes[backoffName] = bo.backoffTimes[backoff]
-		resp.detail.BackoffSleep[backoffName] = time.Duration(bo.backoffSleepMS[backoff]) * time.Millisecond
-	}
+	resp.detail.BackoffRuntimeStats.Stats = make(map[backoffType]*execdetails.CountAndConsume)
+	resp.detail.BackoffRuntimeStats.Merge(bo.backoffStats)
+	//for backoff := range bo.backoffTimes {
+	//	backoffName := backoff.String()
+	//	resp.detail.BackoffTimes[backoffName] = bo.backoffTimes[backoff]
+	//	resp.detail.BackoffSleep[backoffName] = time.Duration(bo.backoffSleepMS[backoff]) * time.Millisecond
+	//}
 	resp.detail.CalleeAddress = task.storeAddr
 
 	b.sendToRespCh(&resp)

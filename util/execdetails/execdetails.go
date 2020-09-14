@@ -46,14 +46,15 @@ type ExecDetails struct {
 	WaitTime         time.Duration
 	BackoffTime      time.Duration
 	LockKeysDuration time.Duration
-	BackoffSleep     map[string]time.Duration
-	BackoffTimes     map[string]int
-	RequestCount     int
-	TotalKeys        int64
-	ProcessedKeys    int64
-	CommitDetail     *CommitDetails
-	LockKeysDetail   *LockKeysDetails
-	StmtStats        *StmtRuntimeStats
+	// Todo: remove this backoff
+	BackoffSleep   map[string]time.Duration
+	BackoffTimes   map[string]int
+	RequestCount   int
+	TotalKeys      int64
+	ProcessedKeys  int64
+	CommitDetail   *CommitDetails
+	LockKeysDetail *LockKeysDetails
+	StmtStats      *StmtRuntimeStats
 }
 
 type stmtExecDetailKeyType struct{}

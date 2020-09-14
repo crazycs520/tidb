@@ -617,17 +617,12 @@ func (s *tikvSnapshot) recordBackoffInfo(bo *Backoffer) {
 	if s.mu.stats == nil {
 		return
 	}
-	if s.mu.stats.backoffSleepMS == nil {
-		s.mu.stats.backoffSleepMS = bo.backoffSleepMS
-		s.mu.stats.backoffTimes = bo.backoffTimes
+	fmt.Printf("record backoff: %v -----\n\n", bo.backoffStats.String())
+	if s.mu.stats.backoffStats.Stats == nil {
+		s.mu.stats.backoffStats = bo.backoffStats
 		return
 	}
-	for k, v := range bo.backoffSleepMS {
-		s.mu.stats.backoffSleepMS[k] += v
-	}
-	for k, v := range bo.backoffTimes {
-		s.mu.stats.backoffTimes[k] += v
-	}
+	s.mu.stats.backoffStats.Merge(bo.backoffStats)
 }
 
 func (s *tikvSnapshot) mergeRegionRequestStats(stats map[tikvrpc.CmdType]*execdetails.CountAndConsume) {
@@ -646,16 +641,14 @@ func (s *tikvSnapshot) mergeRegionRequestStats(stats map[tikvrpc.CmdType]*execde
 			s.mu.stats.rpcStats.Stats[k] = v
 			continue
 		}
-		stat.Count += v.Count
-		stat.Consume += v.Consume
+		stat.Merge(v)
 	}
 }
 
 // SnapshotRuntimeStats records the runtime stats of snapshot.
 type SnapshotRuntimeStats struct {
-	rpcStats       RegionRequestRuntimeStats
-	backoffSleepMS map[backoffType]int
-	backoffTimes   map[backoffType]int
+	rpcStats     RegionRequestRuntimeStats
+	backoffStats BackoffRuntimeStats
 }
 
 // Tp implements the RuntimeStats interface.
@@ -665,21 +658,12 @@ func (rs *SnapshotRuntimeStats) Tp() int {
 
 // Clone implements the RuntimeStats interface.
 func (rs *SnapshotRuntimeStats) Clone() execdetails.RuntimeStats {
-	newRs := SnapshotRuntimeStats{rpcStats: NewRegionRequestRuntimeStats()}
+	newRs := SnapshotRuntimeStats{}
 	if rs.rpcStats.Stats != nil {
-		for k, v := range rs.rpcStats.Stats {
-			newRs.rpcStats.Stats[k] = v
-		}
+		newRs.rpcStats = rs.rpcStats.Clone()
 	}
-	if len(rs.backoffSleepMS) > 0 {
-		newRs.backoffSleepMS = make(map[backoffType]int)
-		newRs.backoffTimes = make(map[backoffType]int)
-		for k, v := range rs.backoffSleepMS {
-			newRs.backoffSleepMS[k] += v
-		}
-		for k, v := range rs.backoffTimes {
-			newRs.backoffTimes[k] += v
-		}
+	if rs.backoffStats.Stats != nil {
+		newRs.backoffStats = rs.backoffStats.Clone()
 	}
 	return &newRs
 }
@@ -696,19 +680,11 @@ func (rs *SnapshotRuntimeStats) Merge(other execdetails.RuntimeStats) {
 		}
 		rs.rpcStats.Merge(tmp.rpcStats)
 	}
-	if len(tmp.backoffSleepMS) > 0 {
-		if rs.backoffSleepMS == nil {
-			rs.backoffSleepMS = make(map[backoffType]int)
+	if tmp.backoffStats.Stats != nil {
+		if rs.backoffStats.Stats == nil {
+			rs.backoffStats.Stats = make(map[backoffType]*execdetails.CountAndConsume, len(tmp.backoffStats.Stats))
 		}
-		if rs.backoffTimes == nil {
-			rs.backoffTimes = make(map[backoffType]int)
-		}
-		for k, v := range tmp.backoffSleepMS {
-			rs.backoffSleepMS[k] += v
-		}
-		for k, v := range tmp.backoffTimes {
-			rs.backoffTimes[k] += v
-		}
+		rs.backoffStats.Merge(tmp.backoffStats)
 	}
 }
 
@@ -716,12 +692,9 @@ func (rs *SnapshotRuntimeStats) Merge(other execdetails.RuntimeStats) {
 func (rs *SnapshotRuntimeStats) String() string {
 	var buf bytes.Buffer
 	buf.WriteString(rs.rpcStats.String())
-	for k, v := range rs.backoffTimes {
-		if buf.Len() > 0 {
-			buf.WriteByte(',')
-		}
-		ms := rs.backoffSleepMS[k]
-		buf.WriteString(fmt.Sprintf("%s_backoff:{num:%d, total_time:%d ms}", k.String(), v, ms))
+	if len(rs.backoffStats.Stats) > 0 {
+		buf.WriteByte(',')
+		buf.WriteString(rs.backoffStats.String())
 	}
 	return buf.String()
 }

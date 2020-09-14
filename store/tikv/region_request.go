@@ -92,6 +92,18 @@ func (r *RegionRequestRuntimeStats) String() string {
 	return buf.String()
 }
 
+// Clone return a cloned RegionRequestRuntimeStats.
+func (r *RegionRequestRuntimeStats) Clone() RegionRequestRuntimeStats {
+	newR := RegionRequestRuntimeStats{
+		Stats: make(map[tikvrpc.CmdType]*execdetails.CountAndConsume),
+	}
+	for k, v := range r.Stats {
+		newV := *v
+		newR.Stats[k] = &newV
+	}
+	return newR
+}
+
 // Merge merges other RegionRequestRuntimeStats.
 func (r *RegionRequestRuntimeStats) Merge(rs RegionRequestRuntimeStats) {
 	for cmd, v := range rs.Stats {

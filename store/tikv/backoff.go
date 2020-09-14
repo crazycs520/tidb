@@ -14,6 +14,7 @@
 package tikv
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -253,8 +254,81 @@ type Backoffer struct {
 	vars       *kv.Variables
 	noop       bool
 
+	backoffStats   BackoffRuntimeStats
 	backoffSleepMS map[backoffType]int
 	backoffTimes   map[backoffType]int
+}
+
+type BackoffRuntimeStats struct {
+	Stats map[backoffType]*execdetails.CountAndConsume
+}
+
+// NewBackoffRuntimeStats returns a new BackoffRuntimeStats.
+func NewBackoffRuntimeStats() BackoffRuntimeStats {
+	return BackoffRuntimeStats{
+		Stats: make(map[backoffType]*execdetails.CountAndConsume),
+	}
+}
+
+// String implements fmt.Stringer interface.
+func (br *BackoffRuntimeStats) String() string {
+	if len(br.Stats) == 0 {
+		return ""
+	}
+	var buf bytes.Buffer
+	buf.WriteString("backoff:{")
+	idx := 0
+	for k, v := range br.Stats {
+		if idx > 0 {
+			buf.WriteString(", ")
+		}
+		idx++
+		buf.WriteString(fmt.Sprintf("%s:{num: %d, total_time: %s}", k, v.Count, time.Duration(v.Consume).String()))
+	}
+	buf.WriteString("}")
+	return buf.String()
+}
+
+// Clone return a cloned BackoffRuntimeStats.
+func (br *BackoffRuntimeStats) Clone() BackoffRuntimeStats {
+	newBr := BackoffRuntimeStats{
+		Stats: make(map[backoffType]*execdetails.CountAndConsume),
+	}
+	for k, v := range br.Stats {
+		newV := *v
+		newBr.Stats[k] = &newV
+	}
+	return newBr
+}
+
+// Merge merges other RegionRequestRuntimeStats.
+func (br *BackoffRuntimeStats) Merge(other BackoffRuntimeStats) {
+	for cmd, v := range other.Stats {
+		stat, ok := br.Stats[cmd]
+		if !ok {
+			br.Stats[cmd] = &execdetails.CountAndConsume{
+				Count:   v.Count,
+				Consume: v.Consume,
+			}
+			continue
+		}
+		stat.Merge(v)
+	}
+}
+
+// Merge merges other RegionRequestRuntimeStats.
+func (br *BackoffRuntimeStats) Record(tp backoffType, ms int64) {
+	duration := ms * int64(time.Millisecond)
+	stat, ok := br.Stats[tp]
+	if !ok {
+		br.Stats[tp] = &execdetails.CountAndConsume{
+			Count:   1,
+			Consume: duration,
+		}
+		return
+	}
+	stat.Count++
+	stat.Consume += duration
 }
 
 type txnStartCtxKeyType struct{}
@@ -345,14 +419,11 @@ func (b *Backoffer) BackoffWithMaxSleep(typ backoffType, maxSleepMs int, err err
 	realSleep := f(b.ctx, maxSleepMs)
 	typ.metric().Observe(float64(realSleep) / 1000)
 	b.totalSleep += realSleep
-	if b.backoffSleepMS == nil {
-		b.backoffSleepMS = make(map[backoffType]int)
+	if b.backoffStats.Stats == nil {
+		b.backoffStats.Stats = make(map[backoffType]*execdetails.CountAndConsume)
 	}
-	b.backoffSleepMS[typ] += realSleep
-	if b.backoffTimes == nil {
-		b.backoffTimes = make(map[backoffType]int)
-	}
-	b.backoffTimes[typ]++
+	b.backoffStats.Record(typ, int64(realSleep))
+	//fmt.Printf("backoff: %v, %v -----\n\n", typ.String(), realSleep)
 
 	stmtExec := b.ctx.Value(execdetails.StmtExecDetailKey)
 	if stmtExec != nil {

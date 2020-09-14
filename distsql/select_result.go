@@ -261,7 +261,7 @@ func (r *selectResult) updateCopRuntimeStats(ctx context.Context, copStats *tikv
 	if r.stats == nil {
 		id := r.rootPlanID
 		r.stats = &selectResultRuntimeStats{
-			backoffSleep: make(map[string]time.Duration),
+			backoffStats: tikv.NewBackoffRuntimeStats(),
 			rpcStat:      tikv.NewRegionRequestRuntimeStats(),
 		}
 		r.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.RegisterStats(id, r.stats)
@@ -321,7 +321,7 @@ type CopRuntimeStats interface {
 type selectResultRuntimeStats struct {
 	copRespTime      []time.Duration
 	procKeys         []int64
-	backoffSleep     map[string]time.Duration
+	backoffStats     tikv.BackoffRuntimeStats
 	totalProcessTime time.Duration
 	totalWaitTime    time.Duration
 	rpcStat          tikv.RegionRequestRuntimeStats
@@ -335,10 +335,7 @@ func (s *selectResultRuntimeStats) GetRPCStats() tikv.RegionRequestRuntimeStats 
 func (s *selectResultRuntimeStats) mergeCopRuntimeStats(copStats *tikv.CopRuntimeStats, respTime time.Duration) {
 	s.copRespTime = append(s.copRespTime, respTime)
 	s.procKeys = append(s.procKeys, copStats.ProcessedKeys)
-
-	for k, v := range copStats.BackoffSleep {
-		s.backoffSleep[k] += v
-	}
+	s.backoffStats.Merge(copStats.BackoffRuntimeStats)
 	s.totalProcessTime += copStats.ProcessTime
 	s.totalWaitTime += copStats.WaitTime
 	s.rpcStat.Merge(copStats.RegionRequestRuntimeStats)
@@ -349,21 +346,16 @@ func (s *selectResultRuntimeStats) mergeCopRuntimeStats(copStats *tikv.CopRuntim
 
 func (s *selectResultRuntimeStats) Clone() execdetails.RuntimeStats {
 	newRs := selectResultRuntimeStats{
-		copRespTime:  make([]time.Duration, 0, len(s.copRespTime)),
-		procKeys:     make([]int64, 0, len(s.procKeys)),
-		backoffSleep: make(map[string]time.Duration, len(s.backoffSleep)),
-		rpcStat:      tikv.NewRegionRequestRuntimeStats(),
+		copRespTime: make([]time.Duration, 0, len(s.copRespTime)),
+		procKeys:    make([]int64, 0, len(s.procKeys)),
+		rpcStat:     tikv.NewRegionRequestRuntimeStats(),
 	}
 	newRs.copRespTime = append(newRs.copRespTime, s.copRespTime...)
 	newRs.procKeys = append(newRs.procKeys, s.procKeys...)
-	for k, v := range s.backoffSleep {
-		newRs.backoffSleep[k] += v
-	}
+	newRs.backoffStats = s.backoffStats.Clone()
 	newRs.totalProcessTime += s.totalProcessTime
 	newRs.totalWaitTime += s.totalWaitTime
-	for k, v := range s.rpcStat.Stats {
-		newRs.rpcStat.Stats[k] = v
-	}
+	newRs.rpcStat = s.rpcStat.Clone()
 	return &newRs
 }
 
@@ -374,10 +366,7 @@ func (s *selectResultRuntimeStats) Merge(rs execdetails.RuntimeStats) {
 	}
 	s.copRespTime = append(s.copRespTime, other.copRespTime...)
 	s.procKeys = append(s.procKeys, other.procKeys...)
-
-	for k, v := range other.backoffSleep {
-		s.backoffSleep[k] += v
-	}
+	s.backoffStats.Merge(other.backoffStats)
 	s.totalProcessTime += other.totalProcessTime
 	s.totalWaitTime += other.totalWaitTime
 	s.rpcStat.Merge(other.rpcStat)
@@ -442,15 +431,15 @@ func (s *selectResultRuntimeStats) String() string {
 		buf.WriteString(rpcStatsStr)
 	}
 
-	if len(s.backoffSleep) > 0 {
+	if len(s.backoffStats.Stats) > 0 {
 		buf.WriteString(", backoff{")
 		idx := 0
-		for k, d := range s.backoffSleep {
+		for k, v := range s.backoffStats.Stats {
 			if idx > 0 {
 				buf.WriteString(", ")
 			}
 			idx++
-			buf.WriteString(fmt.Sprintf("%s: %s", k, d.String()))
+			buf.WriteString(fmt.Sprintf("%s: %s", k, time.Duration(v.Consume).String()))
 		}
 		buf.WriteString("}")
 	}
