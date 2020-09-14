@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/util/execdetails"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -69,21 +70,14 @@ type RegionRequestSender struct {
 
 // RegionRequestRuntimeStats records the runtime stats of send region requests.
 type RegionRequestRuntimeStats struct {
-	Stats map[tikvrpc.CmdType]*RPCRuntimeStats
+	Stats map[tikvrpc.CmdType]*execdetails.CountAndConsume
 }
 
 // NewRegionRequestRuntimeStats returns a new RegionRequestRuntimeStats.
 func NewRegionRequestRuntimeStats() RegionRequestRuntimeStats {
 	return RegionRequestRuntimeStats{
-		Stats: make(map[tikvrpc.CmdType]*RPCRuntimeStats),
+		Stats: make(map[tikvrpc.CmdType]*execdetails.CountAndConsume),
 	}
-}
-
-// RPCRuntimeStats indicates the RPC request count and consume time.
-type RPCRuntimeStats struct {
-	Count int64
-	// Send region request consume time.
-	Consume int64
 }
 
 // String implements fmt.Stringer interface.
@@ -103,7 +97,7 @@ func (r *RegionRequestRuntimeStats) Merge(rs RegionRequestRuntimeStats) {
 	for cmd, v := range rs.Stats {
 		stat, ok := r.Stats[cmd]
 		if !ok {
-			r.Stats[cmd] = &RPCRuntimeStats{
+			r.Stats[cmd] = &execdetails.CountAndConsume{
 				Count:   v.Count,
 				Consume: v.Consume,
 			}
@@ -154,10 +148,10 @@ func (ss *RegionBatchRequestSender) sendStreamReqToAddr(bo *Backoffer, ctxs []co
 	return
 }
 
-func recordRegionRequestRuntimeStats(stats map[tikvrpc.CmdType]*RPCRuntimeStats, cmd tikvrpc.CmdType, d time.Duration) {
+func recordRegionRequestRuntimeStats(stats map[tikvrpc.CmdType]*execdetails.CountAndConsume, cmd tikvrpc.CmdType, d time.Duration) {
 	stat, ok := stats[cmd]
 	if !ok {
-		stats[cmd] = &RPCRuntimeStats{
+		stats[cmd] = &execdetails.CountAndConsume{
 			Count:   1,
 			Consume: int64(d),
 		}

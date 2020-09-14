@@ -14,6 +14,7 @@
 package stmtctx
 
 import (
+	"github.com/pingcap/tidb/store/tikv"
 	"math"
 	"sort"
 	"strconv"
@@ -111,6 +112,7 @@ type StatementContext struct {
 		histogramsNotLoad bool
 		execDetails       execdetails.ExecDetails
 		allExecDetails    []*execdetails.ExecDetails
+		tikv.SnapshotRuntimeStats
 	}
 	// PrevAffectedRows is the affected-rows value(DDL is 0, DML is the number of affected rows).
 	PrevAffectedRows int64
@@ -512,6 +514,17 @@ func (sc *StatementContext) MergeLockKeysExecDetails(lockKeys *execdetails.LockK
 		sc.mu.execDetails.LockKeysDetail = lockKeys
 	} else {
 		sc.mu.execDetails.LockKeysDetail.Merge(lockKeys)
+	}
+	sc.mu.Unlock()
+}
+
+// MergeLockKeysExecDetails merges lock keys execution details into self.
+func (sc *StatementContext) MergeStmtStats(LockKeysDetail *execdetails.StmtRuntimeStats) {
+	sc.mu.Lock()
+	if sc.mu.execDetails.StmtStats == nil {
+		sc.mu.execDetails.StmtStats = LockKeysDetail
+	} else {
+		sc.mu.execDetails.StmtStats.Merge(LockKeysDetail)
 	}
 	sc.mu.Unlock()
 }

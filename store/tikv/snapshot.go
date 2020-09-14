@@ -242,7 +242,7 @@ func (s *tikvSnapshot) batchGetSingleRegion(bo *Backoffer, batch batchKeys, coll
 		Client:            s.store.client,
 	}
 	if s.mu.stats != nil {
-		cli.Stats = make(map[tikvrpc.CmdType]*RPCRuntimeStats)
+		cli.Stats = make(map[tikvrpc.CmdType]*execdetails.CountAndConsume)
 		defer func() {
 			s.mergeRegionRequestStats(cli.Stats)
 		}()
@@ -371,7 +371,7 @@ func (s *tikvSnapshot) get(bo *Backoffer, k kv.Key) ([]byte, error) {
 		resolveLite:       true,
 	}
 	if s.mu.stats != nil {
-		cli.Stats = make(map[tikvrpc.CmdType]*RPCRuntimeStats)
+		cli.Stats = make(map[tikvrpc.CmdType]*execdetails.CountAndConsume)
 		defer func() {
 			s.mergeRegionRequestStats(cli.Stats)
 		}()
@@ -630,7 +630,7 @@ func (s *tikvSnapshot) recordBackoffInfo(bo *Backoffer) {
 	}
 }
 
-func (s *tikvSnapshot) mergeRegionRequestStats(stats map[tikvrpc.CmdType]*RPCRuntimeStats) {
+func (s *tikvSnapshot) mergeRegionRequestStats(stats map[tikvrpc.CmdType]*execdetails.CountAndConsume) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.mu.stats == nil {
@@ -692,7 +692,7 @@ func (rs *SnapshotRuntimeStats) Merge(other execdetails.RuntimeStats) {
 	}
 	if tmp.rpcStats.Stats != nil {
 		if rs.rpcStats.Stats == nil {
-			rs.rpcStats.Stats = make(map[tikvrpc.CmdType]*RPCRuntimeStats, len(tmp.rpcStats.Stats))
+			rs.rpcStats.Stats = make(map[tikvrpc.CmdType]*execdetails.CountAndConsume, len(tmp.rpcStats.Stats))
 		}
 		rs.rpcStats.Merge(tmp.rpcStats)
 	}

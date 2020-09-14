@@ -804,6 +804,7 @@ func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, succ bool, hasMoreResults boo
 		}
 		sessVars.StmtCtx.RuntimeStatsColl.RegisterStats(a.Plan.ID(), statsWithCommit)
 	}
+	a.collectStmtRuntimeStats()
 	// `LowSlowQuery` and `SummaryStmt` must be called before recording `PrevStmt`.
 	a.LogSlowQuery(txnTS, succ, hasMoreResults)
 	a.SummaryStmt(succ)
@@ -821,6 +822,44 @@ func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, succ bool, hasMoreResults boo
 	} else {
 		sessionExecuteRunDurationGeneral.Observe(executeDuration.Seconds())
 	}
+}
+
+type RuntimeStatsWithRPCAndBackoff interface {
+	GetRPCStats() tikv.RegionRequestRuntimeStats
+}
+
+func (a *ExecStmt) collectStmtRuntimeStats() {
+	stmtStats := &execdetails.StmtRuntimeStats{}
+	collect := func(stats *execdetails.RootRuntimeStats) {
+		groupsStats := stats.GetGroupRuntimeStats()
+		for _, rss := range groupsStats {
+			for _, rs := range rss {
+				stats, ok := rs.(RuntimeStatsWithRPCAndBackoff)
+				if !ok {
+					continue
+				}
+				rpcStats := stats.GetRPCStats()
+				if rpcStats.Stats != nil {
+					if stmtStats.RPCStats == nil {
+						stmtStats.RPCStats = make(map[uint16]*execdetails.CountAndConsume)
+					}
+					// Merge
+					for tp, v := range rpcStats.Stats {
+						req := uint16(tp)
+						value, ok := stmtStats.RPCStats[req]
+						if !ok {
+							value = &execdetails.CountAndConsume{}
+							stmtStats.RPCStats[req] = value
+						}
+						value.Merge(v)
+					}
+				}
+			}
+		}
+	}
+	stmtCtx := a.Ctx.GetSessionVars().StmtCtx
+	stmtCtx.RuntimeStatsColl.IterAllRootStats(collect)
+	stmtCtx.MergeStmtStats(stmtStats)
 }
 
 // CloseRecordSet will finish the execution of current statement and do some record work

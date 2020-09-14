@@ -53,6 +53,7 @@ type ExecDetails struct {
 	ProcessedKeys    int64
 	CommitDetail     *CommitDetails
 	LockKeysDetail   *LockKeysDetails
+	StmtStats        *StmtRuntimeStats
 }
 
 type stmtExecDetailKeyType struct{}
@@ -168,7 +169,49 @@ func (ld *LockKeysDetails) Clone() *LockKeysDetails {
 	return lock
 }
 
+type StmtRuntimeStats struct {
+	// RPCStats indicates the RPC runtime stats. uint16 is an alias of tikvrpc.CmdType.
+	RPCStats map[uint16]*CountAndConsume
+	Backoff  map[string]*CountAndConsume
+}
+
+func (s *StmtRuntimeStats) Merge(other *StmtRuntimeStats) {
+	if other == nil {
+		return
+	}
+	if len(other.RPCStats) > 0 {
+		if s.RPCStats == nil {
+			s.RPCStats = other.RPCStats
+		} else {
+			for k, v := range other.RPCStats {
+				value, ok := s.RPCStats[k]
+				if !ok {
+					value = &CountAndConsume{}
+					s.RPCStats[k] = value
+				}
+				value.Merge(v)
+			}
+		}
+	}
+	if len(other.Backoff) > 0 {
+		if s.Backoff == nil {
+			s.Backoff = other.Backoff
+		} else {
+			for k, v := range other.Backoff {
+				value, ok := s.Backoff[k]
+				if !ok {
+					value = &CountAndConsume{}
+					s.Backoff[k] = value
+				}
+				value.Merge(v)
+			}
+		}
+	}
+}
+
 const (
+	// CopTimeStr represents the sum of RPC request time.
+	RpcTimeStr = "Rpc_time"
 	// CopTimeStr represents the sum of cop-task time spend in TiDB distSQL.
 	CopTimeStr = "Cop_time"
 	// ProcessTimeStr represents the sum of process time of all the coprocessor tasks.
@@ -455,6 +498,10 @@ func (e *BasicRuntimeStats) GetActRows() int64 {
 	return e.rows
 }
 
+func (e *BasicRuntimeStats) GetTime() int64 {
+	return e.consume
+}
+
 // Clone implements the RuntimeStats interface.
 func (e *BasicRuntimeStats) Clone() RuntimeStats {
 	return &BasicRuntimeStats{
@@ -493,6 +540,10 @@ func (e *RootRuntimeStats) GetActRows() int64 {
 		num += basic.GetActRows()
 	}
 	return num
+}
+
+func (e *RootRuntimeStats) GetGroupRuntimeStats() [][]RuntimeStats {
+	return e.groupRss
 }
 
 // String implements the RuntimeStats interface.
@@ -589,6 +640,14 @@ func (e *RuntimeStatsColl) RegisterStats(planID int, info RuntimeStats) {
 		}
 	}
 	e.mu.Unlock()
+}
+
+func (e *RuntimeStatsColl) IterAllRootStats(fn func(*RootRuntimeStats)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, stats := range e.rootStats {
+		fn(stats)
+	}
 }
 
 // GetRootStats gets execStat for a executor.
@@ -891,4 +950,15 @@ func (e *RuntimeStatsWithCommit) formatBackoff(backoffTypes []fmt.Stringer) stri
 	}
 	sort.Strings(tpArray)
 	return fmt.Sprintf("%v", tpArray)
+}
+
+// CountAndConsume contains the count and consume time information.
+type CountAndConsume struct {
+	Count   int64
+	Consume int64
+}
+
+func (c *CountAndConsume) Merge(other *CountAndConsume) {
+	c.Count += other.Count
+	c.Consume += other.Consume
 }

@@ -328,6 +328,10 @@ type selectResultRuntimeStats struct {
 	CoprCacheHitNum  int64
 }
 
+func (s *selectResultRuntimeStats) GetRPCStats() tikv.RegionRequestRuntimeStats {
+	return s.rpcStat
+}
+
 func (s *selectResultRuntimeStats) mergeCopRuntimeStats(copStats *tikv.CopRuntimeStats, respTime time.Duration) {
 	s.copRespTime = append(s.copRespTime, respTime)
 	s.procKeys = append(s.procKeys, copStats.ProcessedKeys)
