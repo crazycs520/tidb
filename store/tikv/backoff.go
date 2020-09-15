@@ -125,6 +125,8 @@ func expo(base, cap, n int) int {
 	return int(math.Min(float64(cap), float64(base)*math.Pow(2.0, float64(n))))
 }
 
+type BackoffType = backoffType
+
 type backoffType int
 
 // Back off types.

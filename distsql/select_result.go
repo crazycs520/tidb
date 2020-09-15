@@ -332,6 +332,10 @@ func (s *selectResultRuntimeStats) GetRPCStats() tikv.RegionRequestRuntimeStats 
 	return s.rpcStat
 }
 
+func (rs *selectResultRuntimeStats) GetBackoffStats() tikv.BackoffRuntimeStats {
+	return rs.backoffStats
+}
+
 func (s *selectResultRuntimeStats) mergeCopRuntimeStats(copStats *tikv.CopRuntimeStats, respTime time.Duration) {
 	s.copRespTime = append(s.copRespTime, respTime)
 	s.procKeys = append(s.procKeys, copStats.ProcessedKeys)

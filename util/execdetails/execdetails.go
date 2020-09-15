@@ -44,9 +44,9 @@ type ExecDetails struct {
 	CopTime          time.Duration
 	ProcessTime      time.Duration
 	WaitTime         time.Duration
-	BackoffTime      time.Duration
 	LockKeysDuration time.Duration
-	// Todo: remove this backoff
+	// Todo: remove  below backoff
+	BackoffTime    time.Duration
 	BackoffSleep   map[string]time.Duration
 	BackoffTimes   map[string]int
 	RequestCount   int
@@ -171,9 +171,10 @@ func (ld *LockKeysDetails) Clone() *LockKeysDetails {
 }
 
 type StmtRuntimeStats struct {
-	// RPCStats indicates the RPC runtime stats. uint16 is an alias of tikvrpc.CmdType.
-	RPCStats map[uint16]*CountAndConsume
-	Backoff  map[string]*CountAndConsume
+	// RPCStats indicates the RPC runtime stats.
+	RPCStats map[string]*CountAndConsume
+	// Backoff indicates the backoff stats.
+	Backoff map[string]*CountAndConsume
 }
 
 func (s *StmtRuntimeStats) Merge(other *StmtRuntimeStats) {
@@ -273,6 +274,17 @@ func (d ExecDetails) String() string {
 			parts = append(parts, RpcTimeStr+": "+strconv.FormatFloat(time.Duration(total).Seconds(), 'f', -1, 64))
 			parts = append(parts, RpcCountStr+": "+strconv.FormatInt(count, 10))
 		}
+		if len(d.StmtStats.Backoff) > 0 {
+			total := int64(0)
+			tps := make([]string, 0, len(d.StmtStats.Backoff))
+			for tp, value := range d.StmtStats.Backoff {
+				total += value.Consume
+				tp := tp + "*" + strconv.FormatInt(value.Count, 10)
+				tps = append(tps, tp)
+			}
+			parts = append(parts, BackoffTimeStr+": "+strconv.FormatFloat(time.Duration(total).Seconds(), 'f', -1, 64))
+			parts = append(parts, BackoffTypesStr+": "+fmt.Sprintf("%v", tps))
+		}
 	}
 	if d.CopTime > 0 {
 		parts = append(parts, CopTimeStr+": "+strconv.FormatFloat(d.CopTime.Seconds(), 'f', -1, 64))
@@ -282,9 +294,6 @@ func (d ExecDetails) String() string {
 	}
 	if d.WaitTime > 0 {
 		parts = append(parts, WaitTimeStr+": "+strconv.FormatFloat(d.WaitTime.Seconds(), 'f', -1, 64))
-	}
-	if d.BackoffTime > 0 {
-		parts = append(parts, BackoffTimeStr+": "+strconv.FormatFloat(d.BackoffTime.Seconds(), 'f', -1, 64))
 	}
 	if d.LockKeysDuration > 0 {
 		parts = append(parts, LockKeysTimeStr+": "+strconv.FormatFloat(d.LockKeysDuration.Seconds(), 'f', -1, 64))
@@ -316,11 +325,11 @@ func (d ExecDetails) String() string {
 		if commitBackoffTime > 0 {
 			parts = append(parts, CommitBackoffTimeStr+": "+strconv.FormatFloat(time.Duration(commitBackoffTime).Seconds(), 'f', -1, 64))
 		}
-		commitDetails.Mu.Lock()
-		if len(commitDetails.Mu.BackoffTypes) > 0 {
-			parts = append(parts, BackoffTypesStr+": "+fmt.Sprintf("%v", commitDetails.Mu.BackoffTypes))
-		}
-		commitDetails.Mu.Unlock()
+		//commitDetails.Mu.Lock()
+		//if len(commitDetails.Mu.BackoffTypes) > 0 {
+		//	parts = append(parts, BackoffTypesStr+": "+fmt.Sprintf("%v", commitDetails.Mu.BackoffTypes))
+		//}
+		//commitDetails.Mu.Unlock()
 		resolveLockTime := atomic.LoadInt64(&commitDetails.ResolveLockTime)
 		if resolveLockTime > 0 {
 			parts = append(parts, ResolveLockTimeStr+": "+strconv.FormatFloat(time.Duration(resolveLockTime).Seconds(), 'f', -1, 64))

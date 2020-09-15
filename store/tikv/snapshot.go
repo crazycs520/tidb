@@ -702,3 +702,7 @@ func (rs *SnapshotRuntimeStats) String() string {
 func (rs *SnapshotRuntimeStats) GetRPCStats() RegionRequestRuntimeStats {
 	return rs.rpcStats
 }
+
+func (rs *SnapshotRuntimeStats) GetBackoffStats() BackoffRuntimeStats {
+	return rs.backoffStats
+}

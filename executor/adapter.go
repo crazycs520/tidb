@@ -826,6 +826,7 @@ func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, succ bool, hasMoreResults boo
 
 type RuntimeStatsWithRPCAndBackoff interface {
 	GetRPCStats() tikv.RegionRequestRuntimeStats
+	GetBackoffStats() tikv.BackoffRuntimeStats
 }
 
 func (a *ExecStmt) collectStmtRuntimeStats() {
@@ -839,17 +840,31 @@ func (a *ExecStmt) collectStmtRuntimeStats() {
 					continue
 				}
 				rpcStats := stats.GetRPCStats()
-				if rpcStats.Stats != nil {
+				if len(rpcStats.Stats) > 0 {
 					if stmtStats.RPCStats == nil {
-						stmtStats.RPCStats = make(map[uint16]*execdetails.CountAndConsume)
+						stmtStats.RPCStats = make(map[string]*execdetails.CountAndConsume)
 					}
-					// Merge
 					for tp, v := range rpcStats.Stats {
-						req := uint16(tp)
+						req := tp.String()
 						value, ok := stmtStats.RPCStats[req]
 						if !ok {
 							value = &execdetails.CountAndConsume{}
 							stmtStats.RPCStats[req] = value
+						}
+						value.Merge(v)
+					}
+				}
+				backoff := stats.GetBackoffStats()
+				if len(backoff.Stats) > 0 {
+					if stmtStats.Backoff == nil {
+						stmtStats.Backoff = make(map[string]*execdetails.CountAndConsume)
+					}
+					for tp, v := range backoff.Stats {
+						tp := tp.String()
+						value, ok := stmtStats.Backoff[tp]
+						if !ok {
+							value = &execdetails.CountAndConsume{}
+							stmtStats.Backoff[tp] = value
 						}
 						value.Merge(v)
 					}
