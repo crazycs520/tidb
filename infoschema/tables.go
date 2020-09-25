@@ -263,13 +263,39 @@ func buildTableMeta(tableName string, cs []columnInfo) *model.TableInfo {
 	for i, col := range cols {
 		col.Offset = i
 	}
-	return &model.TableInfo{
+	tblInfo := &model.TableInfo{
 		Name:    model.NewCIStr(tableName),
 		Columns: cols,
 		State:   model.StatePublic,
 		Charset: mysql.DefaultCharset,
 		Collate: mysql.DefaultCollationName,
 	}
+	// add primary key index.
+	if pkCol, ok := tableNameToPrimaryColumn[tableName]; ok {
+		primaryIndexInfo := &model.IndexInfo{
+			ID:      1,
+			Name:    model.NewCIStr(mysql.PrimaryKeyName),
+			State:   model.StatePublic,
+			Tp:      model.IndexTypeBtree,
+			Unique:  true,
+			Primary: true,
+		}
+		for _, col := range tblInfo.Columns {
+			if col.Name.O == pkCol {
+				primaryIndexInfo.Columns = []*model.IndexColumn{
+					{
+						Name:   model.NewCIStr(pkCol),
+						Offset: col.Offset,
+						Length: -1,
+					},
+				}
+				break
+			}
+		}
+		tblInfo.Indices = append(tblInfo.Indices, primaryIndexInfo)
+		tblInfo.IsCommonHandle = true
+	}
+	return tblInfo
 }
 
 var schemataCols = []columnInfo{
@@ -1487,6 +1513,10 @@ func GetTiFlashStoreCount(ctx sessionctx.Context) (cnt uint64, err error) {
 		}
 	}
 	return cnt, nil
+}
+
+var tableNameToPrimaryColumn = map[string]string{
+	ClusterTableSlowLog: variable.SlowLogTimeStr,
 }
 
 var tableNameToColumns = map[string][]columnInfo{

@@ -16,6 +16,7 @@ package core
 import (
 	"bytes"
 	"fmt"
+	"github.com/pingcap/tidb/util"
 	math2 "math"
 
 	"github.com/pingcap/errors"
@@ -411,12 +412,18 @@ func TryFastPlan(ctx sessionctx.Context, node ast.Node) (p Plan) {
 			if checkFastPlanPrivilege(ctx, fp.dbName, fp.TblInfo.Name.L, mysql.SelectPriv) != nil {
 				return
 			}
+			if util.IsMemDB(fp.dbName) {
+				return nil
+			}
 			fp.Lock, fp.LockWaitTime = getLockWaitTime(ctx, x.LockInfo)
 			p = fp
 			return
 		}
 		if fp := tryPointGetPlan(ctx, x); fp != nil {
 			if checkFastPlanPrivilege(ctx, fp.dbName, fp.TblInfo.Name.L, mysql.SelectPriv) != nil {
+				return nil
+			}
+			if util.IsMemDB(fp.dbName) {
 				return nil
 			}
 			if fp.IsTableDual {

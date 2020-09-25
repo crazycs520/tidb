@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/types"
+	util2 "github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/collate"
 	"github.com/pingcap/tidb/util/logutil"
@@ -1427,6 +1428,9 @@ func (ds *DataSource) convertToPointGet(prop *property.PhysicalProperty, candida
 	}
 	if prop.TaskTp == property.CopDoubleReadTaskType && candidate.isSingleScan ||
 		prop.TaskTp == property.CopSingleReadTaskType && !candidate.isSingleScan {
+		return invalidTask
+	}
+	if util2.IsMemDB(ds.DBName.L) {
 		return invalidTask
 	}
 
