@@ -143,6 +143,8 @@ type Config struct {
 	SkipRegisterToDashboard bool `toml:"skip-register-to-dashboard" json:"skip-register-to-dashboard"`
 	// EnableTelemetry enables the usage data report to PingCAP.
 	EnableTelemetry bool `toml:"enable-telemetry" json:"enable-telemetry"`
+	// FreeOSMemoryThreshold is the threshold that auto free os memory.
+	FreeOSMemoryThreshold uint64
 }
 
 // UpdateTempStoragePath is to update the `TempStoragePath` if port/statusPort was changed
