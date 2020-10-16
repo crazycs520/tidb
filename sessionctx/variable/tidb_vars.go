@@ -175,6 +175,9 @@ const (
 
 	// TiDBAllowAutoRandExplicitInsert indicates whether explicit insertion on auto_random column is allowed.
 	TiDBAllowAutoRandExplicitInsert = "allow_auto_random_explicit_insert"
+
+	// TiDBAutoFreeOSMemoryThreshold is used to set the auto free os memory threshold.
+	TiDBAutoFreeOSMemoryThreshold = "tidb_auto_free_os_memory_threshold"
 )
 
 // TiDB system variable names that both in session and global scope.

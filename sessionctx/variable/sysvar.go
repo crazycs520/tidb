@@ -729,6 +729,7 @@ var defaultSysVars = []*SysVar{
 	{ScopeGlobal, TiDBRedactLog, strconv.Itoa(config.DefTiDBRedactLog)},
 	{ScopeGlobal, TiDBEnableTelemetry, BoolToIntStr(DefTiDBEnableTelemetry)},
 	{ScopeGlobal | ScopeSession, TiDBEnableAmendPessimisticTxn, boolToOnOff(DefTiDBEnableAmendPessimisticTxn)},
+	{ScopeSession, TiDBAutoFreeOSMemoryThreshold, "0"},
 }
 
 // SynonymsSysVariables is synonyms of system variables.

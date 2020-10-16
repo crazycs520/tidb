@@ -147,6 +147,8 @@ type Config struct {
 	EnableTelemetry bool `toml:"enable-telemetry" json:"enable-telemetry"`
 	// EnableRedactLog indicates that whether redact log, 0 is disable. 1 is enable.
 	EnableRedactLog int32 `toml:"enable-redact-log" json:"enable-redact-log"`
+	// FreeOSMemoryThreshold is the threshold that auto free os memory.
+	FreeOSMemoryThreshold uint64
 }
 
 // UpdateTempStoragePath is to update the `TempStoragePath` if port/statusPort was changed

@@ -1348,6 +1348,8 @@ func (s *SessionVars) SetSystemVar(name string, val string) error {
 		config.SetRedactLog(TiDBOptOn(val))
 	case TiDBEnableAmendPessimisticTxn:
 		s.EnableAmendPessimisticTxn = TiDBOptOn(val)
+	case TiDBAutoFreeOSMemoryThreshold:
+		atomic.StoreUint64(&config.GetGlobalConfig().FreeOSMemoryThreshold, uint64(tidbOptInt64(val, 0)))
 	}
 	s.systems[name] = val
 	return nil
