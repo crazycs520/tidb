@@ -1429,11 +1429,13 @@ func (cc *clientConn) writeChunks(ctx context.Context, rs ResultSet, binary bool
 		}
 		for i := 0; i < rowCount; i++ {
 			data = data[0:4]
+			rowStr := ""
 			if binary {
-				data, err = dumpBinaryRow(data, rs.Columns(), req.GetRow(i))
+				data, rowStr, err = dumpBinaryRow(data, rs.Columns(), req.GetRow(i))
 			} else {
-				data, err = dumpTextRow(data, rs.Columns(), req.GetRow(i))
+				data, rowStr, err = dumpTextRow(data, rs.Columns(), req.GetRow(i))
 			}
+			logutil.Logger(ctx).Warn("dump result row", zap.Int("row-num", i), zap.String("row", rowStr), zap.Bool("is-binary", binary), zap.Error(err))
 			if err != nil {
 				return err
 			}
@@ -1442,6 +1444,7 @@ func (cc *clientConn) writeChunks(ctx context.Context, rs ResultSet, binary bool
 			}
 		}
 	}
+	logutil.Logger(ctx).Warn("finish dump result row")
 	return cc.writeEOF(serverStatus)
 }
 
@@ -1493,9 +1496,11 @@ func (cc *clientConn) writeChunksWithFetchSize(ctx context.Context, rs ResultSet
 
 	data := cc.alloc.AllocWithLen(4, 1024)
 	var err error
-	for _, row := range curRows {
+	var rowStr string
+	for i, row := range curRows {
 		data = data[0:4]
-		data, err = dumpBinaryRow(data, rs.Columns(), row)
+		data, rowStr, err = dumpBinaryRow(data, rs.Columns(), row)
+		logutil.Logger(ctx).Warn("dump cursor result row", zap.Int("row-num", i), zap.String("row", rowStr), zap.Error(err))
 		if err != nil {
 			return err
 		}
@@ -1503,6 +1508,7 @@ func (cc *clientConn) writeChunksWithFetchSize(ctx context.Context, rs ResultSet
 			return err
 		}
 	}
+	logutil.Logger(ctx).Warn("finish dump cursor result row")
 	if cl, ok := rs.(fetchNotifier); ok {
 		cl.OnFetchReturned()
 	}
