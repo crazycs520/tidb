@@ -16,6 +16,7 @@ package util
 import (
 	"bytes"
 	"crypto/x509/pkix"
+	"math"
 	"time"
 
 	. "github.com/pingcap/check"
@@ -226,4 +227,88 @@ func (*testMiscSuite) TestToPB(c *C) {
 
 	c.Assert(ColumnToProto(column).String(), Equals, "column_id:1 collation:45 columnLen:-1 decimal:-1 ")
 	c.Assert(ColumnsToProto([]*model.ColumnInfo{column, column2}, false)[0].String(), Equals, "column_id:1 collation:45 columnLen:-1 decimal:-1 ")
+}
+
+type SampleDuration time.Duration
+
+func (*testMiscSuite) TestToCs(c *C) {
+	cases := []struct {
+		t time.Duration
+		s string
+	}{
+		{0, "0s"},
+		{1 * time.Nanosecond, "1ns"},
+		{9 * time.Nanosecond, "9ns"},
+		{10 * time.Nanosecond, "10ns"},
+		{999 * time.Nanosecond, "999ns"},
+		{1 * time.Microsecond, "1µs"},
+		{1*time.Microsecond + 123*time.Nanosecond, "1.12µs"},
+		{1*time.Microsecond + 23*time.Nanosecond, "1.02µs"},
+		{1*time.Microsecond + 3*time.Nanosecond, "1µs"},
+		{10*time.Microsecond + 456*time.Nanosecond, "10.5µs"},
+		{10*time.Microsecond + 956*time.Nanosecond, "11µs"},
+		{999*time.Microsecond + 56*time.Nanosecond, "999.1µs"},
+		{999*time.Microsecond + 988*time.Nanosecond, "1ms"},
+	}
+	for _, ca := range cases {
+		result := formatDuration(ca.t)
+		c.Assert(result, Equals, ca.s)
+	}
+}
+
+const (
+	TenSeconds     = 10 * time.Second
+	TenMillisecond = 10 * time.Millisecond
+	TenMicrosecond = 10 * time.Microsecond
+	TenNanosecond  = 10 * time.Nanosecond
+)
+
+func formatDuration(d time.Duration) string {
+	unit := getUnit(d)
+	if unit == time.Nanosecond {
+		return d.String()
+	}
+	integer := (d / unit) * unit
+	decimal := float64(d%unit) / float64(unit)
+	if d < 10*unit {
+		decimal = math.Round(decimal*100) / 100
+	} else {
+		decimal = math.Round(decimal*10) / 10
+	}
+	d = integer + time.Duration(decimal*float64(unit))
+	return d.String()
+}
+
+func getUnitAndDigital(d time.Duration) (time.Duration, int64) {
+	if d >= time.Second {
+		if d >= TenSeconds {
+			return time.Second, 1
+		}
+		return time.Second, 2
+	} else if d >= time.Millisecond {
+		if d >= TenMillisecond {
+			return time.Millisecond, 1
+		}
+		return time.Millisecond, 2
+	} else if d >= time.Microsecond {
+		if d >= TenMicrosecond {
+			return time.Microsecond, 1
+		}
+		return time.Microsecond, 2
+	}
+	if d >= TenNanosecond {
+		return time.Nanosecond, 1
+	}
+	return time.Nanosecond, 2
+}
+
+func getUnit(d time.Duration) time.Duration {
+	if d >= time.Second {
+		return time.Second
+	} else if d >= time.Millisecond {
+		return time.Millisecond
+	} else if d >= time.Microsecond {
+		return time.Microsecond
+	}
+	return time.Nanosecond
 }
