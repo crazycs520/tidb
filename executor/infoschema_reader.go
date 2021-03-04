@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tidb/ddl/placement"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/domain/infosync"
+	tidbutil "github.com/pingcap/tidb/executor/util"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta/autoid"
@@ -142,6 +143,8 @@ func (e *memtableRetriever) retrieve(ctx context.Context, sctx sessionctx.Contex
 			err = e.setDataForStatementsSummary(sctx, e.table.Name.O)
 		case infoschema.TablePlacementPolicy:
 			err = e.setDataForPlacementPolicy(sctx)
+		case infoschema.TableGoroutineAnalyze:
+			err = e.setDataForGoroutineAnalyze()
 		}
 		if err != nil {
 			return nil, err
@@ -1874,6 +1877,26 @@ func (e *memtableRetriever) setDataForPlacementPolicy(ctx sessionctx.Context) er
 			)
 			rows = append(rows, row)
 		}
+	}
+	e.rows = rows
+	return nil
+}
+
+func (e *memtableRetriever) setDataForGoroutineAnalyze() error {
+	var rows [][]types.Datum
+	godump, err := tidbutil.Load("./goroutine")
+	if err != nil {
+		return err
+	}
+	for _, g := range godump.Goroutines {
+		row := types.MakeDatums(
+			g.ID,
+			g.Metas[tidbutil.MetaState],
+			g.FullMd5,
+			g.Duration,
+			g.Trace,
+		)
+		rows = append(rows, row)
 	}
 	e.rows = rows
 	return nil

@@ -1,3 +1,14 @@
+
+Usage:
+
+1. move the `goroutine` file in the current directry.
+2. 
+
+```sql
+select max(duration) as t,max(detail) as d from `GOROUTINE_ANALYZE` group by digest order by t desc, d desc\G
+```
+
+
 ![](docs/logo_with_text.png)
 
 [![LICENSE](https://img.shields.io/github/license/pingcap/tidb.svg)](https://github.com/pingcap/tidb/blob/master/LICENSE)
@@ -104,3 +115,5 @@ TiDB is under the Apache 2.0 license. See the [LICENSE](./LICENSE) file for deta
 
 - Thanks [cznic](https://github.com/cznic) for providing some great open source tools.
 - Thanks [GolevelDB](https://github.com/syndtr/goleveldb), [BoltDB](https://github.com/boltdb/bolt), and [RocksDB](https://github.com/facebook/rocksdb) for their powerful storage engines.
+
+

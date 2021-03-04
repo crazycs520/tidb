@@ -155,6 +155,8 @@ const (
 	TableTiFlashSegments = "TIFLASH_SEGMENTS"
 	// TablePlacementPolicy is the string constant of placement policy table.
 	TablePlacementPolicy = "PLACEMENT_POLICY"
+
+	TableGoroutineAnalyze = "GOROUTINE_ANALYZE"
 )
 
 var tableIDMap = map[string]int64{
@@ -224,6 +226,7 @@ var tableIDMap = map[string]int64{
 	TableTiFlashTables:                      autoid.InformationSchemaDBID + 64,
 	TableTiFlashSegments:                    autoid.InformationSchemaDBID + 65,
 	TablePlacementPolicy:                    autoid.InformationSchemaDBID + 66,
+	TableGoroutineAnalyze:                   autoid.InformationSchemaDBID + 67,
 }
 
 type columnInfo struct {
@@ -1292,6 +1295,14 @@ var tablePlacementPolicyCols = []columnInfo{
 	{name: "CONSTRAINTS", tp: mysql.TypeVarchar, size: 1024},
 }
 
+var tableGoroutineAnalyzeCols = []columnInfo{
+	{name: "id", tp: mysql.TypeLonglong, size: 64, flag: mysql.NotNullFlag | mysql.UnsignedFlag},
+	{name: "state", tp: mysql.TypeVarchar, size: 64},
+	{name: "digest", tp: mysql.TypeLongBlob, size: types.UnspecifiedLength},
+	{name: "duration", tp: mysql.TypeLonglong, size: 64},
+	{name: "detail", tp: mysql.TypeLongBlob, size: types.UnspecifiedLength},
+}
+
 // GetShardingInfo returns a nil or description string for the sharding information of given TableInfo.
 // The returned description string may be:
 //  - "NOT_SHARDED": for tables that SHARD_ROW_ID_BITS is not specified.
@@ -1658,6 +1669,7 @@ var tableNameToColumns = map[string][]columnInfo{
 	TableTiFlashTables:                      tableTableTiFlashTablesCols,
 	TableTiFlashSegments:                    tableTableTiFlashSegmentsCols,
 	TablePlacementPolicy:                    tablePlacementPolicyCols,
+	TableGoroutineAnalyze:                   tableGoroutineAnalyzeCols,
 }
 
 func createInfoSchemaTable(_ autoid.Allocators, meta *model.TableInfo) (table.Table, error) {
