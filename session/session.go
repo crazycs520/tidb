@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"runtime"
 	"runtime/trace"
 	"strconv"
 	"strings"
@@ -214,6 +215,8 @@ type session struct {
 
 	// indexUsageCollector collects index usage information.
 	idxUsageCollector *handle.SessionIndexUsageCollector
+
+	taskGroup runtime.InternalTaskGroup
 }
 
 // AddTableLock adds table lock to the session lock map.
@@ -2888,6 +2891,14 @@ func (s *session) checkPlacementPolicyBeforeCommit() error {
 
 func (s *session) SetPort(port string) {
 	s.sessionVars.Port = port
+}
+
+func (s *session) SetTaskGroup() {
+	s.taskGroup = runtime.SetInternalTaskGroup()
+}
+
+func (s *session) GetTaskGroup() runtime.InternalTaskGroup {
+	return s.taskGroup
 }
 
 // GetTxnWriteThroughputSLI implements the Context interface.

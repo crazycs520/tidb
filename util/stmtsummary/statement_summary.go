@@ -195,6 +195,8 @@ type stmtSummaryByDigestElement struct {
 	// pessimistic execution retry information.
 	execRetryCount uint
 	execRetryTime  time.Duration
+
+	sumCPUTime time.Duration
 }
 
 // StmtExecInfo records execution information of each statement.
@@ -228,6 +230,7 @@ type StmtExecInfo struct {
 	ExecRetryTime  time.Duration
 	execdetails.StmtExecDetails
 	Prepared bool
+	CPUTime  time.Duration
 }
 
 // newStmtSummaryByDigestMap creates an empty stmtSummaryByDigestMap.
@@ -843,6 +846,10 @@ func (ssElement *stmtSummaryByDigestElement) add(sei *StmtExecInfo, intervalSeco
 		ssElement.execRetryCount += sei.ExecRetryCount
 		ssElement.execRetryTime += sei.ExecRetryTime
 	}
+	if sei.CPUTime > 0 {
+		ssElement.sumCPUTime += sei.CPUTime
+	}
+
 	ssElement.sumKVTotal += time.Duration(atomic.LoadInt64(&sei.StmtExecDetails.WaitKVRespDuration))
 	ssElement.sumPDTotal += time.Duration(atomic.LoadInt64(&sei.StmtExecDetails.WaitPDRespDuration))
 	ssElement.sumBackoffTotal += time.Duration(atomic.LoadInt64(&sei.StmtExecDetails.BackoffDuration))
@@ -955,6 +962,7 @@ func (ssElement *stmtSummaryByDigestElement) toDatum(ssbd *stmtSummaryByDigest) 
 		ssElement.prevSQL,
 		ssbd.planDigest,
 		plan,
+		int64(ssElement.sumCPUTime),
 	)
 }
 

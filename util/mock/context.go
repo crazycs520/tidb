@@ -17,6 +17,7 @@ package mock
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -260,6 +261,12 @@ func (c *Context) StoreIndexUsage(_ int64, _ int64, _ int64) {}
 // GetTxnWriteThroughputSLI implements the sessionctx.Context interface.
 func (c *Context) GetTxnWriteThroughputSLI() *sli.TxnWriteThroughputSLI {
 	return &sli.TxnWriteThroughputSLI{}
+}
+
+func (s *Context) SetTaskGroup() {}
+
+func (s *Context) GetTaskGroup() runtime.InternalTaskGroup {
+	return nil
 }
 
 // StmtCommit implements the sessionctx.Context interface.

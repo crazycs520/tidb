@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	gometrics "runtime/metrics"
 	"runtime/trace"
 	"strings"
 	"sync/atomic"
@@ -1114,6 +1115,16 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	if stmtDetailRaw != nil {
 		stmtDetail = *(stmtDetailRaw.(*execdetails.StmtExecDetails))
 	}
+
+	cpuTime := int64(0)
+	if taskGroup := a.Ctx.GetTaskGroup(); taskGroup != nil {
+		var taskGroupMetrics = []gometrics.Sample{
+			{Name: "/taskgroup/sched/cputime:nanoseconds"},
+		}
+		gometrics.ReadTaskGroup(taskGroup, taskGroupMetrics)
+		cpuTime = int64(taskGroupMetrics[0].Value.Uint64())
+	}
+
 	stmtExecInfo := &stmtsummary.StmtExecInfo{
 		SchemaName:      strings.ToLower(sessVars.CurrentDB),
 		OriginalSQL:     sql,
@@ -1143,6 +1154,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		ExecRetryCount:  a.retryCount,
 		StmtExecDetails: stmtDetail,
 		Prepared:        a.isPreparedStmt,
+		CPUTime:         time.Duration(cpuTime),
 	}
 	if a.retryCount > 0 {
 		stmtExecInfo.ExecRetryTime = costTime - sessVars.DurationParse - sessVars.DurationCompile - time.Since(a.retryStartTime)

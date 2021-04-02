@@ -16,6 +16,7 @@ package sessionctx
 import (
 	"context"
 	"fmt"
+	"runtime"
 
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
@@ -116,6 +117,8 @@ type Context interface {
 	StoreIndexUsage(tblID int64, idxID int64, rowsSelected int64)
 	// GetTxnWriteThroughputSLI returns the TxnWriteThroughputSLI.
 	GetTxnWriteThroughputSLI() *sli.TxnWriteThroughputSLI
+	SetTaskGroup()
+	GetTaskGroup() runtime.InternalTaskGroup
 }
 
 type basicCtxType int
