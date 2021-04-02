@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pingcap/tidb/util/stmtcost"
 	"io/ioutil"
 	"net/http"
 	"sort"
@@ -148,6 +149,10 @@ func (e *memtableRetriever) retrieve(ctx context.Context, sctx sessionctx.Contex
 			infoschema.TableClientErrorsSummaryByUser,
 			infoschema.TableClientErrorsSummaryByHost:
 			err = e.setDataForClientErrorsSummary(sctx, e.table.Name.O)
+		case infoschema.TableStatementsCost:
+			err = e.setDataForStatementsCost(sctx)
+		case infoschema.TableStatementsCostHistory:
+			err = e.setDataForStatementsCostHistory(sctx)
 		}
 		if err != nil {
 			return nil, err
@@ -1844,6 +1849,16 @@ func (e *memtableRetriever) setDataForStatementsSummary(ctx sessionctx.Context, 
 		}
 		e.rows = rows
 	}
+	return nil
+}
+
+func (e *memtableRetriever) setDataForStatementsCost(ctx sessionctx.Context) error {
+	e.rows = stmtcost.StmtCostCollector.ToCurrentDatum()
+	return nil
+}
+
+func (e *memtableRetriever) setDataForStatementsCostHistory(ctx sessionctx.Context) error {
+	e.rows = stmtcost.StmtCostCollector.ToHistoryDatum()
 	return nil
 }
 

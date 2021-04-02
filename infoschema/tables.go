@@ -161,6 +161,9 @@ const (
 	TableClientErrorsSummaryByUser = "CLIENT_ERRORS_SUMMARY_BY_USER"
 	// TableClientErrorsSummaryByHost is the string constant of client errors table.
 	TableClientErrorsSummaryByHost = "CLIENT_ERRORS_SUMMARY_BY_HOST"
+
+	TableStatementsCost        = "STATEMENTS_COST"
+	TableStatementsCostHistory = "STATEMENTS_COST_HISTORY"
 )
 
 var tableIDMap = map[string]int64{
@@ -233,6 +236,8 @@ var tableIDMap = map[string]int64{
 	TableClientErrorsSummaryGlobal:          autoid.InformationSchemaDBID + 67,
 	TableClientErrorsSummaryByUser:          autoid.InformationSchemaDBID + 68,
 	TableClientErrorsSummaryByHost:          autoid.InformationSchemaDBID + 69,
+	TableStatementsCost:                     autoid.InformationSchemaDBID + 70,
+	TableStatementsCostHistory:              autoid.InformationSchemaDBID + 71,
 }
 
 type columnInfo struct {
@@ -1107,6 +1112,16 @@ var tableSequencesCols = []columnInfo{
 	{name: "START", tp: mysql.TypeLonglong, size: 21},
 	{name: "COMMENT", tp: mysql.TypeVarchar, size: 64},
 }
+var tableStatementsCostCols = []columnInfo{
+	{name: "BEGIN_TIME", tp: mysql.TypeTimestamp, size: 26, flag: mysql.NotNullFlag, comment: "Begin time of this summary"},
+	{name: "END_TIME", tp: mysql.TypeTimestamp, size: 26, flag: mysql.NotNullFlag, comment: "End time of this summary"},
+	{name: "SCHEMA_NAME", tp: mysql.TypeVarchar, size: 64, flag: mysql.NotNullFlag, comment: "Current schema"},
+	{name: "DIGEST", tp: mysql.TypeVarchar, size: 64, flag: mysql.NotNullFlag},
+	{name: "SUM_CPU_TIME", tp: mysql.TypeLonglong, size: 20, flag: mysql.NotNullFlag | mysql.UnsignedFlag, comment: "Sum CPU time of these statements"},
+	{name: "EXEC_COUNT", tp: mysql.TypeLonglong, size: 20, flag: mysql.NotNullFlag | mysql.UnsignedFlag, comment: "Count of executions"},
+	{name: "DIGEST_TEXT", tp: mysql.TypeBlob, size: types.UnspecifiedLength, flag: mysql.NotNullFlag, comment: "Normalized statement"},
+	{name: "QUERY_SAMPLE_TEXT", tp: mysql.TypeBlob, size: types.UnspecifiedLength, comment: "Sampled original statement"},
+}
 
 var tableStatementsSummaryCols = []columnInfo{
 	{name: "SUMMARY_BEGIN_TIME", tp: mysql.TypeTimestamp, size: 26, flag: mysql.NotNullFlag, comment: "Begin time of this summary"},
@@ -1701,6 +1716,8 @@ var tableNameToColumns = map[string][]columnInfo{
 	TableClientErrorsSummaryGlobal:          tableClientErrorsSummaryGlobalCols,
 	TableClientErrorsSummaryByUser:          tableClientErrorsSummaryByUserCols,
 	TableClientErrorsSummaryByHost:          tableClientErrorsSummaryByHostCols,
+	TableStatementsCost:                     tableStatementsCostCols,
+	TableStatementsCostHistory:              tableStatementsCostCols,
 }
 
 func createInfoSchemaTable(_ autoid.Allocators, meta *model.TableInfo) (table.Table, error) {

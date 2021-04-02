@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/util/stmtcost"
 	"math"
 	gometrics "runtime/metrics"
 	"runtime/trace"
@@ -1160,6 +1161,13 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		stmtExecInfo.ExecRetryTime = costTime - sessVars.DurationParse - sessVars.DurationCompile - time.Since(a.retryStartTime)
 	}
 	stmtsummary.StmtSummaryByDigestMap.AddStatement(stmtExecInfo)
+	stmtcost.StmtCostCollector.AddStatement(&stmtcost.StmtExecInfo{
+		SchemaName:    stmtExecInfo.SchemaName,
+		Digest:        stmtExecInfo.Digest,
+		NormalizedSQL: stmtExecInfo.NormalizedSQL,
+		OriginalSQL:   stmtExecInfo.OriginalSQL,
+		CPUTime:       cpuTime,
+	})
 }
 
 // GetTextToLog return the query text to log.

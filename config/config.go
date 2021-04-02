@@ -137,6 +137,7 @@ type Config struct {
 	DelayCleanTableLock uint64      `toml:"delay-clean-table-lock" json:"delay-clean-table-lock"`
 	SplitRegionMaxNum   uint64      `toml:"split-region-max-num" json:"split-region-max-num"`
 	StmtSummary         StmtSummary `toml:"stmt-summary" json:"stmt-summary"`
+	StmtCost            StmtCost    `toml:"stmt-summary" json:"stmt-cost"`
 	// RepairMode indicates that the TiDB is in the repair mode for table meta.
 	RepairMode      bool     `toml:"repair-mode" json:"repair-mode"`
 	RepairTableList []string `toml:"repair-table-list" json:"repair-table-list"`
@@ -524,6 +525,21 @@ type StmtSummary struct {
 	HistorySize int `toml:"history-size" json:"history-size"`
 }
 
+type StmtCost struct {
+	// Enable statement cost or not.
+	Enable bool `toml:"enable" json:"enable"`
+	// Enable summary internal query.
+	EnableInternalQuery bool `toml:"enable-internal-query" json:"enable-internal-query"`
+	// The maximum number of statements kept in memory.
+	MaxStmtCount uint `toml:"max-stmt-count" json:"max-stmt-count"`
+	// The maximum length of displayed normalized SQL and sample SQL.
+	MaxSQLLength uint `toml:"max-sql-length" json:"max-sql-length"`
+	// The refresh interval of statement summary.
+	RefreshInterval int `toml:"refresh-interval" json:"refresh-interval"`
+	// The maximum history size of statement summary.
+	HistorySize int `toml:"history-size" json:"history-size"`
+}
+
 // IsolationRead is the config for isolation read.
 type IsolationRead struct {
 	// Engines filters tidb-server access paths by engine type.
@@ -651,6 +667,14 @@ var defaultConf = Config{
 		MaxStmtCount:        200,
 		MaxSQLLength:        4096,
 		RefreshInterval:     1800,
+		HistorySize:         24,
+	},
+	StmtCost: StmtCost{
+		Enable:              true,
+		EnableInternalQuery: false,
+		MaxStmtCount:        200,
+		MaxSQLLength:        4096,
+		RefreshInterval:     10,
 		HistorySize:         24,
 	},
 	IsolationRead: IsolationRead{

@@ -60,6 +60,7 @@ func (sg *sessionPool) get() (sessionctx.Context, error) {
 	ctx := resource.(sessionctx.Context)
 	ctx.GetSessionVars().SetStatusFlag(mysql.ServerStatusAutocommit, true)
 	ctx.GetSessionVars().InRestrictedSQL = true
+	ctx.SetTaskGroup()
 	return ctx, nil
 }
 
