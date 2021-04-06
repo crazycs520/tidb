@@ -1188,4 +1188,5 @@ type StmtExecStats struct {
 
 func (s *StmtExecStats) Begin() {
 	s.TaskGroup = runtime.SetInternalTaskGroup()
+	s.ConsumedCPUTime = 0
 }

@@ -269,7 +269,7 @@ func (scm *stmtCostByDigestMap) addRunningStmtCost(sm util.SessionManager, saveT
 		key.Hash()
 
 		cpuTime := int64(0)
-		if pi.ExecStats.TaskGroup != nil {
+		if pi.ExecStats != nil && pi.ExecStats.TaskGroup != nil {
 			var taskGroupMetrics = []metrics.Sample{
 				{Name: "/taskgroup/sched/cputime:nanoseconds"},
 			}

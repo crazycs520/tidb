@@ -1118,12 +1118,14 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	}
 
 	cpuTime := int64(0)
-	if taskGroup := a.Ctx.GetTaskGroup(); taskGroup != nil {
+	consumed := int64(0)
+	if stmtExec := a.Ctx.GetStmtExecStats(); stmtExec != nil && stmtExec.TaskGroup != nil {
 		var taskGroupMetrics = []gometrics.Sample{
 			{Name: "/taskgroup/sched/cputime:nanoseconds"},
 		}
-		gometrics.ReadTaskGroup(taskGroup, taskGroupMetrics)
+		gometrics.ReadTaskGroup(stmtExec.TaskGroup, taskGroupMetrics)
 		cpuTime = int64(taskGroupMetrics[0].Value.Uint64())
+		consumed = stmtExec.ConsumedCPUTime
 	}
 
 	stmtExecInfo := &stmtsummary.StmtExecInfo{
@@ -1166,7 +1168,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		Digest:        stmtExecInfo.Digest,
 		NormalizedSQL: stmtExecInfo.NormalizedSQL,
 		OriginalSQL:   stmtExecInfo.OriginalSQL,
-		CPUTime:       cpuTime,
+		CPUTime:       cpuTime - consumed,
 	})
 }
 

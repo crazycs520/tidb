@@ -52,7 +52,7 @@ type ProcessInfo struct {
 	Command                   byte
 	ExceedExpensiveTimeThresh bool
 	RedactSQL                 bool
-	ExecStats                 execdetails.StmtExecStats
+	ExecStats                 *execdetails.StmtExecStats
 }
 
 // ToRowForShow returns []interface{} for the row data of "SHOW [FULL] PROCESSLIST".

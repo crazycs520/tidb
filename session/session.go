@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"runtime"
 	"runtime/trace"
 	"strconv"
 	"strings"
@@ -1120,7 +1119,7 @@ func (s *session) SetProcessInfo(sql string, t time.Time, command byte, maxExecu
 		StatsInfo:        plannercore.GetStatsInfo,
 		MaxExecutionTime: maxExecutionTime,
 		RedactSQL:        s.sessionVars.EnableRedactLog,
-		ExecStats:        s.stmtExecStats,
+		ExecStats:        &s.stmtExecStats,
 	}
 	oldPi := s.ShowProcess()
 	if p == nil {
@@ -2893,12 +2892,8 @@ func (s *session) SetPort(port string) {
 	s.sessionVars.Port = port
 }
 
-func (s *session) SetTaskGroup() {
-	s.stmtExecStats.Begin()
-}
-
-func (s *session) GetTaskGroup() runtime.InternalTaskGroup {
-	return s.stmtExecStats.TaskGroup
+func (s *session) GetStmtExecStats() *execdetails.StmtExecStats {
+	return &s.stmtExecStats
 }
 
 // GetTxnWriteThroughputSLI implements the Context interface.

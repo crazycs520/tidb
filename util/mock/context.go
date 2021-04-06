@@ -17,7 +17,7 @@ package mock
 import (
 	"context"
 	"fmt"
-	"runtime"
+	"github.com/pingcap/tidb/util/execdetails"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -263,9 +263,7 @@ func (c *Context) GetTxnWriteThroughputSLI() *sli.TxnWriteThroughputSLI {
 	return &sli.TxnWriteThroughputSLI{}
 }
 
-func (s *Context) SetTaskGroup() {}
-
-func (s *Context) GetTaskGroup() runtime.InternalTaskGroup {
+func (s *Context) GetStmtExecStats() *execdetails.StmtExecStats {
 	return nil
 }
 

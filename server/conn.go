@@ -938,7 +938,7 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 		// reset killed for each request
 		atomic.StoreUint32(&cc.ctx.GetSessionVars().Killed, 0)
 	}()
-	cc.ctx.SetTaskGroup()
+	cc.ctx.GetStmtExecStats().Begin()
 	t := time.Now()
 	if (cc.ctx.Status() & mysql.ServerStatusInTrans) > 0 {
 		connIdleDurationHistogramInTxn.Observe(t.Sub(cc.lastActive).Seconds())
