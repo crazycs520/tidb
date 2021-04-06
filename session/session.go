@@ -216,7 +216,7 @@ type session struct {
 	// indexUsageCollector collects index usage information.
 	idxUsageCollector *handle.SessionIndexUsageCollector
 
-	taskGroup runtime.InternalTaskGroup
+	stmtExecStats execdetails.StmtExecStats
 }
 
 // AddTableLock adds table lock to the session lock map.
@@ -1120,6 +1120,7 @@ func (s *session) SetProcessInfo(sql string, t time.Time, command byte, maxExecu
 		StatsInfo:        plannercore.GetStatsInfo,
 		MaxExecutionTime: maxExecutionTime,
 		RedactSQL:        s.sessionVars.EnableRedactLog,
+		ExecStats:        s.stmtExecStats,
 	}
 	oldPi := s.ShowProcess()
 	if p == nil {
@@ -1135,7 +1136,7 @@ func (s *session) SetProcessInfo(sql string, t time.Time, command byte, maxExecu
 	if oldPi != nil && oldPi.Info == pi.Info {
 		pi.Time = oldPi.Time
 	}
-	_, pi.Digest = s.sessionVars.StmtCtx.SQLDigest()
+	pi.NormalizedSQL, pi.Digest = s.sessionVars.StmtCtx.SQLDigest()
 	// DO NOT reset the currentPlan to nil until this query finishes execution, otherwise reentrant calls
 	// of SetProcessInfo would override Plan and PlanExplainRows to nil.
 	if command == mysql.ComSleep {
@@ -2287,7 +2288,6 @@ func BootstrapSession(store kv.Storage) (*domain.Domain, error) {
 			return nil, err
 		}
 	}
-
 	return dom, err
 }
 
@@ -2894,11 +2894,11 @@ func (s *session) SetPort(port string) {
 }
 
 func (s *session) SetTaskGroup() {
-	s.taskGroup = runtime.SetInternalTaskGroup()
+	s.stmtExecStats.Begin()
 }
 
 func (s *session) GetTaskGroup() runtime.InternalTaskGroup {
-	return s.taskGroup
+	return s.stmtExecStats.TaskGroup
 }
 
 // GetTxnWriteThroughputSLI implements the Context interface.

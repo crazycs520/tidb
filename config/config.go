@@ -528,15 +528,13 @@ type StmtSummary struct {
 type StmtCost struct {
 	// Enable statement cost or not.
 	Enable bool `toml:"enable" json:"enable"`
-	// Enable summary internal query.
-	EnableInternalQuery bool `toml:"enable-internal-query" json:"enable-internal-query"`
 	// The maximum number of statements kept in memory.
 	MaxStmtCount uint `toml:"max-stmt-count" json:"max-stmt-count"`
 	// The maximum length of displayed normalized SQL and sample SQL.
 	MaxSQLLength uint `toml:"max-sql-length" json:"max-sql-length"`
-	// The refresh interval of statement summary.
+	// The refresh interval of statement cost.
 	RefreshInterval int `toml:"refresh-interval" json:"refresh-interval"`
-	// The maximum history size of statement summary.
+	// The maximum history size of statement cost.
 	HistorySize int `toml:"history-size" json:"history-size"`
 }
 
@@ -670,12 +668,11 @@ var defaultConf = Config{
 		HistorySize:         24,
 	},
 	StmtCost: StmtCost{
-		Enable:              true,
-		EnableInternalQuery: false,
-		MaxStmtCount:        200,
-		MaxSQLLength:        4096,
-		RefreshInterval:     10,
-		HistorySize:         24,
+		Enable:          true,
+		MaxStmtCount:    200,
+		MaxSQLLength:    4096,
+		RefreshInterval: 60,
+		HistorySize:     24,
 	},
 	IsolationRead: IsolationRead{
 		Engines: []string{"tikv", "tiflash", "tidb"},

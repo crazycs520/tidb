@@ -150,9 +150,9 @@ func (e *memtableRetriever) retrieve(ctx context.Context, sctx sessionctx.Contex
 			infoschema.TableClientErrorsSummaryByHost:
 			err = e.setDataForClientErrorsSummary(sctx, e.table.Name.O)
 		case infoschema.TableStatementsCost:
-			err = e.setDataForStatementsCost(sctx)
+			err = e.setDataForStatementsCost()
 		case infoschema.TableStatementsCostHistory:
-			err = e.setDataForStatementsCostHistory(sctx)
+			err = e.setDataForStatementsCostHistory()
 		}
 		if err != nil {
 			return nil, err
@@ -1852,12 +1852,12 @@ func (e *memtableRetriever) setDataForStatementsSummary(ctx sessionctx.Context, 
 	return nil
 }
 
-func (e *memtableRetriever) setDataForStatementsCost(ctx sessionctx.Context) error {
+func (e *memtableRetriever) setDataForStatementsCost() error {
 	e.rows = stmtcost.StmtCostCollector.ToCurrentDatum()
 	return nil
 }
 
-func (e *memtableRetriever) setDataForStatementsCostHistory(ctx sessionctx.Context) error {
+func (e *memtableRetriever) setDataForStatementsCostHistory() error {
 	e.rows = stmtcost.StmtCostCollector.ToHistoryDatum()
 	return nil
 }

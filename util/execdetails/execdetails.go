@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1177,4 +1178,14 @@ func getUnit(d time.Duration) time.Duration {
 		return time.Microsecond
 	}
 	return time.Nanosecond
+}
+
+type StmtExecStats struct {
+	TaskGroup runtime.InternalTaskGroup
+
+	ConsumedCPUTime int64
+}
+
+func (s *StmtExecStats) Begin() {
+	s.TaskGroup = runtime.SetInternalTaskGroup()
 }

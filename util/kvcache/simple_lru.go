@@ -185,6 +185,16 @@ func (l *SimpleLRUCache) Keys() []Key {
 	return keys
 }
 
+func (l *SimpleLRUCache) Iter(fn func(Key, Value) bool) {
+	for ele := l.cache.Front(); ele != nil; ele = ele.Next() {
+		entry := ele.Value.(*cacheEntry)
+		ok := fn(entry.key, entry.value)
+		if ok {
+			return
+		}
+	}
+}
+
 // SetCapacity sets capacity of the cache.
 func (l *SimpleLRUCache) SetCapacity(capacity uint) error {
 	if capacity < 1 {
@@ -198,6 +208,10 @@ func (l *SimpleLRUCache) SetCapacity(capacity uint) error {
 		l.size--
 	}
 	return nil
+}
+
+func (l *SimpleLRUCache) GetCapacity() uint {
+	return l.capacity
 }
 
 // RemoveOldest removes the oldest element from the cache.

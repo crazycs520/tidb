@@ -35,6 +35,7 @@ type ProcessInfo struct {
 	Port             string
 	DB               string
 	Digest           string
+	NormalizedSQL    string
 	Plan             interface{}
 	PlanExplainRows  [][]string
 	RuntimeStatsColl *execdetails.RuntimeStatsColl
@@ -51,6 +52,7 @@ type ProcessInfo struct {
 	Command                   byte
 	ExceedExpensiveTimeThresh bool
 	RedactSQL                 bool
+	ExecStats                 execdetails.StmtExecStats
 }
 
 // ToRowForShow returns []interface{} for the row data of "SHOW [FULL] PROCESSLIST".

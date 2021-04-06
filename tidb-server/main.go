@@ -17,6 +17,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/pingcap/tidb/util/stmtcost"
 	"io/ioutil"
 	"os"
 	"runtime"
@@ -606,6 +607,7 @@ func createServer() {
 	svr.InitGlobalConnID(dom.ServerID)
 	go dom.ExpensiveQueryHandle().SetSessionManager(svr).Run()
 	dom.InfoSyncer().SetSessionManager(svr)
+	stmtcost.StmtCostCollector.SetSessionManager(svr)
 }
 
 func serverShutdown(isgraceful bool) {

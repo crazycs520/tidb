@@ -459,6 +459,22 @@ refresh-interval = 1800
 # the maximum history size of statement summary.
 history-size = 24
 
+[stmt-cost]
+# enable statement cost.
+enable = true
+
+# max number of statements kept in memory.
+max-stmt-count = 200
+
+# max length of displayed normalized sql and sample sql.
+max-sql-length = 4096
+
+# the refresh interval of statement cost, it's counted in seconds.
+refresh-interval = 60
+
+# the maximum history size of statement cost.
+history-size = 24
+
 # experimental section controls the features that are still experimental: their semantics,
 # interfaces are subject to change, using these features in the production environment is not recommended.
 [experimental]

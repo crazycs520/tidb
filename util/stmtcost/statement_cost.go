@@ -14,12 +14,15 @@
 package stmtcost
 
 import (
-	"github.com/pingcap/tidb/config"
+	"fmt"
+	"runtime/metrics"
 	"sync"
 	"time"
 
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/hack"
 	"github.com/pingcap/tidb/util/kvcache"
 )
@@ -50,13 +53,16 @@ type stmtCostCollector struct {
 	current    *stmtCostByDigestMap
 	history    []*stmtCostByDigestMap
 	historyIdx int
+	sm         util.SessionManager
 }
 
 type stmtCostByDigestMap struct {
+	sync.Mutex
 	costMap *kvcache.SimpleLRUCache
-	other   stmtCostStats
-	begin   int64 // unix second
-	end     int64
+	// todo: add other
+	other stmtCostStats
+	begin int64 // unix second
+	end   int64
 }
 
 type stmtCostByDigest struct {
@@ -84,17 +90,31 @@ func newStmtCostCollector() *stmtCostCollector {
 
 func newStmtCostByDigestMap() *stmtCostByDigestMap {
 	maxStmtCount := config.GetGlobalConfig().StmtCost.MaxStmtCount
+	begin := (int(time.Now().Unix()) / config.GetGlobalConfig().StmtCost.RefreshInterval) * config.GetGlobalConfig().StmtCost.RefreshInterval
 	return &stmtCostByDigestMap{
 		costMap: kvcache.NewSimpleLRUCache(maxStmtCount, 0, 0),
-		begin:   time.Now().Unix(),
+		begin:   int64(begin),
+	}
+}
+
+func (sc *stmtCostCollector) SetSessionManager(sm util.SessionManager) {
+	if sm != nil {
+		sc.sm = sm
 	}
 }
 
 func (sc *stmtCostCollector) historyLoop() {
-	tick := time.NewTicker(time.Duration(config.GetGlobalConfig().StmtCost.RefreshInterval) * time.Second)
+	now := int(time.Now().Unix())
+	next := (now/config.GetGlobalConfig().StmtCost.RefreshInterval + 1) * config.GetGlobalConfig().StmtCost.RefreshInterval
+	tick := time.NewTicker(time.Duration(next-now) * time.Second)
+	bootstrap := true
 	for {
 		select {
 		case <-tick.C:
+			if bootstrap {
+				bootstrap = false
+				tick.Reset(time.Duration(config.GetGlobalConfig().StmtCost.RefreshInterval) * time.Second)
+			}
 			sc.saveToHistory()
 		}
 	}
@@ -103,7 +123,6 @@ func (sc *stmtCostCollector) historyLoop() {
 func (sc *stmtCostCollector) saveToHistory() {
 	historySize := config.GetGlobalConfig().StmtCost.HistorySize
 	sc.Lock()
-	defer sc.Unlock()
 	sc.current.end = time.Now().Unix()
 	if len(sc.history) < historySize {
 		sc.history = append(sc.history, sc.current)
@@ -111,8 +130,14 @@ func (sc *stmtCostCollector) saveToHistory() {
 		idx := sc.historyIdx % len(sc.history)
 		sc.history[idx] = sc.current
 	}
+	old := sc.current
 	sc.current = newStmtCostByDigestMap()
 	sc.historyIdx++
+	sc.Unlock()
+
+	old.Lock()
+	old.addRunningStmtCost(sc.sm, true)
+	old.Unlock()
 }
 
 // AddStatement adds a statement to StmtSummaryByDigestMap.
@@ -128,18 +153,21 @@ func (sc *stmtCostCollector) AddStatement(sei *StmtExecInfo) {
 	key.Hash()
 	sc.Lock()
 	defer sc.Unlock()
-	current := sc.current
-	value, ok := current.costMap.Get(key)
+	sc.current.AddStatement(key, sei)
+}
+
+func (scm *stmtCostByDigestMap) AddStatement(key *stmtCostByDigestKey, sei *StmtExecInfo) {
+	value, ok := scm.costMap.Get(key)
 	var stmt *stmtCostByDigest
 	if !ok {
 		// Lazy initialize it to release ssMap.mutex ASAP.
 		stmt = &stmtCostByDigest{
 			schemaName:    sei.SchemaName,
 			digest:        sei.Digest,
-			normalizedSQL: sei.NormalizedSQL,
-			sampleSQL:     sei.OriginalSQL,
+			normalizedSQL: formatSQL(sei.NormalizedSQL),
+			sampleSQL:     formatSQL(sei.OriginalSQL),
 		}
-		current.costMap.Put(key, stmt)
+		scm.costMap.Put(key, stmt)
 	} else {
 		stmt = value.(*stmtCostByDigest)
 	}
@@ -160,10 +188,17 @@ func (sc *stmtCostCollector) Clear() {
 // ToCurrentDatum converts current statement summaries to datum.
 func (sc *stmtCostCollector) ToCurrentDatum() [][]types.Datum {
 	cfg := config.GetGlobalConfig().StmtCost
+	var current *stmtCostByDigestMap
 	sc.Lock()
-	defer sc.Unlock()
-	values := sc.current.costMap.Values()
-	beginTime := sc.current.begin
+	current = sc.current.Copy()
+	sc.Unlock()
+
+	current.Lock()
+	defer current.Unlock()
+	current.addRunningStmtCost(sc.sm, false)
+
+	values := current.costMap.Values()
+	beginTime := current.begin
 	end := beginTime + int64(cfg.RefreshInterval)
 	rows := make([][]types.Datum, 0, len(values))
 	for _, value := range values {
@@ -181,7 +216,7 @@ func (sc *stmtCostCollector) ToHistoryDatum() [][]types.Datum {
 	sc.Unlock()
 	rows := make([][]types.Datum, 0, len(sc.history)*10)
 	for _, scbd := range sc.history {
-		values := sc.current.costMap.Values()
+		values := scbd.costMap.Values()
 		for _, value := range values {
 			record := value.(*stmtCostByDigest).toCurrentDatum(scbd.begin, scbd.end)
 			if record != nil {
@@ -206,6 +241,55 @@ func (scbd *stmtCostByDigest) toCurrentDatum(beginTime, endTime int64) []types.D
 	)
 }
 
+func (scm *stmtCostByDigestMap) Copy() *stmtCostByDigestMap {
+	to := &stmtCostByDigestMap{
+		costMap: kvcache.NewSimpleLRUCache(scm.costMap.GetCapacity(), 0, 0),
+		begin:   scm.begin,
+		end:     scm.end,
+	}
+	scm.costMap.Iter(func(key kvcache.Key, value kvcache.Value) bool {
+		stmt := value.(*stmtCostByDigest)
+		newStmt := *stmt
+		to.costMap.Put(key, &newStmt)
+		return false
+	})
+	return to
+}
+
+func (scm *stmtCostByDigestMap) addRunningStmtCost(sm util.SessionManager, saveToHistory bool) {
+	if sm == nil {
+		return
+	}
+	pl := sm.ShowProcessList()
+	for _, pi := range pl {
+		key := &stmtCostByDigestKey{
+			schemaName: pi.DB,
+			digest:     pi.Digest,
+		}
+		key.Hash()
+
+		cpuTime := int64(0)
+		if pi.ExecStats.TaskGroup != nil {
+			var taskGroupMetrics = []metrics.Sample{
+				{Name: "/taskgroup/sched/cputime:nanoseconds"},
+			}
+			metrics.ReadTaskGroup(pi.ExecStats.TaskGroup, taskGroupMetrics)
+			cpuTime = int64(taskGroupMetrics[0].Value.Uint64()) - pi.ExecStats.ConsumedCPUTime
+			if saveToHistory {
+				pi.ExecStats.ConsumedCPUTime += cpuTime
+			}
+		}
+
+		scm.AddStatement(key, &StmtExecInfo{
+			SchemaName:    pi.DB,
+			Digest:        pi.Digest,
+			NormalizedSQL: formatSQL(pi.NormalizedSQL),
+			OriginalSQL:   formatSQL(pi.Info),
+			CPUTime:       cpuTime,
+		})
+	}
+}
+
 // StmtExecInfo records execution information of each statement.
 type StmtExecInfo struct {
 	SchemaName    string
@@ -213,4 +297,14 @@ type StmtExecInfo struct {
 	NormalizedSQL string
 	OriginalSQL   string
 	CPUTime       int64
+}
+
+// Truncate SQL to maxSQLLength.
+func formatSQL(sql string) string {
+	maxSQLLength := config.GetGlobalConfig().StmtCost.MaxSQLLength
+	length := len(sql)
+	if uint(length) > maxSQLLength {
+		sql = fmt.Sprintf("%.*s(len:%d)", maxSQLLength, sql, length)
+	}
+	return sql
 }
