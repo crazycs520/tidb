@@ -196,41 +196,43 @@ type stmtSummaryByDigestElement struct {
 	execRetryCount uint
 	execRetryTime  time.Duration
 
-	sumCPUTime time.Duration
+	sumCPUTime int64
 }
 
 // StmtExecInfo records execution information of each statement.
 type StmtExecInfo struct {
-	SchemaName     string
-	OriginalSQL    string
-	Charset        string
-	Collation      string
-	NormalizedSQL  string
-	Digest         string
-	PrevSQL        string
-	PrevSQLDigest  string
-	PlanGenerator  func() (string, string)
-	PlanDigest     string
-	PlanDigestGen  func() string
-	User           string
-	TotalLatency   time.Duration
-	ParseLatency   time.Duration
-	CompileLatency time.Duration
-	StmtCtx        *stmtctx.StatementContext
-	CopTasks       *stmtctx.CopTasksDetails
-	ExecDetail     *execdetails.ExecDetails
-	MemMax         int64
-	DiskMax        int64
-	StartTime      time.Time
-	IsInternal     bool
-	Succeed        bool
-	PlanInCache    bool
-	PlanInBinding  bool
-	ExecRetryCount uint
-	ExecRetryTime  time.Duration
+	SchemaName      string
+	OriginalSQL     string
+	Charset         string
+	Collation       string
+	NormalizedSQL   string
+	Digest          string
+	PrevSQL         string
+	PrevSQLDigest   string
+	PlanGenerator   func() (string, string)
+	PlanDigest      string
+	PlanDigestGen   func() string
+	User            string
+	TotalLatency    time.Duration
+	ParseLatency    time.Duration
+	CompileLatency  time.Duration
+	OptimizeLatency time.Duration
+	WaitTsLatency   time.Duration
+	StmtCtx         *stmtctx.StatementContext
+	CopTasks        *stmtctx.CopTasksDetails
+	ExecDetail      *execdetails.ExecDetails
+	MemMax          int64
+	DiskMax         int64
+	StartTime       time.Time
+	IsInternal      bool
+	Succeed         bool
+	PlanInCache     bool
+	PlanInBinding   bool
+	ExecRetryCount  uint
+	ExecRetryTime   time.Duration
 	execdetails.StmtExecDetails
 	Prepared bool
-	CPUTime  time.Duration
+	CPUTime  int64
 }
 
 // newStmtSummaryByDigestMap creates an empty stmtSummaryByDigestMap.
@@ -962,7 +964,7 @@ func (ssElement *stmtSummaryByDigestElement) toDatum(ssbd *stmtSummaryByDigest) 
 		ssElement.prevSQL,
 		ssbd.planDigest,
 		plan,
-		int64(ssElement.sumCPUTime),
+		ssElement.sumCPUTime,
 	)
 }
 

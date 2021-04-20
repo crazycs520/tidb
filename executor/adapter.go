@@ -1144,6 +1144,8 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		TotalLatency:    costTime,
 		ParseLatency:    sessVars.DurationParse,
 		CompileLatency:  sessVars.DurationCompile,
+		OptimizeLatency: sessVars.DurationOptimization,
+		WaitTsLatency:   sessVars.DurationWaitTS,
 		StmtCtx:         stmtCtx,
 		CopTasks:        copTaskInfo,
 		ExecDetail:      &execDetail,
@@ -1157,19 +1159,15 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		ExecRetryCount:  a.retryCount,
 		StmtExecDetails: stmtDetail,
 		Prepared:        a.isPreparedStmt,
-		CPUTime:         time.Duration(cpuTime),
+		CPUTime:         cpuTime,
 	}
 	if a.retryCount > 0 {
 		stmtExecInfo.ExecRetryTime = costTime - sessVars.DurationParse - sessVars.DurationCompile - time.Since(a.retryStartTime)
 	}
 	stmtsummary.StmtSummaryByDigestMap.AddStatement(stmtExecInfo)
-	stmtcost.StmtCostCollector.AddStatement(&stmtcost.StmtExecInfo{
-		SchemaName:    stmtExecInfo.SchemaName,
-		Digest:        stmtExecInfo.Digest,
-		NormalizedSQL: stmtExecInfo.NormalizedSQL,
-		OriginalSQL:   stmtExecInfo.OriginalSQL,
-		CPUTime:       cpuTime - consumed,
-	})
+
+	stmtExecInfo.CPUTime = cpuTime - consumed
+	stmtcost.StmtCostCollector.AddStatement(stmtExecInfo)
 }
 
 // GetTextToLog return the query text to log.

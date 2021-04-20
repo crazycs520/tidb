@@ -15,6 +15,7 @@ package stmtcost
 
 import (
 	"fmt"
+	"github.com/pingcap/tidb/util/stmtsummary"
 	"runtime/metrics"
 	"sync"
 	"time"
@@ -76,6 +77,19 @@ type stmtCostByDigest struct {
 type stmtCostStats struct {
 	execCount  int64
 	sumCPUTime int64 // nanosecond
+
+	sumQueryTime       time.Duration
+	sumParseTime       time.Duration
+	sumCompileTime     time.Duration
+	sumOptimizeTime    time.Duration
+	sumWaitTsTime      time.Duration
+	sumCopProcessTime  time.Duration
+	sumCopWaitTime     time.Duration
+	sumBackoffTime     time.Duration
+	sumPreWriteTime    time.Duration
+	sumGetCommitTsTime time.Duration
+	sumCommitTime      time.Duration
+	sumResolveLockTime time.Duration
 }
 
 var StmtCostCollector = newStmtCostCollector()
@@ -141,7 +155,7 @@ func (sc *stmtCostCollector) saveToHistory() {
 }
 
 // AddStatement adds a statement to StmtSummaryByDigestMap.
-func (sc *stmtCostCollector) AddStatement(sei *StmtExecInfo) {
+func (sc *stmtCostCollector) AddStatement(sei *stmtsummary.StmtExecInfo) {
 	cfg := config.GetGlobalConfig().StmtCost
 	if !cfg.Enable {
 		return
@@ -156,7 +170,7 @@ func (sc *stmtCostCollector) AddStatement(sei *StmtExecInfo) {
 	sc.current.AddStatement(key, sei)
 }
 
-func (scm *stmtCostByDigestMap) AddStatement(key *stmtCostByDigestKey, sei *StmtExecInfo) {
+func (scm *stmtCostByDigestMap) AddStatement(key *stmtCostByDigestKey, sei *stmtsummary.StmtExecInfo) {
 	value, ok := scm.costMap.Get(key)
 	var stmt *stmtCostByDigest
 	if !ok {
@@ -173,6 +187,23 @@ func (scm *stmtCostByDigestMap) AddStatement(key *stmtCostByDigestKey, sei *Stmt
 	}
 	stmt.execCount++
 	stmt.sumCPUTime += sei.CPUTime
+
+	stmt.sumQueryTime += sei.TotalLatency
+	stmt.sumParseTime += sei.ParseLatency
+	stmt.sumCompileTime += sei.CompileLatency
+	stmt.sumOptimizeTime += sei.OptimizeLatency
+	stmt.sumWaitTsTime += sei.WaitTsLatency
+	if sei.ExecDetail != nil {
+		stmt.sumCopProcessTime += sei.ExecDetail.TimeDetail.ProcessTime
+		stmt.sumCopWaitTime += sei.ExecDetail.TimeDetail.WaitTime
+		if sei.ExecDetail.CommitDetail != nil {
+			stmt.sumPreWriteTime += sei.ExecDetail.CommitDetail.PrewriteTime
+			stmt.sumGetCommitTsTime += sei.ExecDetail.CommitDetail.GetCommitTsTime
+			stmt.sumCommitTime += sei.ExecDetail.CommitDetail.CommitTime
+			stmt.sumResolveLockTime += time.Duration(sei.ExecDetail.CommitDetail.ResolveLockTime)
+		}
+	}
+	stmt.sumBackoffTime += time.Duration(sei.StmtExecDetails.BackoffDuration)
 }
 
 // Clear removes all statement summaries.
@@ -234,8 +265,20 @@ func (scbd *stmtCostByDigest) toCurrentDatum(beginTime, endTime int64) []types.D
 		types.NewTime(types.FromGoTime(time.Unix(endTime, 0)), mysql.TypeTimestamp, 0),
 		scbd.schemaName,
 		scbd.digest,
-		scbd.sumCPUTime,
 		scbd.execCount,
+		scbd.sumCPUTime,
+		int64(scbd.sumQueryTime),
+		int64(scbd.sumParseTime),
+		int64(scbd.sumCompileTime),
+		int64(scbd.sumOptimizeTime),
+		int64(scbd.sumWaitTsTime),
+		int64(scbd.sumCopProcessTime),
+		int64(scbd.sumCopWaitTime),
+		int64(scbd.sumBackoffTime),
+		int64(scbd.sumPreWriteTime),
+		int64(scbd.sumGetCommitTsTime),
+		int64(scbd.sumCommitTime),
+		int64(scbd.sumResolveLockTime),
 		scbd.normalizedSQL,
 		scbd.sampleSQL,
 	)
@@ -280,7 +323,7 @@ func (scm *stmtCostByDigestMap) addRunningStmtCost(sm util.SessionManager, saveT
 			}
 		}
 
-		scm.AddStatement(key, &StmtExecInfo{
+		scm.AddStatement(key, &stmtsummary.StmtExecInfo{
 			SchemaName:    pi.DB,
 			Digest:        pi.Digest,
 			NormalizedSQL: formatSQL(pi.NormalizedSQL),
@@ -288,15 +331,6 @@ func (scm *stmtCostByDigestMap) addRunningStmtCost(sm util.SessionManager, saveT
 			CPUTime:       cpuTime,
 		})
 	}
-}
-
-// StmtExecInfo records execution information of each statement.
-type StmtExecInfo struct {
-	SchemaName    string
-	Digest        string
-	NormalizedSQL string
-	OriginalSQL   string
-	CPUTime       int64
 }
 
 // Truncate SQL to maxSQLLength.
