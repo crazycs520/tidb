@@ -2,10 +2,8 @@ package traceresource
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/google/pprof/profile"
 	"github.com/pingcap/tidb/util/logutil"
-	"go.uber.org/zap"
 	"runtime/pprof"
 	"time"
 )
@@ -44,27 +42,27 @@ func (sp *StmtProfiler) startAnalyzeProfileWorker() {
 	var buf *bytes.Buffer
 	for {
 		buf = <-sp.taskCh
-		reader := bytes.NewReader(buf.Bytes())
-		p, err := profile.Parse(reader)
-		if err != nil {
-			logutil.BgLogger().Error("parse profile error", zap.Error(err))
-			continue
-		}
-		tagMap := sp.parseCPUProfileTags(p)
-		if len(tagMap) == 0 {
-			continue
-		}
-		logutil.BgLogger().Info("-------- [ BEGIN ] ----------")
-		for k, tags := range tagMap {
-			if k != "sql" {
-				continue
-			}
-			for t, v := range tags {
-				logutil.BgLogger().Info(fmt.Sprintf("    %s : %s", time.Duration(v), t))
-			}
-		}
-		logutil.BgLogger().Info("--")
-
+		//reader := bytes.NewReader(buf.Bytes())
+		//p, err := profile.Parse(reader)
+		//if err != nil {
+		//	logutil.BgLogger().Error("parse profile error", zap.Error(err))
+		//	continue
+		//}
+		//tagMap := sp.parseCPUProfileTags(p)
+		//if len(tagMap) == 0 {
+		//	continue
+		//}
+		//logutil.BgLogger().Info("-------- [ BEGIN ] ----------")
+		//for k, tags := range tagMap {
+		//	if k != "sql" {
+		//		continue
+		//	}
+		//	for t, v := range tags {
+		//		logutil.BgLogger().Info(fmt.Sprintf("    %s : %s", time.Duration(v), t))
+		//	}
+		//}
+		//logutil.BgLogger().Info("--")
+		//
 		sp.putBuffer(buf)
 	}
 }
