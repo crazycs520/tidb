@@ -60,10 +60,11 @@ func (sp *StmtProfiler) startAnalyzeProfileWorker() {
 				continue
 			}
 			for t, v := range tags {
-				fmt.Printf("%s : %s\n", time.Duration(v), t)
+				logutil.BgLogger().Info(fmt.Sprintf("    %s : %s", time.Duration(v), t))
 			}
 		}
-		fmt.Printf("\n\n")
+		logutil.BgLogger().Info("--")
+
 		sp.putBuffer(buf)
 	}
 }
