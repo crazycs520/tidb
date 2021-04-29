@@ -32,7 +32,7 @@ func (sp *StmtProfiler) startCPUProfileWorker() {
 		if err := pprof.StartCPUProfile(buf); err != nil {
 			return
 		}
-		sp.sleep(time.Second * 10)
+		sp.sleep(time.Second * 1)
 		pprof.StopCPUProfile()
 		sp.taskCh <- buf
 	}
