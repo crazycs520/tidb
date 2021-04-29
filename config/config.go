@@ -674,7 +674,7 @@ var defaultConf = Config{
 		Enable:          true,
 		MaxStmtCount:    200,
 		MaxSQLLength:    4096,
-		RefreshInterval: 60,
+		RefreshInterval: 1,
 		HistorySize:     24,
 	},
 	IsolationRead: IsolationRead{
