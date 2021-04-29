@@ -429,7 +429,7 @@ func (e *ShowExec) fetchShowTableStatus() error {
 		data_free, auto_increment, create_time, update_time, check_time,
 		table_collation, IFNULL(checksum,''), create_options, table_comment
 		FROM information_schema.tables
-		WHERE table_schema=%? ORDER BY table_name`, e.DBName.L)
+		WHERE lower(table_schema)=%? ORDER BY table_name`, e.DBName.L)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -672,7 +672,7 @@ func (e *ShowExec) fetchShowVariables() (err error) {
 		// 		otherwise, fetch the value from table `mysql.Global_Variables`.
 		for _, v := range variable.GetSysVars() {
 			if v.Scope != variable.ScopeSession {
-				if variable.FilterImplicitFeatureSwitch(v) {
+				if v.Hidden {
 					continue
 				}
 				value, err = variable.GetGlobalSystemVar(sessionVars, v.Name)
@@ -689,7 +689,7 @@ func (e *ShowExec) fetchShowVariables() (err error) {
 	// If it is a session only variable, use the default value defined in code,
 	//   otherwise, fetch the value from table `mysql.Global_Variables`.
 	for _, v := range variable.GetSysVars() {
-		if variable.FilterImplicitFeatureSwitch(v) {
+		if v.Hidden {
 			continue
 		}
 		value, err = variable.GetSessionSystemVar(sessionVars, v.Name)
@@ -730,7 +730,8 @@ func getDefaultCollate(charsetName string) string {
 			return c.DefaultCollation
 		}
 	}
-	return ""
+	// The charset is invalid, return server default.
+	return mysql.DefaultCollationName
 }
 
 // ConstructResultOfShowCreateTable constructs the result for show create table.
@@ -1372,7 +1373,6 @@ func (e *ShowExec) fetchShowGrants() error {
 }
 
 func (e *ShowExec) fetchShowPrivileges() error {
-	e.appendRow([]interface{}{"Alter", "Tables", "To alter the table"})
 	e.appendRow([]interface{}{"Alter", "Tables", "To alter the table"})
 	e.appendRow([]interface{}{"Alter routine", "Functions,Procedures", "To alter or drop stored functions/procedures"})
 	e.appendRow([]interface{}{"Create", "Databases,Tables,Indexes", "To create new databases and tables"})

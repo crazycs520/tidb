@@ -1064,8 +1064,8 @@ func (e *memtableRetriever) setDataFromEngines() {
 }
 
 func (e *memtableRetriever) setDataFromCharacterSets() {
-	var rows [][]types.Datum
 	charsets := charset.GetSupportedCharsets()
+	var rows = make([][]types.Datum, 0, len(charsets))
 	for _, charset := range charsets {
 		rows = append(rows,
 			types.MakeDatums(charset.Name, charset.DefaultCollation, charset.Desc, charset.Maxlen),
@@ -1075,8 +1075,8 @@ func (e *memtableRetriever) setDataFromCharacterSets() {
 }
 
 func (e *memtableRetriever) setDataFromCollations() {
-	var rows [][]types.Datum
 	collations := collate.GetSupportedCollations()
+	var rows = make([][]types.Datum, 0, len(collations))
 	for _, collation := range collations {
 		isDefault := ""
 		if collation.IsDefault {
@@ -1090,8 +1090,8 @@ func (e *memtableRetriever) setDataFromCollations() {
 }
 
 func (e *memtableRetriever) dataForCollationCharacterSetApplicability() {
-	var rows [][]types.Datum
 	collations := collate.GetSupportedCollations()
+	var rows = make([][]types.Datum, 0, len(collations))
 	for _, collation := range collations {
 		rows = append(rows,
 			types.MakeDatums(collation.Name, collation.CharsetName),
@@ -1193,12 +1193,12 @@ func (e *memtableRetriever) setDataFromUserPrivileges(ctx sessionctx.Context) {
 }
 
 func (e *memtableRetriever) setDataForMetricTables(ctx sessionctx.Context) {
-	var rows [][]types.Datum
 	tables := make([]string, 0, len(infoschema.MetricTableMap))
 	for name := range infoschema.MetricTableMap {
 		tables = append(tables, name)
 	}
 	sort.Strings(tables)
+	rows := make([][]types.Datum, 0, len(tables))
 	for _, name := range tables {
 		schema := infoschema.MetricTableMap[name]
 		record := types.MakeDatums(
@@ -1674,11 +1674,16 @@ func dataForAnalyzeStatusHelper(sctx sessionctx.Context) (rows [][]types.Datum) 
 	checker := privilege.GetPrivilegeManager(sctx)
 	for _, job := range statistics.GetAllAnalyzeJobs() {
 		job.Lock()
-		var startTime interface{}
+		var startTime, endTime interface{}
 		if job.StartTime.IsZero() {
 			startTime = nil
 		} else {
 			startTime = types.NewTime(types.FromGoTime(job.StartTime), mysql.TypeDatetime, 0)
+		}
+		if job.EndTime.IsZero() {
+			endTime = nil
+		} else {
+			endTime = types.NewTime(types.FromGoTime(job.EndTime), mysql.TypeDatetime, 0)
 		}
 		if checker == nil || checker.RequestVerification(sctx.GetSessionVars().ActiveRoles, job.DBName, job.TableName, "", mysql.AllPrivMask) {
 			rows = append(rows, types.MakeDatums(
@@ -1688,6 +1693,7 @@ func dataForAnalyzeStatusHelper(sctx sessionctx.Context) (rows [][]types.Datum) 
 				job.JobInfo,       // JOB_INFO
 				job.RowCount,      // ROW_COUNT
 				startTime,         // START_TIME
+				endTime,           // END_TIME
 				job.State,         // STATE
 			))
 		}
@@ -1893,7 +1899,7 @@ func (e *memtableRetriever) setDataForPlacementPolicy(ctx sessionctx.Context) er
 			continue
 		}
 		for _, rule := range bundle.Rules {
-			constraint, err := placement.RestoreLabelConstraintList(rule.LabelConstraints)
+			constraint, err := rule.LabelConstraints.Restore()
 			if err != nil {
 				return errors.Wrapf(err, "Restore rule %s in bundle %s failed", rule.ID, bundle.ID)
 			}

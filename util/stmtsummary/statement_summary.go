@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
+	"github.com/pingcap/tidb/store/tikv/util"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/pingcap/tidb/util/hack"
@@ -231,8 +232,9 @@ type StmtExecInfo struct {
 	ExecRetryCount  uint
 	ExecRetryTime   time.Duration
 	execdetails.StmtExecDetails
-	Prepared bool
-	CPUTime  int64
+	TiKVExecDetails util.ExecDetails
+	Prepared        bool
+	CPUTime         int64
 }
 
 // newStmtSummaryByDigestMap creates an empty stmtSummaryByDigestMap.
@@ -852,9 +854,9 @@ func (ssElement *stmtSummaryByDigestElement) add(sei *StmtExecInfo, intervalSeco
 		ssElement.sumCPUTime += sei.CPUTime
 	}
 
-	ssElement.sumKVTotal += time.Duration(atomic.LoadInt64(&sei.StmtExecDetails.WaitKVRespDuration))
-	ssElement.sumPDTotal += time.Duration(atomic.LoadInt64(&sei.StmtExecDetails.WaitPDRespDuration))
-	ssElement.sumBackoffTotal += time.Duration(atomic.LoadInt64(&sei.StmtExecDetails.BackoffDuration))
+	ssElement.sumKVTotal += time.Duration(atomic.LoadInt64(&sei.TiKVExecDetails.WaitKVRespDuration))
+	ssElement.sumPDTotal += time.Duration(atomic.LoadInt64(&sei.TiKVExecDetails.WaitPDRespDuration))
+	ssElement.sumBackoffTotal += time.Duration(atomic.LoadInt64(&sei.TiKVExecDetails.BackoffDuration))
 	ssElement.sumWriteSQLRespTotal += sei.StmtExecDetails.WriteSQLRespDuration
 }
 

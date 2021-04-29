@@ -203,7 +203,6 @@ func (scm *stmtCostByDigestMap) AddStatement(key *stmtCostByDigestKey, sei *stmt
 			stmt.sumResolveLockTime += time.Duration(sei.ExecDetail.CommitDetail.ResolveLockTime)
 		}
 	}
-	stmt.sumBackoffTime += time.Duration(sei.StmtExecDetails.BackoffDuration)
 }
 
 // Clear removes all statement summaries.

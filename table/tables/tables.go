@@ -544,11 +544,11 @@ func NewCommonAddRecordCtx(size int) *CommonAddRecordCtx {
 
 // TryGetCommonPkColumnIds get the IDs of primary key column if the table has common handle.
 func TryGetCommonPkColumnIds(tbl *model.TableInfo) []int64 {
-	var pkColIds []int64
 	if !tbl.IsCommonHandle {
 		return nil
 	}
 	pkIdx := FindPrimaryIndex(tbl)
+	pkColIds := make([]int64, 0, len(pkIdx.Columns))
 	for _, idxCol := range pkIdx.Columns {
 		pkColIds = append(pkColIds, tbl.Columns[idxCol.Offset].ID)
 	}
@@ -572,12 +572,12 @@ func PrimaryPrefixColumnIDs(tbl *model.TableInfo) (prefixCols []int64) {
 
 // TryGetCommonPkColumns get the primary key columns if the table has common handle.
 func TryGetCommonPkColumns(tbl table.Table) []*table.Column {
-	var pkCols []*table.Column
 	if !tbl.Meta().IsCommonHandle {
 		return nil
 	}
 	pkIdx := FindPrimaryIndex(tbl.Meta())
 	cols := tbl.Cols()
+	pkCols := make([]*table.Column, 0, len(pkIdx.Columns))
 	for _, idxCol := range pkIdx.Columns {
 		pkCols = append(pkCols, cols[idxCol.Offset])
 	}
@@ -805,7 +805,7 @@ func (t *TableCommon) AddRecord(sctx sessionctx.Context, r []types.Datum, opts .
 }
 
 // genIndexKeyStr generates index content string representation.
-func (t *TableCommon) genIndexKeyStr(colVals []types.Datum) (string, error) {
+func genIndexKeyStr(colVals []types.Datum) (string, error) {
 	// Pass pre-composed error to txn.
 	strVals := make([]string, 0, len(colVals))
 	for _, cv := range colVals {
@@ -840,7 +840,7 @@ func (t *TableCommon) addIndices(sctx sessionctx.Context, recordID kv.Handle, r 
 		}
 		var dupErr error
 		if !skipCheck && v.Meta().Unique {
-			entryKey, err := t.genIndexKeyStr(indexVals)
+			entryKey, err := genIndexKeyStr(indexVals)
 			if err != nil {
 				return nil, err
 			}
@@ -1160,7 +1160,7 @@ func (t *TableCommon) buildIndexForRow(ctx sessionctx.Context, h kv.Handle, vals
 	if _, err := idx.Create(ctx, txn, vals, h, rsData, opts...); err != nil {
 		if kv.ErrKeyExists.Equal(err) {
 			// Make error message consistent with MySQL.
-			entryKey, err1 := t.genIndexKeyStr(vals)
+			entryKey, err1 := genIndexKeyStr(vals)
 			if err1 != nil {
 				// if genIndexKeyStr failed, return the original error.
 				return err
@@ -1448,36 +1448,6 @@ func FindIndexByColName(t table.Table, name string) table.Index {
 	return nil
 }
 
-// CheckHandleExists check whether recordID key exists. if not exists, return nil,
-// otherwise return kv.ErrKeyExists error.
-func CheckHandleExists(ctx context.Context, sctx sessionctx.Context, t table.Table, recordID kv.Handle, data []types.Datum) error {
-	physicalTableID := t.Meta().ID
-	if pt, ok := t.(*partitionedTable); ok {
-		info := t.Meta().GetPartitionInfo()
-		pid, err := pt.locatePartition(sctx, info, data)
-		if err != nil {
-			return err
-		}
-		partition := pt.GetPartition(pid)
-		physicalTableID = partition.GetPhysicalID()
-	}
-	txn, err := sctx.Txn(true)
-	if err != nil {
-		return err
-	}
-	// Check key exists.
-	prefix := tablecodec.GenTableRecordPrefix(physicalTableID)
-	recordKey := tablecodec.EncodeRecordKey(prefix, recordID)
-	_, err = txn.Get(ctx, recordKey)
-	if err == nil {
-		handleStr := getDuplicateErrorHandleString(t, recordID, data)
-		return kv.ErrKeyExists.FastGenByArgs(handleStr, "PRIMARY")
-	} else if !kv.ErrNotExist.Equal(err) {
-		return err
-	}
-	return nil
-}
-
 func getDuplicateErrorHandleString(t table.Table, handle kv.Handle, row []types.Datum) string {
 	if handle.IsInt() {
 		return kv.GetDuplicateErrorHandleString(handle)
@@ -1700,57 +1670,52 @@ func TryGetHandleRestoredDataWrapper(t table.Table, row []types.Datum, rowMap ma
 	if !collate.NewCollationEnabled() || !t.Meta().IsCommonHandle || t.Meta().CommonHandleVersion == 0 {
 		return nil
 	}
-
-	useIDMap := false
-	if len(rowMap) > 0 {
-		useIDMap = true
-	}
-
-	var datum types.Datum
 	rsData := make([]types.Datum, 0, 4)
-	pkCols := TryGetCommonPkColumns(t)
-	for _, col := range pkCols {
-		if !types.NeedRestoredData(&col.FieldType) {
+	pkIdx := FindPrimaryIndex(t.Meta())
+	for _, pkIdxCol := range pkIdx.Columns {
+		pkCol := t.Meta().Columns[pkIdxCol.Offset]
+		if !types.NeedRestoredData(&pkCol.FieldType) {
 			continue
 		}
-		if collate.IsBinCollation(col.Collate) {
-			if useIDMap {
-				datum = rowMap[col.ID]
-			} else {
-				datum = row[col.Offset]
-			}
-			rsData = append(rsData, types.NewIntDatum(stringutil.GetTailSpaceCount(datum.GetString())))
+		var datum types.Datum
+		if len(rowMap) > 0 {
+			datum = rowMap[pkCol.ID]
 		} else {
-			if useIDMap {
-				rsData = append(rsData, rowMap[col.ID])
-			} else {
-				rsData = append(rsData, row[col.Offset])
-			}
+			datum = row[pkCol.Offset]
 		}
-	}
-
-	// Try to truncate index values.
-	// Says that primary key(a (8)),
-	// For index t(a), don't truncate the value.
-	// For index t(a(9)), truncate to a(9).
-	// For index t(a(7)), truncate to a(8).
-	pkIdx := FindPrimaryIndex(t.Meta())
-	for i, pkCol := range pkIdx.Columns {
+		// Try to truncate index values.
+		// Says that primary key(a (8)),
+		// For index t(a), don't truncate the value.
+		// For index t(a(9)), truncate to a(9).
+		// For index t(a(7)), truncate to a(8).
+		truncateTargetCol := pkIdxCol
 		for _, idxCol := range idx.Columns {
 			if idxCol.Offset == pkCol.Offset {
-				if idxCol.Length == types.UnspecifiedLength || pkCol.Length == types.UnspecifiedLength {
-					break
-				}
-				useIdx := idxCol
-				if pkCol.Length > idxCol.Length {
-					useIdx = pkCol
-				}
-				tablecodec.TruncateIndexValue(&rsData[i], useIdx, t.Meta().Columns[idxCol.Offset])
+				truncateTargetCol = maxIndexLen(pkIdxCol, idxCol)
+				break
 			}
 		}
+		tablecodec.TruncateIndexValue(&datum, truncateTargetCol, pkCol)
+		if collate.IsBinCollation(pkCol.Collate) {
+			rsData = append(rsData, types.NewIntDatum(stringutil.GetTailSpaceCount(datum.GetString())))
+		} else {
+			rsData = append(rsData, datum)
+		}
 	}
-
 	return rsData
+}
+
+func maxIndexLen(idxA, idxB *model.IndexColumn) *model.IndexColumn {
+	if idxA.Length == types.UnspecifiedLength {
+		return idxA
+	}
+	if idxB.Length == types.UnspecifiedLength {
+		return idxB
+	}
+	if idxA.Length > idxB.Length {
+		return idxA
+	}
+	return idxB
 }
 
 func getSequenceAllocator(allocs autoid.Allocators) (autoid.Allocator, error) {
