@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Workiva/go-datastructures/queue"
 	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -67,6 +68,7 @@ func (key *stmtSummaryByDigestKey) Hash() []byte {
 type stmtSummaryByDigestMap struct {
 	// It's rare to read concurrently, so RWMutex is not needed.
 	sync.Mutex
+	ringBuf    *queue.RingBuffer
 	summaryMap *kvcache.SimpleLRUCache
 	// beginTimeForCurInterval is the begin time for current summary.
 	beginTimeForCurInterval int64
@@ -76,13 +78,13 @@ type stmtSummaryByDigestMap struct {
 }
 
 // StmtSummaryByDigestMap is a global map containing all statement summaries.
-var StmtSummaryByDigestMap = newStmtSummaryByDigestMap()
+var StmtSummaryByDigestMap *stmtSummaryByDigestMap
 
 // stmtSummaryByDigest is the summary for each type of statements.
 type stmtSummaryByDigest struct {
+	sync.Mutex
 	// It's rare to read concurrently, so RWMutex is not needed.
 	// Mutex is only used to lock `history`.
-	sync.Mutex
 	initialized bool
 	// Each element in history is a summary in one interval.
 	history *list.List
@@ -200,6 +202,7 @@ type stmtSummaryByDigestElement struct {
 
 // StmtExecInfo records execution information of each statement.
 type StmtExecInfo struct {
+	now            int64
 	SchemaName     string
 	OriginalSQL    string
 	Charset        string
@@ -232,6 +235,11 @@ type StmtExecInfo struct {
 	Prepared        bool
 }
 
+func init() {
+	StmtSummaryByDigestMap = newStmtSummaryByDigestMap()
+	StmtSummaryByDigestMap.SetupConsumer()
+}
+
 // newStmtSummaryByDigestMap creates an empty stmtSummaryByDigestMap.
 func newStmtSummaryByDigestMap() *stmtSummaryByDigestMap {
 	sysVars := newSysVars()
@@ -239,16 +247,33 @@ func newStmtSummaryByDigestMap() *stmtSummaryByDigestMap {
 	return &stmtSummaryByDigestMap{
 		summaryMap: kvcache.NewSimpleLRUCache(maxStmtCount, 0, 0),
 		sysVars:    sysVars,
+		ringBuf:    queue.NewRingBuffer(1024 * 4),
 	}
 }
 
-// AddStatement adds a statement to StmtSummaryByDigestMap.
-func (ssMap *stmtSummaryByDigestMap) AddStatement(sei *StmtExecInfo) {
-	// All times are counted in seconds.
-	now := time.Now().Unix()
+func (ssMap *stmtSummaryByDigestMap) SetupConsumer() {
+	go func() {
+		for {
+			sei, _ := ssMap.ringBuf.Poll(0)
+			if sei == nil {
+				continue
+			}
+			ssMap.consumer(sei.(*StmtExecInfo))
+		}
+	}()
+}
 
-	intervalSeconds := ssMap.refreshInterval()
-	historySize := ssMap.historySize()
+func (ssMap *stmtSummaryByDigestMap) AddStatement(sei *StmtExecInfo) {
+	if !ssMap.Enabled() {
+		return
+	}
+	sei.now = time.Now().Unix()
+	ssMap.ringBuf.Put(sei)
+}
+
+// AddStatement adds a statement to StmtSummaryByDigestMap.
+func (ssMap *stmtSummaryByDigestMap) consumer(sei *StmtExecInfo) {
+	// All times are counted in seconds.
 
 	key := &stmtSummaryByDigestKey{
 		schemaName: sei.SchemaName,
@@ -259,8 +284,12 @@ func (ssMap *stmtSummaryByDigestMap) AddStatement(sei *StmtExecInfo) {
 	// Calculate hash value in advance, to reduce the time holding the lock.
 	key.Hash()
 
+	intervalSeconds := ssMap.refreshInterval()
+	historySize := ssMap.historySize()
+
 	// Enclose the block in a function to ensure the lock will always be released.
 	summary, beginTime := func() (*stmtSummaryByDigest, int64) {
+
 		ssMap.Lock()
 		defer ssMap.Unlock()
 
@@ -272,10 +301,10 @@ func (ssMap *stmtSummaryByDigestMap) AddStatement(sei *StmtExecInfo) {
 			return nil, 0
 		}
 
-		if ssMap.beginTimeForCurInterval+intervalSeconds <= now {
+		if ssMap.beginTimeForCurInterval+intervalSeconds <= sei.now {
 			// `beginTimeForCurInterval` is a multiple of intervalSeconds, so that when the interval is a multiple
 			// of 60 (or 600, 1800, 3600, etc), begin time shows 'XX:XX:00', not 'XX:XX:01'~'XX:XX:59'.
-			ssMap.beginTimeForCurInterval = now / intervalSeconds * intervalSeconds
+			ssMap.beginTimeForCurInterval = sei.now / intervalSeconds * intervalSeconds
 		}
 
 		beginTime := ssMap.beginTimeForCurInterval
