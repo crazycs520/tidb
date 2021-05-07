@@ -254,8 +254,9 @@ func newStmtSummaryByDigestMap() *stmtSummaryByDigestMap {
 func (ssMap *stmtSummaryByDigestMap) SetupConsumer() {
 	go func() {
 		for {
-			sei, _ := ssMap.ringBuf.Poll(0)
+			sei, _ := ssMap.ringBuf.Poll(time.Microsecond)
 			if sei == nil {
+				time.Sleep(time.Millisecond)
 				continue
 			}
 			ssMap.consumer(sei.(*StmtExecInfo))
