@@ -31,11 +31,12 @@ func (sp *StmtProfiler) Run() {
 func (sp *StmtProfiler) startCPUProfileWorker() {
 	for {
 		buf := sp.getBuffer()
-		if err := pprof.StartCPUProfile(buf); err != nil {
+		//if err := pprof.StartCPUProfile(buf); err != nil {
+		if err := pprof.StartCPUProfileTagOnly(buf); err != nil {
 			return
 		}
 		sp.sleep(time.Second * 1)
-		pprof.StopCPUProfile()
+		pprof.StopCPUProfileTagOnly()
 		sp.taskCh <- buf
 	}
 }
