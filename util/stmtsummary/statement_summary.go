@@ -23,7 +23,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Workiva/go-datastructures/queue"
 	"github.com/pingcap/parser/auth"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -68,7 +67,7 @@ func (key *stmtSummaryByDigestKey) Hash() []byte {
 type stmtSummaryByDigestMap struct {
 	// It's rare to read concurrently, so RWMutex is not needed.
 	sync.Mutex
-	ringBuf    *queue.RingBuffer
+	bufCh      chan *StmtExecInfo
 	summaryMap *kvcache.SimpleLRUCache
 	// beginTimeForCurInterval is the begin time for current summary.
 	beginTimeForCurInterval int64
@@ -247,19 +246,17 @@ func newStmtSummaryByDigestMap() *stmtSummaryByDigestMap {
 	return &stmtSummaryByDigestMap{
 		summaryMap: kvcache.NewSimpleLRUCache(maxStmtCount, 0, 0),
 		sysVars:    sysVars,
-		ringBuf:    queue.NewRingBuffer(1024 * 4),
+		bufCh:      make(chan *StmtExecInfo, 1024*8),
 	}
 }
 
 func (ssMap *stmtSummaryByDigestMap) SetupConsumer() {
 	go func() {
 		for {
-			sei, _ := ssMap.ringBuf.Poll(time.Microsecond)
-			if sei == nil {
-				time.Sleep(time.Millisecond)
-				continue
+			select {
+			case sei := <-ssMap.bufCh:
+				ssMap.consumer(sei)
 			}
-			ssMap.consumer(sei.(*StmtExecInfo))
 		}
 	}()
 }
@@ -269,7 +266,7 @@ func (ssMap *stmtSummaryByDigestMap) AddStatement(sei *StmtExecInfo) {
 		return
 	}
 	sei.now = time.Now().Unix()
-	ssMap.ringBuf.Put(sei)
+	ssMap.bufCh <- sei
 }
 
 // AddStatement adds a statement to StmtSummaryByDigestMap.
