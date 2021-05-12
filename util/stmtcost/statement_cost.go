@@ -15,7 +15,6 @@ package stmtcost
 
 import (
 	"fmt"
-	"github.com/pingcap/tidb/util/stmtsummary"
 	"runtime/metrics"
 	"sync"
 	"time"
@@ -26,6 +25,8 @@ import (
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/hack"
 	"github.com/pingcap/tidb/util/kvcache"
+	"github.com/pingcap/tidb/util/stmtsummary"
+	"github.com/twmb/murmur3"
 )
 
 // stmtCostByDigestKey defines key for stmtSummaryByDigestMap.summaryMap.
@@ -34,7 +35,8 @@ type stmtCostByDigestKey struct {
 	schemaName string
 	digest     string
 	// `hash` is the hash value of this object.
-	hash []byte
+	hash      []byte
+	hashSum64 uint64
 }
 
 // Hash implements SimpleLRUCache.Key.
@@ -45,13 +47,20 @@ func (key *stmtCostByDigestKey) Hash() []byte {
 		key.hash = make([]byte, 0, len(key.schemaName)+len(key.digest))
 		key.hash = append(key.hash, hack.Slice(key.digest)...)
 		key.hash = append(key.hash, hack.Slice(key.schemaName)...)
+		key.hashSum64 = murmur3.Sum64(key.hash)
 	}
 	return key.hash
 }
 
+func (key *stmtCostByDigestKey) HashSum64() uint64 {
+	if len(key.hash) == 0 {
+		key.Hash()
+	}
+	return key.hashSum64
+}
+
 type stmtCostCollector struct {
-	sync.Mutex
-	current    *stmtCostByDigestMap
+	currents   []*stmtCostByDigestMap
 	history    []*stmtCostByDigestMap
 	historyIdx int
 	sm         util.SessionManager
@@ -95,11 +104,18 @@ type stmtCostStats struct {
 var StmtCostCollector = newStmtCostCollector()
 
 func newStmtCostCollector() *stmtCostCollector {
-	sc := &stmtCostCollector{
-		current: newStmtCostByDigestMap(),
-	}
+	sc := &stmtCostCollector{}
+	sc.newCurrents()
 	go sc.historyLoop()
 	return sc
+}
+
+func (sc *stmtCostCollector) newCurrents() {
+	currents := make([]*stmtCostByDigestMap, 64)
+	for i := range currents {
+		currents[i] = newStmtCostByDigestMap()
+	}
+	sc.currents = currents
 }
 
 func newStmtCostByDigestMap() *stmtCostByDigestMap {
@@ -135,23 +151,24 @@ func (sc *stmtCostCollector) historyLoop() {
 }
 
 func (sc *stmtCostCollector) saveToHistory() {
-	historySize := config.GetGlobalConfig().StmtCost.HistorySize
-	sc.Lock()
-	sc.current.end = time.Now().Unix()
-	if len(sc.history) < historySize {
-		sc.history = append(sc.history, sc.current)
-	} else {
-		idx := sc.historyIdx % len(sc.history)
-		sc.history[idx] = sc.current
-	}
-	old := sc.current
-	sc.current = newStmtCostByDigestMap()
-	sc.historyIdx++
-	sc.Unlock()
-
-	old.Lock()
-	old.addRunningStmtCost(sc.sm, true)
-	old.Unlock()
+	sc.newCurrents()
+	//historySize := config.GetGlobalConfig().StmtCost.HistorySize
+	//sc.Lock()
+	//sc.current.end = time.Now().Unix()
+	//if len(sc.history) < historySize {
+	//	sc.history = append(sc.history, sc.current)
+	//} else {
+	//	idx := sc.historyIdx % len(sc.history)
+	//	sc.history[idx] = sc.current
+	//}
+	//old := sc.current
+	//sc.current = newStmtCostByDigestMap()
+	//sc.historyIdx++
+	//sc.Unlock()
+	//
+	//old.Lock()
+	//old.addRunningStmtCost(sc.sm, true)
+	//old.Unlock()
 }
 
 // AddStatement adds a statement to StmtSummaryByDigestMap.
@@ -165,12 +182,13 @@ func (sc *stmtCostCollector) AddStatement(sei *stmtsummary.StmtExecInfo) {
 		digest:     sei.Digest,
 	}
 	key.Hash()
-	sc.Lock()
-	defer sc.Unlock()
-	sc.current.AddStatement(key, sei)
+	idx := key.HashSum64() % uint64(len(sc.currents))
+	sc.currents[idx].AddStatement(key, sei)
 }
 
 func (scm *stmtCostByDigestMap) AddStatement(key *stmtCostByDigestKey, sei *stmtsummary.StmtExecInfo) {
+	scm.Lock()
+	defer scm.Unlock()
 	value, ok := scm.costMap.Get(key)
 	var stmt *stmtCostByDigest
 	if !ok {
@@ -207,10 +225,7 @@ func (scm *stmtCostByDigestMap) AddStatement(key *stmtCostByDigestKey, sei *stmt
 
 // Clear removes all statement summaries.
 func (sc *stmtCostCollector) Clear() {
-	sc.Lock()
-	defer sc.Unlock()
-
-	sc.current.costMap.DeleteAll()
+	sc.newCurrents()
 	sc.history = nil
 	sc.historyIdx = 0
 }
@@ -218,32 +233,31 @@ func (sc *stmtCostCollector) Clear() {
 // ToCurrentDatum converts current statement summaries to datum.
 func (sc *stmtCostCollector) ToCurrentDatum() [][]types.Datum {
 	cfg := config.GetGlobalConfig().StmtCost
-	var current *stmtCostByDigestMap
-	sc.Lock()
-	current = sc.current.Copy()
-	sc.Unlock()
-
-	current.Lock()
-	defer current.Unlock()
-	current.addRunningStmtCost(sc.sm, false)
-
-	values := current.costMap.Values()
-	beginTime := current.begin
-	end := beginTime + int64(cfg.RefreshInterval)
-	rows := make([][]types.Datum, 0, len(values))
-	for _, value := range values {
-		record := value.(*stmtCostByDigest).toCurrentDatum(beginTime, end)
-		if record != nil {
-			rows = append(rows, record)
+	running := newStmtCostByDigestMap()
+	running.addRunningStmtCost(sc.sm, false)
+	currents := sc.currents
+	currents = append(currents, running)
+	// todo: fix me: duplicate item between sc.currents and running, should merge them first.
+	rows := make([][]types.Datum, 0, len(currents)*2)
+	for _, cur := range currents {
+		cur.Lock()
+		values := cur.costMap.Values()
+		beginTime := cur.begin
+		end := beginTime + int64(cfg.RefreshInterval)
+		for _, value := range values {
+			record := value.(*stmtCostByDigest).toCurrentDatum(beginTime, end)
+			if record != nil {
+				rows = append(rows, record)
+			}
 		}
+		cur.Unlock()
 	}
+
 	return rows
 }
 
 // ToHistoryDatum converts history statements summaries to datum.
 func (sc *stmtCostCollector) ToHistoryDatum() [][]types.Datum {
-	sc.Lock()
-	sc.Unlock()
 	rows := make([][]types.Datum, 0, len(sc.history)*10)
 	for _, scbd := range sc.history {
 		values := scbd.costMap.Values()
