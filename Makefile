@@ -17,6 +17,8 @@ include Makefile.common
 
 default: server buildsucc
 
+release: server_gostats buildsucc
+
 server-admin-check: server_check buildsucc
 
 buildsucc:
@@ -168,6 +170,13 @@ ifeq ($(TARGET), "")
 	$(GOBUILD) $(RACE_FLAG) -ldflags '$(CHECK_LDFLAGS)' -o bin/tidb-server tidb-server/main.go
 else
 	$(GOBUILD) $(RACE_FLAG) -ldflags '$(CHECK_LDFLAGS)' -o '$(TARGET)' tidb-server/main.go
+endif
+
+server_gostats:
+ifeq ($(TARGET), "")
+	CGO_ENABLED=1 $(GOBUILD),gostats $(RACE_FLAG) -ldflags '$(LDFLAGS) $(CHECK_FLAG)' -o bin/tidb-server tidb-server/main.go
+else
+	CGO_ENABLED=1 $(GOBUILD),gostats $(RACE_FLAG) -ldflags '$(LDFLAGS) $(CHECK_FLAG)' -o '$(TARGET)' tidb-server/main.go
 endif
 
 linux:

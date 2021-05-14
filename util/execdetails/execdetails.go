@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/store/tikv/util"
+	"github.com/pingcap/tidb/util/gostats"
 	"github.com/pingcap/tipb/go-tipb"
 	"go.uber.org/zap"
 )
@@ -953,12 +953,12 @@ func getUnit(d time.Duration) time.Duration {
 }
 
 type StmtExecStats struct {
-	TaskGroup runtime.InternalTaskGroup
+	TaskGroup gostats.GoroutineTaskGroup
 
 	ConsumedCPUTime int64
 }
 
 func (s *StmtExecStats) Begin() {
-	s.TaskGroup = runtime.SetInternalTaskGroup()
+	s.TaskGroup = gostats.SetTaskGroup()
 	s.ConsumedCPUTime = 0
 }

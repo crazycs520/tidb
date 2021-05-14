@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"github.com/pingcap/tidb/util/stmtcost"
 	"math"
-	gometrics "runtime/metrics"
 	"runtime/trace"
 	"strings"
 	"sync/atomic"
@@ -1113,11 +1112,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	cpuTime := int64(0)
 	consumed := int64(0)
 	if stmtExec := a.Ctx.GetStmtExecStats(); stmtExec != nil && stmtExec.TaskGroup != nil {
-		var taskGroupMetrics = []gometrics.Sample{
-			{Name: "/taskgroup/sched/cputime:nanoseconds"},
-		}
-		gometrics.ReadTaskGroup(stmtExec.TaskGroup, taskGroupMetrics)
-		cpuTime = int64(taskGroupMetrics[0].Value.Uint64())
+		cpuTime = stmtExec.TaskGroup.GetCPUTime()
 		consumed = stmtExec.ConsumedCPUTime
 	}
 

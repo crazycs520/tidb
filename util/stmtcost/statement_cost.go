@@ -15,7 +15,6 @@ package stmtcost
 
 import (
 	"fmt"
-	"runtime/metrics"
 	"sync"
 	"time"
 
@@ -326,11 +325,7 @@ func (scm *stmtCostByDigestMap) addRunningStmtCost(sm util.SessionManager, saveT
 
 		cpuTime := int64(0)
 		if pi.ExecStats != nil && pi.ExecStats.TaskGroup != nil {
-			var taskGroupMetrics = []metrics.Sample{
-				{Name: "/taskgroup/sched/cputime:nanoseconds"},
-			}
-			metrics.ReadTaskGroup(pi.ExecStats.TaskGroup, taskGroupMetrics)
-			cpuTime = int64(taskGroupMetrics[0].Value.Uint64()) - pi.ExecStats.ConsumedCPUTime
+			cpuTime = pi.ExecStats.TaskGroup.GetCPUTime()
 			if saveToHistory {
 				pi.ExecStats.ConsumedCPUTime += cpuTime
 			}
