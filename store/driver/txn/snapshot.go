@@ -87,6 +87,10 @@ func (s *tikvSnapshot) SetOption(opt int, val interface{}) {
 		s.KVSnapshot.SetIsStatenessReadOnly(val.(bool))
 	case kv.MatchStoreLabels:
 		s.KVSnapshot.SetMatchStoreLabels(val.([]*metapb.StoreLabel))
+	case kv.SQLDigest:
+		s.KVSnapshot.SetSQLDigest(val.(string))
+	case kv.PlanDigest:
+		s.KVSnapshot.SetPlanDigest(val.(string))
 	}
 }
 

@@ -147,6 +147,10 @@ func (e *PointGetExecutor) Open(context.Context) error {
 		e.snapshot.SetOption(kv.CollectRuntimeStats, snapshotStats)
 		e.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.RegisterStats(e.id, e.stats)
 	}
+	_, sqlDigest := e.ctx.GetSessionVars().StmtCtx.SQLDigest()
+	_, planDigest := e.ctx.GetSessionVars().StmtCtx.GetPlanDigest()
+	e.snapshot.SetOption(kv.SQLDigest, sqlDigest)
+	e.snapshot.SetOption(kv.PlanDigest, planDigest)
 	if e.ctx.GetSessionVars().GetReplicaRead().IsFollowerRead() {
 		e.snapshot.SetOption(kv.ReplicaRead, tikvstore.ReplicaReadFollower)
 	}

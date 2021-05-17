@@ -333,6 +333,8 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		return nil, err
 	}
 
+	getPlanDigest(a.Ctx, a.Plan)
+
 	if err = e.Open(ctx); err != nil {
 		terror.Call(e.Close)
 		return nil, err

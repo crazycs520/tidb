@@ -16,6 +16,7 @@ package tikv
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"sync"
@@ -106,6 +107,8 @@ type KVSnapshot struct {
 		isStaleness bool
 		// MatchStoreLabels indicates the labels the store should be matched
 		matchStoreLabels []*metapb.StoreLabel
+		sqlDigest        []byte
+		planDigest       []byte
 	}
 	sampleStep uint32
 }
@@ -465,6 +468,8 @@ func (s *KVSnapshot) get(ctx context.Context, bo *Backoffer, k []byte) ([]byte, 
 			Priority:     s.priority.ToPB(),
 			NotFillCache: s.notFillCache,
 			TaskId:       s.mu.taskID,
+			SqlDigest:    s.mu.sqlDigest,
+			PlanDigest:   s.mu.planDigest,
 		})
 	isStaleness = s.mu.isStaleness
 	matchStoreLabels = s.mu.matchStoreLabels
@@ -605,6 +610,24 @@ func (s *KVSnapshot) SetTaskID(id uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.taskID = id
+}
+
+func (s *KVSnapshot) SetSQLDigest(digest string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	hash, err := hex.DecodeString(digest)
+	if err == nil {
+		s.mu.sqlDigest = hash
+	}
+}
+
+func (s *KVSnapshot) SetPlanDigest(digest string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	hash, err := hex.DecodeString(digest)
+	if err == nil {
+		s.mu.planDigest = hash
+	}
 }
 
 // SetRuntimeStats sets the stats to collect runtime statistics.
