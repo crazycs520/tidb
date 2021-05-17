@@ -457,8 +457,8 @@ func (s *KVSnapshot) get(ctx context.Context, bo *Backoffer, k []byte) ([]byte, 
 			s.mergeRegionRequestStats(cli.Stats)
 		}()
 	}
-	sqlDigest := make([]byte, 32)
-	planDigest := make([]byte, 32)
+	sqlDigest := make([]byte, 8)
+	planDigest := make([]byte, 8)
 	for i := range sqlDigest {
 		sqlDigest[i] = 'a' + byte(i)
 		planDigest[i] = 'A' + byte(i)
