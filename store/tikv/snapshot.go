@@ -457,6 +457,12 @@ func (s *KVSnapshot) get(ctx context.Context, bo *Backoffer, k []byte) ([]byte, 
 			s.mergeRegionRequestStats(cli.Stats)
 		}()
 	}
+	sqlDigest := make([]byte, 32)
+	planDigest := make([]byte, 32)
+	for i := range sqlDigest {
+		sqlDigest[i] = 'a' + byte(i)
+		planDigest[i] = 'A' + byte(i)
+	}
 	req := tikvrpc.NewReplicaReadRequest(tikvrpc.CmdGet,
 		&pb.GetRequest{
 			Key:     k,
@@ -465,6 +471,8 @@ func (s *KVSnapshot) get(ctx context.Context, bo *Backoffer, k []byte) ([]byte, 
 			Priority:     s.priority.ToPB(),
 			NotFillCache: s.notFillCache,
 			TaskId:       s.mu.taskID,
+			SqlDigest:    sqlDigest,
+			PlanDigest:   planDigest,
 		})
 	isStaleness = s.mu.isStaleness
 	matchStoreLabels = s.mu.matchStoreLabels
