@@ -111,11 +111,8 @@ github.com/corona10/goimagehash v1.0.2/go.mod h1:/l9umBhvcHQXVtQO1V6Gp1yD20STawk
 github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwcJI5acqYI6dE=
 github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d/go.mod h1:maD7wRr/U5Z6m/iR4s+kqSMx2CaBsrgA7czyZG/E6dU=
 github.com/cpuguy83/go-md2man/v2 v2.0.0/go.mod h1:maD7wRr/U5Z6m/iR4s+kqSMx2CaBsrgA7czyZG/E6dU=
-github.com/crazycs520/kvproto v0.0.0-20191018083421-f37afb7e2ae7 h1:1TcGc6AB6VU3JAvs/ZcPrX4mQV9IDF78aBmrC34LlcU=
 github.com/crazycs520/kvproto v0.0.0-20210514051636-51c896452dcb h1:Dnyvzp66glE8ha1QYPojJj57KAuNGiGarvNsaJzntDU=
 github.com/crazycs520/kvproto v0.0.0-20210514051636-51c896452dcb/go.mod h1:IOdRDPLyda8GX2hE/jO7gqaCV/PNFh8BZQCQZXfIOqI=
-github.com/crazycs520/kvproto v0.0.0-20210518013844-abd5f9086d2a h1:qlVhwAoqlhPX0I4gdVfh/67tdPmPSsB3Mv/5PciKS9g=
-github.com/crazycs520/kvproto v0.0.0-20210518013844-abd5f9086d2a/go.mod h1:IOdRDPLyda8GX2hE/jO7gqaCV/PNFh8BZQCQZXfIOqI=
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/cznic/golex v0.0.0-20181122101858-9c343928389c/go.mod h1:+bmmJDNmKlhWNG+gwWCkaBoTy39Fs+bzRxVBzoTQbIc=
