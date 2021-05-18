@@ -16,7 +16,6 @@ package tikv
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"fmt"
 	"math"
 	"sync"
@@ -615,19 +614,28 @@ func (s *KVSnapshot) SetTaskID(id uint64) {
 func (s *KVSnapshot) SetSQLDigest(digest string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	hash, err := hex.DecodeString(digest)
-	if err == nil {
-		s.mu.sqlDigest = hash
+	//hash, err := hex.DecodeString(digest)
+	//if err == nil {
+	//}
+	hash := make([]byte, 32)
+	for i := range hash {
+		hash[i] = byte(i) + 'a'
 	}
+	s.mu.sqlDigest = hash
 }
 
 func (s *KVSnapshot) SetPlanDigest(digest string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	hash, err := hex.DecodeString(digest)
-	if err == nil {
-		s.mu.planDigest = hash
+	//hash, err := hex.DecodeString(digest)
+	//if err == nil {
+	//	s.mu.planDigest = hash
+	//}
+	hash := make([]byte, 32)
+	for i := range hash {
+		hash[i] = byte(i) + 'a'
 	}
+	s.mu.planDigest = hash
 }
 
 // SetRuntimeStats sets the stats to collect runtime statistics.
