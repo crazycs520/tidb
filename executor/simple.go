@@ -945,21 +945,21 @@ func (e *SimpleExec) executeAlterUser(s *ast.AlterUserStmt) error {
 			return errors.Trace(ErrPasswordFormat)
 		}
 		exec := e.ctx.(sqlexec.RestrictedSQLExecutor)
-		stmt, err := exec.ParseWithParams(context.TODO(), `UPDATE %n.%n SET authentication_string=%? WHERE Host=%? and User=%?;`, mysql.SystemDB, mysql.UserTable, pwd, spec.User.Hostname, spec.User.Username)
+		goCtx,stmt, err := exec.ParseWithParams(context.TODO(), `UPDATE %n.%n SET authentication_string=%? WHERE Host=%? and User=%?;`, mysql.SystemDB, mysql.UserTable, pwd, spec.User.Hostname, spec.User.Username)
 		if err != nil {
 			return err
 		}
-		_, _, err = exec.ExecRestrictedStmt(context.TODO(), stmt)
+		_, _, err = exec.ExecRestrictedStmt(goCtx, stmt)
 		if err != nil {
 			failedUsers = append(failedUsers, spec.User.String())
 		}
 
 		if len(privData) > 0 {
-			stmt, err = exec.ParseWithParams(context.TODO(), "INSERT INTO %n.%n (Host, User, Priv) VALUES (%?,%?,%?) ON DUPLICATE KEY UPDATE Priv = values(Priv)", mysql.SystemDB, mysql.GlobalPrivTable, spec.User.Hostname, spec.User.Username, string(hack.String(privData)))
+			goCtx,stmt, err = exec.ParseWithParams(context.TODO(), "INSERT INTO %n.%n (Host, User, Priv) VALUES (%?,%?,%?) ON DUPLICATE KEY UPDATE Priv = values(Priv)", mysql.SystemDB, mysql.GlobalPrivTable, spec.User.Hostname, spec.User.Username, string(hack.String(privData)))
 			if err != nil {
 				return err
 			}
-			_, _, err = exec.ExecRestrictedStmt(context.TODO(), stmt)
+			_, _, err = exec.ExecRestrictedStmt(goCtx, stmt)
 			if err != nil {
 				failedUsers = append(failedUsers, spec.User.String())
 			}
@@ -1192,11 +1192,11 @@ func (e *SimpleExec) executeDropUser(s *ast.DropUserStmt) error {
 
 func userExists(ctx sessionctx.Context, name string, host string) (bool, error) {
 	exec := ctx.(sqlexec.RestrictedSQLExecutor)
-	stmt, err := exec.ParseWithParams(context.TODO(), `SELECT * FROM %n.%n WHERE User=%? AND Host=%?;`, mysql.SystemDB, mysql.UserTable, name, host)
+	goCtx,stmt, err := exec.ParseWithParams(context.TODO(), `SELECT * FROM %n.%n WHERE User=%? AND Host=%?;`, mysql.SystemDB, mysql.UserTable, name, host)
 	if err != nil {
 		return false, err
 	}
-	rows, _, err := exec.ExecRestrictedStmt(context.TODO(), stmt)
+	rows, _, err := exec.ExecRestrictedStmt(goCtx, stmt)
 	if err != nil {
 		return false, err
 	}
@@ -1230,11 +1230,11 @@ func (e *SimpleExec) executeSetPwd(s *ast.SetPwdStmt) error {
 
 	// update mysql.user
 	exec := e.ctx.(sqlexec.RestrictedSQLExecutor)
-	stmt, err := exec.ParseWithParams(context.TODO(), `UPDATE %n.%n SET authentication_string=%? WHERE User=%? AND Host=%?;`, mysql.SystemDB, mysql.UserTable, auth.EncodePassword(s.Password), u, h)
+	goCtx,stmt, err := exec.ParseWithParams(context.TODO(), `UPDATE %n.%n SET authentication_string=%? WHERE User=%? AND Host=%?;`, mysql.SystemDB, mysql.UserTable, auth.EncodePassword(s.Password), u, h)
 	if err != nil {
 		return err
 	}
-	_, _, err = exec.ExecRestrictedStmt(context.TODO(), stmt)
+	_, _, err = exec.ExecRestrictedStmt(goCtx, stmt)
 	domain.GetDomain(e.ctx).NotifyUpdatePrivilege(e.ctx)
 	return err
 }

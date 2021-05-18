@@ -290,8 +290,8 @@ type RecordData struct {
 	Values []types.Datum
 }
 
-func getCount(exec sqlexec.RestrictedSQLExecutor, stmt ast.StmtNode, snapshot uint64) (int64, error) {
-	rows, _, err := exec.ExecRestrictedStmt(context.Background(), stmt, sqlexec.ExecOptionWithSnapshot(snapshot))
+func getCount(ctx context.Context,exec sqlexec.RestrictedSQLExecutor, stmt ast.StmtNode, snapshot uint64) (int64, error) {
+	rows, _, err := exec.ExecRestrictedStmt(ctx, stmt, sqlexec.ExecOptionWithSnapshot(snapshot))
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -318,7 +318,7 @@ func CheckIndicesCount(ctx sessionctx.Context, dbName, tableName string, indices
 	ctx.GetSessionVars().OptimizerUseInvisibleIndexes = true
 	// Add `` for some names like `table name`.
 	exec := ctx.(sqlexec.RestrictedSQLExecutor)
-	stmt, err := exec.ParseWithParams(context.Background(), "SELECT COUNT(*) FROM %n.%n USE INDEX()", dbName, tableName)
+	goCtx,stmt, err := exec.ParseWithParams(context.Background(), "SELECT COUNT(*) FROM %n.%n USE INDEX()", dbName, tableName)
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
@@ -335,16 +335,16 @@ func CheckIndicesCount(ctx sessionctx.Context, dbName, tableName string, indices
 		snapshot = ctx.GetSessionVars().SnapshotTS
 	}
 
-	tblCnt, err := getCount(exec, stmt, snapshot)
+	tblCnt, err := getCount(goCtx,exec, stmt, snapshot)
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
 	for i, idx := range indices {
-		stmt, err := exec.ParseWithParams(context.Background(), "SELECT COUNT(*) FROM %n.%n USE INDEX(%n)", dbName, tableName, idx)
+		goCtx,stmt, err := exec.ParseWithParams(context.Background(), "SELECT COUNT(*) FROM %n.%n USE INDEX(%n)", dbName, tableName, idx)
 		if err != nil {
 			return 0, i, errors.Trace(err)
 		}
-		idxCnt, err := getCount(exec, stmt, snapshot)
+		idxCnt, err := getCount(goCtx,exec, stmt, snapshot)
 		if err != nil {
 			return 0, i, errors.Trace(err)
 		}

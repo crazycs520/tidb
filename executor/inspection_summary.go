@@ -459,7 +459,7 @@ func (e *inspectionSummaryRetriever) retrieve(ctx context.Context, sctx sessionc
 					util.MetricSchemaName.L, name, cond)
 			}
 			exec := sctx.(sqlexec.RestrictedSQLExecutor)
-			stmt, err := exec.ParseWithParams(ctx, sql)
+			ctx,stmt, err := exec.ParseWithParams(ctx, sql)
 			if err != nil {
 				return nil, errors.Errorf("execute '%s' failed: %v", sql, err)
 			}

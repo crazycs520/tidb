@@ -319,11 +319,11 @@ func (e *DDLExec) dropTableObject(objects []*ast.TableName, obt objectType, ifEx
 				zap.String("table", fullti.Name.O),
 			)
 			exec := e.ctx.(sqlexec.RestrictedSQLExecutor)
-			stmt, err := exec.ParseWithParams(context.TODO(), "admin check table %n.%n", fullti.Schema.O, fullti.Name.O)
+			goCtx,stmt, err := exec.ParseWithParams(context.TODO(), "admin check table %n.%n", fullti.Schema.O, fullti.Name.O)
 			if err != nil {
 				return err
 			}
-			_, _, err = exec.ExecRestrictedStmt(context.TODO(), stmt)
+			_, _, err = exec.ExecRestrictedStmt(goCtx, stmt)
 			if err != nil {
 				return err
 			}

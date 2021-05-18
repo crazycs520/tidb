@@ -14,6 +14,7 @@
 package ddl
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pingcap/errors"
@@ -285,7 +286,7 @@ func rollingbackAddIndex(w *worker, d *ddlCtx, t *meta.Meta, job *model.Job, isP
 		// add index workers are started. need to ask them to exit.
 		logutil.Logger(w.logCtx).Info("[ddl] run the cancelling DDL job", zap.String("job", job.String()))
 		w.reorgCtx.notifyReorgCancel()
-		ver, err = w.onCreateIndex(d, t, job, isPK)
+		ver, err = w.onCreateIndex(context.Background(),d, t, job, isPK)
 	} else {
 		// add index workers are not started, remove the indexInfo in tableInfo.
 		ver, err = convertNotStartAddIdxJob2RollbackJob(t, job, errCancelledDDLJob)

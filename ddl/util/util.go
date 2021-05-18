@@ -175,11 +175,11 @@ func LoadGlobalVars(ctx sessionctx.Context, varNames []string) error {
 			paramNames = append(paramNames, name)
 		}
 		buf.WriteString(")")
-		stmt, err := sctx.ParseWithParams(context.Background(), buf.String(), paramNames...)
+		goCtx,stmt, err := sctx.ParseWithParams(context.Background(), buf.String(), paramNames...)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		rows, _, err := sctx.ExecRestrictedStmt(context.Background(), stmt)
+		rows, _, err := sctx.ExecRestrictedStmt(goCtx, stmt)
 		if err != nil {
 			return errors.Trace(err)
 		}

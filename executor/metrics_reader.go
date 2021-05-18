@@ -229,7 +229,7 @@ func (e *MetricsSummaryRetriever) retrieve(ctx context.Context, sctx sessionctx.
 		}
 
 		exec := sctx.(sqlexec.RestrictedSQLExecutor)
-		stmt, err := exec.ParseWithParams(ctx, sql)
+		ctx,stmt, err := exec.ParseWithParams(ctx, sql)
 		if err != nil {
 			return nil, errors.Errorf("execute '%s' failed: %v", sql, err)
 		}
@@ -311,7 +311,7 @@ func (e *MetricsSummaryByLabelRetriever) retrieve(ctx context.Context, sctx sess
 				util.MetricSchemaName.L, name, cond)
 		}
 		exec := sctx.(sqlexec.RestrictedSQLExecutor)
-		stmt, err := exec.ParseWithParams(ctx, sql)
+		ctx,stmt, err := exec.ParseWithParams(ctx, sql)
 		if err != nil {
 			return nil, errors.Errorf("execute '%s' failed: %v", sql, err)
 		}

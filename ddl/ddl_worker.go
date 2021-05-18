@@ -16,6 +16,8 @@ package ddl
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/parser"
+	"runtime/pprof"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -460,13 +462,16 @@ func (w *worker) handleDDLJobQueue(d *ddlCtx) error {
 			return nil
 		}
 
+		ctx := pprof.WithLabels(context.Background(), pprof.Labels("ddl", "ddl-worker"))
+		pprof.SetGoroutineLabels(ctx)
+
 		var (
 			job       *model.Job
 			schemaVer int64
 			runJobErr error
 		)
 		waitTime := 2 * d.lease
-		err := kv.RunInNewTxn(context.Background(), d.store, false, func(ctx context.Context, txn kv.Transaction) error {
+		err := kv.RunInNewTxn(ctx, d.store, false, func(ctx context.Context, txn kv.Transaction) error {
 			// We are not owner, return and retry checking later.
 			if !d.isOwner() {
 				return nil
@@ -479,6 +484,16 @@ func (w *worker) handleDDLJobQueue(d *ddlCtx) error {
 			if job == nil || err != nil {
 				return errors.Trace(err)
 			}
+
+			if variable.EnablePProfSQLCPU.Load() {
+				normalizedSQL := parser.Normalize(job.Query)
+				//fmt.Printf("ddl labels %v , %v ------- \n", job.Query, normalizedSQL)
+				if len(normalizedSQL) > 0 {
+					ctx = pprof.WithLabels(ctx, pprof.Labels("sql-1", normalizedSQL))
+					pprof.SetGoroutineLabels(ctx)
+				}
+			}
+
 			if isDone, err1 := isDependencyJobDone(t, job); err1 != nil || !isDone {
 				return errors.Trace(err1)
 			}
@@ -494,6 +509,7 @@ func (w *worker) handleDDLJobQueue(d *ddlCtx) error {
 					job.State = model.JobStateSynced
 				}
 				err = w.finishDDLJob(t, job)
+				//pprof.SetGoroutineLabels(ctx)
 				return errors.Trace(err)
 			}
 
@@ -503,10 +519,11 @@ func (w *worker) handleDDLJobQueue(d *ddlCtx) error {
 
 			// If running job meets error, we will save this error in job Error
 			// and retry later if the job is not cancelled.
-			schemaVer, runJobErr = w.runDDLJob(d, t, job)
+			schemaVer, runJobErr = w.runDDLJob(ctx, d, t, job)
 			if job.IsCancelled() {
 				txn.Reset()
 				err = w.finishDDLJob(t, job)
+				//pprof.SetGoroutineLabels(ctx)
 				return errors.Trace(err)
 			}
 			if runJobErr != nil && !job.IsRollingback() && !job.IsRollbackDone() {
@@ -670,7 +687,7 @@ func (w *worker) countForError(err error, job *model.Job) error {
 }
 
 // runDDLJob runs a DDL job. It returns the current schema version in this transaction and the error.
-func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error) {
+func (w *worker) runDDLJob(ctx context.Context, d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, err error) {
 	defer tidbutil.Recover(metrics.LabelDDLWorker, fmt.Sprintf("%s runDDLJob", w),
 		func() {
 			w.countForPanic(job)
@@ -735,9 +752,9 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 	case model.ActionSetDefaultValue:
 		ver, err = onSetDefaultValue(t, job)
 	case model.ActionAddIndex:
-		ver, err = w.onCreateIndex(d, t, job, false)
+		ver, err = w.onCreateIndex(ctx, d, t, job, false)
 	case model.ActionAddPrimaryKey:
-		ver, err = w.onCreateIndex(d, t, job, true)
+		ver, err = w.onCreateIndex(ctx, d, t, job, true)
 	case model.ActionDropIndex, model.ActionDropPrimaryKey:
 		ver, err = onDropIndex(t, job)
 	case model.ActionRenameIndex:

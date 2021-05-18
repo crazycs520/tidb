@@ -1041,12 +1041,13 @@ type AnalyzeFastExec struct {
 func (e *AnalyzeFastExec) calculateEstimateSampleStep() (err error) {
 	exec := e.ctx.(sqlexec.RestrictedSQLExecutor)
 	var stmt ast.StmtNode
-	stmt, err = exec.ParseWithParams(context.TODO(), "select flag from mysql.stats_histograms where table_id = %?", e.tableID.GetStatisticsID())
+	var goCtx context.Context
+	goCtx,stmt, err = exec.ParseWithParams(context.TODO(), "select flag from mysql.stats_histograms where table_id = %?", e.tableID.GetStatisticsID())
 	if err != nil {
 		return
 	}
 	var rows []chunk.Row
-	rows, _, err = exec.ExecRestrictedStmt(context.TODO(), stmt)
+	rows, _, err = exec.ExecRestrictedStmt(goCtx, stmt)
 	if err != nil {
 		return
 	}

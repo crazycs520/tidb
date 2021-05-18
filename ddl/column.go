@@ -944,12 +944,12 @@ func (w *worker) doModifyColumnTypeWithData(
 				}
 				defer w.sessPool.put(ctx)
 
-				stmt, err := ctx.(sqlexec.RestrictedSQLExecutor).ParseWithParams(context.Background(), valStr)
+				goCtx,stmt, err := ctx.(sqlexec.RestrictedSQLExecutor).ParseWithParams(context.Background(), valStr)
 				if err != nil {
 					job.State = model.JobStateCancelled
 					failpoint.Return(ver, err)
 				}
-				_, _, err = ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedStmt(context.Background(), stmt)
+				_, _, err = ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedStmt(goCtx, stmt)
 				if err != nil {
 					job.State = model.JobStateCancelled
 					failpoint.Return(ver, err)
@@ -1103,7 +1103,7 @@ func BuildElements(changingCol *model.ColumnInfo, changingIdxs []*model.IndexInf
 
 func (w *worker) updatePhysicalTableRow(t table.PhysicalTable, oldColInfo, colInfo *model.ColumnInfo, reorgInfo *reorgInfo) error {
 	logutil.BgLogger().Info("[ddl] start to update table row", zap.String("job", reorgInfo.Job.String()), zap.String("reorgInfo", reorgInfo.String()))
-	return w.writePhysicalTableRecord(t.(table.PhysicalTable), typeUpdateColumnWorker, nil, oldColInfo, colInfo, reorgInfo)
+	return w.writePhysicalTableRecord(context.Background(),t.(table.PhysicalTable), typeUpdateColumnWorker, nil, oldColInfo, colInfo, reorgInfo)
 }
 
 // updateColumnAndIndexes handles the modify column reorganization state for a table.
@@ -1162,7 +1162,7 @@ func (w *worker) updateColumnAndIndexes(t table.Table, oldCol, col *model.Column
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = w.addTableIndex(t, idxes[i], reorgInfo)
+		err = w.addTableIndex(context.Background(),t, idxes[i], reorgInfo)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -1603,11 +1603,11 @@ func checkForNullValue(ctx sessionctx.Context, isDataTruncated bool, schema, tab
 		}
 	}
 	buf.WriteString(" limit 1")
-	stmt, err := ctx.(sqlexec.RestrictedSQLExecutor).ParseWithParams(context.Background(), buf.String(), paramsList...)
+	goCtx,stmt, err := ctx.(sqlexec.RestrictedSQLExecutor).ParseWithParams(context.Background(), buf.String(), paramsList...)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	rows, _, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedStmt(context.Background(), stmt)
+	rows, _, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedStmt(goCtx, stmt)
 	if err != nil {
 		return errors.Trace(err)
 	}

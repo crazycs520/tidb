@@ -293,11 +293,11 @@ func (e *ShowExec) fetchShowBind() error {
 func (e *ShowExec) fetchShowEngines() error {
 	exec := e.ctx.(sqlexec.RestrictedSQLExecutor)
 
-	stmt, err := exec.ParseWithParams(context.TODO(), `SELECT * FROM information_schema.engines`)
+	goCtx,stmt, err := exec.ParseWithParams(context.TODO(), `SELECT * FROM information_schema.engines`)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	rows, _, err := exec.ExecRestrictedStmt(context.TODO(), stmt)
+	rows, _, err := exec.ExecRestrictedStmt(goCtx, stmt)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -424,7 +424,7 @@ func (e *ShowExec) fetchShowTableStatus() error {
 
 	exec := e.ctx.(sqlexec.RestrictedSQLExecutor)
 
-	stmt, err := exec.ParseWithParams(context.TODO(), `SELECT
+	goCtx,stmt, err := exec.ParseWithParams(context.TODO(), `SELECT
 		table_name, engine, version, row_format, table_rows,
 		avg_row_length, data_length, max_data_length, index_length,
 		data_free, auto_increment, create_time, update_time, check_time,
@@ -447,7 +447,7 @@ func (e *ShowExec) fetchShowTableStatus() error {
 		snapshot = e.ctx.GetSessionVars().SnapshotTS
 	}
 
-	rows, _, err := exec.ExecRestrictedStmt(context.TODO(), stmt, sqlexec.ExecOptionWithSnapshot(snapshot))
+	rows, _, err := exec.ExecRestrictedStmt(goCtx, stmt, sqlexec.ExecOptionWithSnapshot(snapshot))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1302,11 +1302,11 @@ func (e *ShowExec) fetchShowCreateUser() error {
 
 	exec := e.ctx.(sqlexec.RestrictedSQLExecutor)
 
-	stmt, err := exec.ParseWithParams(context.TODO(), `SELECT * FROM %n.%n WHERE User=%? AND Host=%?`, mysql.SystemDB, mysql.UserTable, userName, hostName)
+	goCtx,stmt, err := exec.ParseWithParams(context.TODO(), `SELECT * FROM %n.%n WHERE User=%? AND Host=%?`, mysql.SystemDB, mysql.UserTable, userName, hostName)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	rows, _, err := exec.ExecRestrictedStmt(context.TODO(), stmt)
+	rows, _, err := exec.ExecRestrictedStmt(goCtx, stmt)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1317,11 +1317,11 @@ func (e *ShowExec) fetchShowCreateUser() error {
 			fmt.Sprintf("'%s'@'%s'", e.User.Username, e.User.Hostname))
 	}
 
-	stmt, err = exec.ParseWithParams(context.TODO(), `SELECT Priv FROM %n.%n WHERE User=%? AND Host=%?`, mysql.SystemDB, mysql.GlobalPrivTable, userName, hostName)
+	goCtx,stmt, err = exec.ParseWithParams(context.TODO(), `SELECT Priv FROM %n.%n WHERE User=%? AND Host=%?`, mysql.SystemDB, mysql.GlobalPrivTable, userName, hostName)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	rows, _, err = exec.ExecRestrictedStmt(context.TODO(), stmt)
+	rows, _, err = exec.ExecRestrictedStmt(goCtx, stmt)
 	if err != nil {
 		return errors.Trace(err)
 	}

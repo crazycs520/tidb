@@ -374,7 +374,7 @@ func updateHiddenColumns(tblInfo *model.TableInfo, idxInfo *model.IndexInfo, sta
 	}
 }
 
-func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK bool) (ver int64, err error) {
+func (w *worker) onCreateIndex(ctx context.Context,d *ddlCtx, t *meta.Meta, job *model.Job, isPK bool) (ver int64, err error) {
 	// Handle the rolling back job.
 	if job.IsRollingback() {
 		ver, err = onDropIndex(t, job)
@@ -552,7 +552,7 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job, isPK boo
 				func() {
 					addIndexErr = errCancelledDDLJob.GenWithStack("add table `%v` index `%v` panic", tblInfo.Name, indexInfo.Name)
 				}, false)
-			return w.addTableIndex(tbl, indexInfo, reorgInfo)
+			return w.addTableIndex(ctx,tbl, indexInfo, reorgInfo)
 		})
 		if err != nil {
 			if errWaitReorgTimeout.Equal(err) {
@@ -1166,13 +1166,13 @@ func (w *addIndexWorker) BackfillDataInTxn(handleRange reorgBackfillTask) (taskC
 	return
 }
 
-func (w *worker) addPhysicalTableIndex(t table.PhysicalTable, indexInfo *model.IndexInfo, reorgInfo *reorgInfo) error {
+func (w *worker) addPhysicalTableIndex(ctx context.Context,t table.PhysicalTable, indexInfo *model.IndexInfo, reorgInfo *reorgInfo) error {
 	logutil.BgLogger().Info("[ddl] start to add table index", zap.String("job", reorgInfo.Job.String()), zap.String("reorgInfo", reorgInfo.String()))
-	return w.writePhysicalTableRecord(t.(table.PhysicalTable), typeAddIndexWorker, indexInfo, nil, nil, reorgInfo)
+	return w.writePhysicalTableRecord(ctx,t.(table.PhysicalTable), typeAddIndexWorker, indexInfo, nil, nil, reorgInfo)
 }
 
 // addTableIndex handles the add index reorganization state for a table.
-func (w *worker) addTableIndex(t table.Table, idx *model.IndexInfo, reorgInfo *reorgInfo) error {
+func (w *worker) addTableIndex(ctx context.Context,t table.Table, idx *model.IndexInfo, reorgInfo *reorgInfo) error {
 	var err error
 	if tbl, ok := t.(table.PartitionedTable); ok {
 		var finish bool
@@ -1181,7 +1181,7 @@ func (w *worker) addTableIndex(t table.Table, idx *model.IndexInfo, reorgInfo *r
 			if p == nil {
 				return errCancelledDDLJob.GenWithStack("Can not find partition id %d for table %d", reorgInfo.PhysicalTableID, t.Meta().ID)
 			}
-			err = w.addPhysicalTableIndex(p, idx, reorgInfo)
+			err = w.addPhysicalTableIndex(ctx,p, idx, reorgInfo)
 			if err != nil {
 				break
 			}
@@ -1191,7 +1191,7 @@ func (w *worker) addTableIndex(t table.Table, idx *model.IndexInfo, reorgInfo *r
 			}
 		}
 	} else {
-		err = w.addPhysicalTableIndex(t.(table.PhysicalTable), idx, reorgInfo)
+		err = w.addPhysicalTableIndex(ctx,t.(table.PhysicalTable), idx, reorgInfo)
 	}
 	return errors.Trace(err)
 }
@@ -1360,7 +1360,7 @@ func (w *cleanUpIndexWorker) BackfillDataInTxn(handleRange reorgBackfillTask) (t
 // cleanupPhysicalTableIndex handles the drop partition reorganization state for a non-partitioned table or a partition.
 func (w *worker) cleanupPhysicalTableIndex(t table.PhysicalTable, reorgInfo *reorgInfo) error {
 	logutil.BgLogger().Info("[ddl] start to clean up index", zap.String("job", reorgInfo.Job.String()), zap.String("reorgInfo", reorgInfo.String()))
-	return w.writePhysicalTableRecord(t.(table.PhysicalTable), typeCleanUpIndexWorker, nil, nil, nil, reorgInfo)
+	return w.writePhysicalTableRecord(context.Background(),t.(table.PhysicalTable), typeCleanUpIndexWorker, nil, nil, nil, reorgInfo)
 }
 
 // cleanupGlobalIndex handles the drop partition reorganization state to clean up index entries of partitions.

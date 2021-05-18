@@ -68,11 +68,11 @@ func normalizeFieldName(name string) string {
 
 func getClusterHardware(ctx sessionctx.Context) ([]*clusterHardwareItem, error) {
 	exec := ctx.(sqlexec.RestrictedSQLExecutor)
-	stmt, err := exec.ParseWithParams(context.TODO(), `SELECT TYPE, INSTANCE, DEVICE_TYPE, DEVICE_NAME, NAME, VALUE FROM information_schema.cluster_hardware`)
+	goCtx, stmt, err := exec.ParseWithParams(context.TODO(), `SELECT TYPE, INSTANCE, DEVICE_TYPE, DEVICE_NAME, NAME, VALUE FROM information_schema.cluster_hardware`)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	rows, _, err := exec.ExecRestrictedStmt(context.TODO(), stmt)
+	rows, _, err := exec.ExecRestrictedStmt(goCtx, stmt)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

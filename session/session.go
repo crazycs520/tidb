@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"runtime/pprof"
 	"runtime/trace"
 	"strconv"
 	"strings"
@@ -916,7 +917,7 @@ func drainRecordSet(ctx context.Context, se *session, rs sqlexec.RecordSet) ([]c
 // getTableValue executes restricted sql and the result is one column.
 // It returns a string value.
 func (s *session) getTableValue(ctx context.Context, tblName string, varName string) (string, error) {
-	stmt, err := s.ParseWithParams(ctx, "SELECT VARIABLE_VALUE FROM %n.%n WHERE VARIABLE_NAME=%?", mysql.SystemDB, tblName, varName)
+	ctx,stmt, err := s.ParseWithParams(ctx, "SELECT VARIABLE_VALUE FROM %n.%n WHERE VARIABLE_NAME=%?", mysql.SystemDB, tblName, varName)
 	if err != nil {
 		return "", err
 	}
@@ -948,18 +949,18 @@ var gcVariableComments = map[string]string{
 func (s *session) replaceTableValue(ctx context.Context, tblName string, varName, val string) error {
 	if tblName == mysql.TiDBTable { // maintain comment metadata
 		comment := gcVariableComments[varName]
-		stmt, err := s.ParseWithParams(ctx, `REPLACE INTO %n.%n (variable_name, variable_value, comment) VALUES (%?, %?, %?)`, mysql.SystemDB, tblName, varName, val, comment)
+		goCtx,stmt, err := s.ParseWithParams(ctx, `REPLACE INTO %n.%n (variable_name, variable_value, comment) VALUES (%?, %?, %?)`, mysql.SystemDB, tblName, varName, val, comment)
 		if err != nil {
 			return err
 		}
-		_, _, err = s.ExecRestrictedStmt(ctx, stmt)
+		_, _, err = s.ExecRestrictedStmt(goCtx, stmt)
 		return err
 	}
-	stmt, err := s.ParseWithParams(ctx, `REPLACE INTO %n.%n (variable_name, variable_value) VALUES (%?, %?)`, mysql.SystemDB, tblName, varName, val)
+	goCtx,stmt, err := s.ParseWithParams(ctx, `REPLACE INTO %n.%n (variable_name, variable_value) VALUES (%?, %?)`, mysql.SystemDB, tblName, varName, val)
 	if err != nil {
 		return err
 	}
-	_, _, err = s.ExecRestrictedStmt(ctx, stmt)
+	_, _, err = s.ExecRestrictedStmt(goCtx, stmt)
 	return err
 }
 
@@ -1034,11 +1035,11 @@ func (s *session) updateGlobalSysVar(sv *variable.SysVar, value string) error {
 			return err
 		}
 	}
-	stmt, err := s.ParseWithParams(context.TODO(), "REPLACE %n.%n VALUES (%?, %?)", mysql.SystemDB, mysql.GlobalVariablesTable, sv.Name, value)
+	goCtx,stmt, err := s.ParseWithParams(context.TODO(), "REPLACE %n.%n VALUES (%?, %?)", mysql.SystemDB, mysql.GlobalVariablesTable, sv.Name, value)
 	if err != nil {
 		return err
 	}
-	_, _, err = s.ExecRestrictedStmt(context.TODO(), stmt)
+	_, _, err = s.ExecRestrictedStmt(goCtx, stmt)
 	return err
 }
 
@@ -1210,12 +1211,12 @@ func (s *session) ExecuteInternal(ctx context.Context, sql string, args ...inter
 		logutil.Eventf(ctx, "execute: %s", sql)
 	}
 
-	stmtNode, err := s.ParseWithParams(ctx, sql, args...)
+	goCtx,stmtNode, err := s.ParseWithParams(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
 
-	rs, err = s.ExecuteStmt(ctx, stmtNode)
+	rs, err = s.ExecuteStmt(goCtx, stmtNode)
 	if err != nil {
 		s.sessionVars.StmtCtx.AppendError(err)
 	}
@@ -1289,12 +1290,21 @@ func (s *session) Parse(ctx context.Context, sql string) ([]ast.StmtNode, error)
 
 // ParseWithParams parses a query string, with arguments, to raw ast.StmtNode.
 // Note that it will not do escaping if no variable arguments are passed.
-func (s *session) ParseWithParams(ctx context.Context, sql string, args ...interface{}) (ast.StmtNode, error) {
+func (s *session) ParseWithParams(ctx context.Context, sql string, args ...interface{}) (context.Context,ast.StmtNode, error) {
 	var err error
 	if len(args) > 0 {
 		sql, err = sqlexec.EscapeSQL(sql, args...)
 		if err != nil {
-			return nil, err
+			return ctx,nil, err
+		}
+	}
+
+	if variable.EnablePProfSQLCPU.Load() {
+		normalizedSQL := parser.Normalize(sql)
+		if len(normalizedSQL) > 0 {
+			defer pprof.SetGoroutineLabels(ctx)
+			ctx = pprof.WithLabels(ctx, pprof.Labels("sql", normalizedSQL))
+			pprof.SetGoroutineLabels(ctx)
 		}
 	}
 
@@ -1328,7 +1338,7 @@ func (s *session) ParseWithParams(ctx context.Context, sql string, args ...inter
 				logutil.Logger(ctx).Warn("parse SQL failed", zap.Error(err), zap.String("SQL", sql))
 			}
 		}
-		return nil, util.SyntaxError(err)
+		return ctx,nil, util.SyntaxError(err)
 	}
 	durParse := time.Since(parseStartTime)
 	if s.isInternal() {
@@ -1339,7 +1349,7 @@ func (s *session) ParseWithParams(ctx context.Context, sql string, args ...inter
 	for _, warn := range warns {
 		s.sessionVars.StmtCtx.AppendWarning(util.SyntaxWarn(warn))
 	}
-	return stmts[0], nil
+	return ctx,stmts[0], nil
 }
 
 // ExecRestrictedStmt implements RestrictedSQLExecutor interface.
@@ -2627,12 +2637,12 @@ func (s *session) loadCommonGlobalVariablesIfNeeded() error {
 			vars = append(vars, variable.PluginVarNames...)
 		}
 
-		stmt, err := s.ParseWithParams(context.TODO(), "select HIGH_PRIORITY * from mysql.global_variables where variable_name in (%?) order by VARIABLE_NAME", vars)
+		goCtx,stmt, err := s.ParseWithParams(context.TODO(), "select HIGH_PRIORITY * from mysql.global_variables where variable_name in (%?) order by VARIABLE_NAME", vars)
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
 
-		return s.ExecRestrictedStmt(context.TODO(), stmt)
+		return s.ExecRestrictedStmt(goCtx, stmt)
 	}
 	rows, _, err := gvc.LoadGlobalVariables(loadFunc)
 	if err != nil {

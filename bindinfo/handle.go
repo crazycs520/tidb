@@ -127,7 +127,7 @@ func (h *BindHandle) Update(fullLoad bool) (err error) {
 	}
 
 	exec := h.sctx.Context.(sqlexec.RestrictedSQLExecutor)
-	stmt, err := exec.ParseWithParams(context.TODO(), `SELECT original_sql, bind_sql, default_db, status, create_time, update_time, charset, collation, source
+	goCtx, stmt, err := exec.ParseWithParams(context.TODO(), `SELECT original_sql, bind_sql, default_db, status, create_time, update_time, charset, collation, source
 	FROM mysql.bind_info WHERE update_time > %? ORDER BY update_time`, updateTime)
 	if err != nil {
 		return err
@@ -135,7 +135,7 @@ func (h *BindHandle) Update(fullLoad bool) (err error) {
 
 	// No need to acquire the session context lock for ExecRestrictedStmt, it
 	// uses another background session.
-	rows, _, err := exec.ExecRestrictedStmt(context.Background(), stmt)
+	rows, _, err := exec.ExecRestrictedStmt(goCtx, stmt)
 
 	if err != nil {
 		h.bindInfo.Unlock()
@@ -755,7 +755,7 @@ func (h *BindHandle) SaveEvolveTasksToStore() {
 }
 
 func getEvolveParameters(ctx sessionctx.Context) (time.Duration, time.Time, time.Time, error) {
-	stmt, err := ctx.(sqlexec.RestrictedSQLExecutor).ParseWithParams(
+	goCtx,stmt, err := ctx.(sqlexec.RestrictedSQLExecutor).ParseWithParams(
 		context.TODO(),
 		"SELECT variable_name, variable_value FROM mysql.global_variables WHERE variable_name IN (%?, %?, %?)",
 		variable.TiDBEvolvePlanTaskMaxTime,
@@ -765,7 +765,7 @@ func getEvolveParameters(ctx sessionctx.Context) (time.Duration, time.Time, time
 	if err != nil {
 		return 0, time.Time{}, time.Time{}, err
 	}
-	rows, _, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedStmt(context.TODO(), stmt)
+	rows, _, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedStmt(goCtx, stmt)
 	if err != nil {
 		return 0, time.Time{}, time.Time{}, err
 	}

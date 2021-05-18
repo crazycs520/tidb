@@ -166,12 +166,12 @@ func (n *metricNode) getLabelValue(label string) *metricValue {
 
 func (n *metricNode) queryRowsByLabel(pb *profileBuilder, query string, handleRowFn func(label string, v float64)) error {
 	exec := pb.sctx.(sqlexec.RestrictedSQLExecutor)
-	stmt, err := exec.ParseWithParams(context.TODO(), query)
+	goCtx,stmt, err := exec.ParseWithParams(context.TODO(), query)
 	if err != nil {
 		return err
 	}
 
-	rows, _, err := pb.sctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedStmt(context.TODO(), stmt)
+	rows, _, err := pb.sctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedStmt(goCtx, stmt)
 	if err != nil {
 		return err
 	}
