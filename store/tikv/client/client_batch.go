@@ -17,6 +17,7 @@ package client
 import (
 	"context"
 	"math"
+	"runtime/pprof"
 	"runtime/trace"
 	"sync"
 	"sync/atomic"
@@ -289,6 +290,8 @@ func (a *batchConn) batchSendLoop(cfg config.TiKVClient) {
 
 	bestBatchWaitSize := cfg.BatchWaitSize
 	for {
+		ctx := pprof.WithLabels(context.Background(), pprof.Labels("batch-client", "send-loop"))
+		pprof.SetGoroutineLabels(ctx)
 		a.reqBuilder.reset()
 
 		start := a.fetchAllPendingRequests(int(cfg.MaxBatchSize))
