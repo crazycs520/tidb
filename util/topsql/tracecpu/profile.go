@@ -343,17 +343,12 @@ func (sp *sqlCPUProfiler) removeLabel(p *profile.Profile) {
 	//keepLabelSQL := variable.EnablePProfSQLCPU.Load()
 	for _, s := range p.Sample {
 		for k, v := range s.Label {
-			if len(v) == 1 {
-				s.Label[k][0] = hex.EncodeToString([]byte(v[0]))
+			switch k {
+			case labelSQLDigest, labelPlanDigest:
+				if len(v) == 1 {
+					s.Label[k][0] = hex.EncodeToString([]byte(v[0]))
+				}
 			}
-			//switch k {
-			//case labelSQL:
-			//	if !keepLabelSQL {
-			//		delete(s.Label, k)
-			//	}
-			//case labelSQLDigest, labelPlanDigest:
-			//	delete(s.Label, k)
-			//}
 		}
 	}
 }
