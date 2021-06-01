@@ -39,6 +39,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"runtime/pprof"
 	"runtime/trace"
 	"strconv"
 	"time"
@@ -123,6 +124,11 @@ func (cc *clientConn) handleStmtExecute(ctx context.Context, data []byte) (err e
 			metrics.ExecuteErrorCounter.WithLabelValues(metrics.ExecuteErrorToLabel(err)).Inc()
 		}
 	}()
+	ctx = pprof.WithLabels(ctx, pprof.Labels("conn-3", "execute-stmt"))
+	if variable.TopSQLEnabled() {
+		pprof.SetGoroutineLabels(ctx)
+	}
+
 	if len(data) < 9 {
 		return mysql.ErrMalformPacket
 	}

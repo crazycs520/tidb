@@ -818,7 +818,12 @@ func (cc *clientConn) Run(ctx context.Context) {
 	// the status to special values, for example: kill or graceful shutdown.
 	// The client connection would detect the events when it fails to change status
 	// by CAS operation, it would then take some actions accordingly.
+	ctx = pprof.WithLabels(ctx, pprof.Labels("conn", "for-loop"))
 	for {
+		if variable.TopSQLEnabled() {
+			pprof.SetGoroutineLabels(ctx)
+		}
+
 		if !atomic.CompareAndSwapInt32(&cc.status, connStatusDispatching, connStatusReading) ||
 			// The judge below will not be hit by all means,
 			// But keep it stayed as a reminder and for the code reference for connStatusWaitShutdown.
@@ -996,6 +1001,10 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 		// reset killed for each request
 		atomic.StoreUint32(&cc.ctx.GetSessionVars().Killed, 0)
 	}()
+	ctx = pprof.WithLabels(ctx, pprof.Labels("conn-2", "dispatch"))
+	if variable.TopSQLEnabled() {
+		pprof.SetGoroutineLabels(ctx)
+	}
 	t := time.Now()
 	if (cc.ctx.Status() & mysql.ServerStatusInTrans) > 0 {
 		connIdleDurationHistogramInTxn.Observe(t.Sub(cc.lastActive).Seconds())
@@ -1018,9 +1027,9 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 	cc.lastPacket = data
 	cmd := data[0]
 	data = data[1:]
-	if variable.TopSQLEnabled() {
-		defer pprof.SetGoroutineLabels(ctx)
-	}
+	//if variable.TopSQLEnabled() {
+	//defer pprof.SetGoroutineLabels(ctx)
+	//}
 	if variable.EnablePProfSQLCPU.Load() {
 		label := getLastStmtInConn{cc}.PProfLabel()
 		if len(label) > 0 {
@@ -1817,6 +1826,11 @@ func (cc *clientConn) writeResultset(ctx context.Context, rs ResultSet, binary b
 		buf = buf[:stackSize]
 		logutil.Logger(ctx).Error("write query result panic", zap.Stringer("lastSQL", getLastStmtInConn{cc}), zap.String("stack", string(buf)))
 	}()
+	if variable.TopSQLEnabled() {
+		ctx = pprof.WithLabels(ctx, pprof.Labels("conn-4", "write-result"))
+		pprof.SetGoroutineLabels(ctx)
+	}
+
 	var err error
 	if mysql.HasCursorExistsFlag(serverStatus) {
 		err = cc.writeChunksWithFetchSize(ctx, rs, serverStatus, fetchSize)
