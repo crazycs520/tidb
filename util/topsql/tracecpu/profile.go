@@ -16,6 +16,7 @@ package tracecpu
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -140,6 +141,11 @@ func (sp *sqlCPUProfiler) startAnalyzeProfileWorker() {
 		}
 		stats := sp.parseCPUProfileBySQLLabels(p)
 		sp.handleExportProfileTask(p)
+		total := 0
+		for _, s := range stats {
+			total += int(s.CPUTimeMs)
+		}
+		logutil.BgLogger().Info("sql cpu time", zap.Duration("total", time.Millisecond*time.Duration(total)))
 		if c := sp.GetCollector(); c != nil {
 			c.Collect(task.end, stats)
 		}
@@ -334,16 +340,14 @@ func (sp *sqlCPUProfiler) removeLabel(p *profile.Profile) {
 	if p == nil {
 		return
 	}
-	keepLabelSQL := variable.EnablePProfSQLCPU.Load()
+	//keepLabelSQL := variable.EnablePProfSQLCPU.Load()
 	for _, s := range p.Sample {
-		for k := range s.Label {
+		for k, v := range s.Label {
 			switch k {
-			case labelSQL:
-				if !keepLabelSQL {
-					delete(s.Label, k)
-				}
 			case labelSQLDigest, labelPlanDigest:
-				delete(s.Label, k)
+				if len(v) == 1 {
+					s.Label[k][0] = hex.EncodeToString([]byte(v[0]))
+				}
 			}
 		}
 	}
