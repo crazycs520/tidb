@@ -578,6 +578,8 @@ func (c *batchCommandsClient) batchRecvLoop(cfg config.TiKVClient, tikvTransport
 
 	epoch := atomic.LoadUint64(&c.epoch)
 	for {
+		ctx := pprof.WithLabels(context.Background(), pprof.Labels("batch-client", "recv-loop"))
+		pprof.SetGoroutineLabels(ctx)
 		resp, err := streamClient.recv()
 		if err != nil {
 			if c.isStopped() {
