@@ -298,6 +298,18 @@ func (tsr *RemoteTopSQLReporter) takeDataAndSendToReportChan(collectedDataPtr *m
 	tsr.sqlMapLength.Store(0)
 	tsr.planMapLength.Store(0)
 
+	sqlCnt := int64(0)
+	data.normalizedSQLMap.Range(func(key, value interface{}) bool {
+		sqlCnt++
+		return true
+	})
+	planCnt := int64(0)
+	data.normalizedPlanMap.Range(func(key, value interface{}) bool {
+		planCnt++
+		return true
+	})
+	logutil.BgLogger().Info("[top-sql] report data", zap.Int64("sql-cnt", sqlCnt), zap.Int64("plan-ctn", planCnt))
+
 	// Send to report channel. When channel is full, data will be dropped.
 	select {
 	case tsr.reportDataChan <- data:
