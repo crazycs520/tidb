@@ -1299,7 +1299,7 @@ var tableGoroutineAnalyzeCols = []columnInfo{
 	{name: "id", tp: mysql.TypeLonglong, size: 64, flag: mysql.NotNullFlag | mysql.UnsignedFlag},
 	{name: "state", tp: mysql.TypeVarchar, size: 64},
 	{name: "digest", tp: mysql.TypeLongBlob, size: types.UnspecifiedLength},
-	{name: "duration", tp: mysql.TypeLonglong, size: 64},
+	{name: "duration", tp: mysql.TypeLonglong, size: 64, comment: "unit is minute"},
 	{name: "detail", tp: mysql.TypeLongBlob, size: types.UnspecifiedLength},
 }
 
