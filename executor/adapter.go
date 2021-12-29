@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	topsqlstate "github.com/pingcap/tidb/util/topsql/state"
 	"github.com/cznic/mathutil"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
@@ -332,7 +333,7 @@ func (a *ExecStmt) RebuildPlan(ctx context.Context) (int64, error) {
 }
 
 func (a *ExecStmt) setPlanLabelForTopSQL(ctx context.Context) context.Context {
-	if a.Plan == nil || !variable.TopSQLEnabled() {
+	if a.Plan == nil || !topsqlstate.TopSQLEnabled() {
 		return ctx
 	}
 	vars := a.Ctx.GetSessionVars()
@@ -1283,7 +1284,7 @@ func (a *ExecStmt) GetTextToLog() string {
 }
 
 func (a *ExecStmt) observeOnDigestKnownForTopSQL() {
-	if vars := a.Ctx.GetSessionVars(); variable.TopSQLEnabled() && vars.StmtStats != nil {
+	if vars := a.Ctx.GetSessionVars(); topsqlstate.TopSQLEnabled() && vars.StmtStats != nil {
 		sqlDigest, planDigest := a.getSQLPlanDigest()
 		vars.StmtStats.OnDigestKnown(sqlDigest, planDigest)
 		// This is a special logic prepared for TiKV's SQLExecCount.

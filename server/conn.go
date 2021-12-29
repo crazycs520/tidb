@@ -86,6 +86,7 @@ import (
 	"github.com/pingcap/tidb/util/hack"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/memory"
+	topsqlstate "github.com/pingcap/tidb/util/topsql/state"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/util"
 	"go.uber.org/zap"
@@ -1258,7 +1259,7 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 	vars := cc.ctx.GetSessionVars()
 	vars.StmtStats.OnCmdDispatchBegin()
 	defer vars.StmtStats.OnCmdDispatchFinish()
-	if variable.TopSQLEnabled() {
+	if topsqlstate.TopSQLEnabled() {
 		defer pprof.SetGoroutineLabels(ctx)
 	}
 	if variable.EnablePProfSQLCPU.Load() {
