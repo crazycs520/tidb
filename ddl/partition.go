@@ -399,6 +399,11 @@ func buildTablePartitionInfo(ctx sessionctx.Context, s *ast.PartitionOptions, tb
 		Enable: enable,
 		Num:    s.Num,
 	}
+	if s.Tp == model.PartitionTypeRange && s.Interval {
+		pi.Interval.AutoIntervalValue = s.IntervalNum
+		pi.Interval.AutoIntervalUnit = s.Unit.String()
+	}
+
 	tbInfo.Partition = pi
 	if s.Expr != nil {
 		if err := checkPartitionFuncValid(ctx, tbInfo, s.Expr); err != nil {

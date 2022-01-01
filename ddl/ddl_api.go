@@ -19,6 +19,7 @@
 package ddl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -6705,6 +6706,53 @@ func (d *ddl) AlterPlacementPolicy(ctx sessionctx.Context, stmt *ast.AlterPlacem
 		Type:       model.ActionAlterPlacementPolicy,
 		BinlogInfo: &model.HistoryInfo{},
 		Args:       []interface{}{newPolicyInfo},
+	}
+	err = d.doDDLJob(ctx, job)
+	err = d.callHookOnChanged(err)
+	return errors.Trace(err)
+}
+
+var supportedEngineList = []string{"AWS_S3"}
+
+func (d *ddl) AlterTablePartitionsMoveEngine(ctx sessionctx.Context, stmt *ast.AlterTableMoveStmt) (err error) {
+	tbInfo := stmt.Table.TableInfo
+	// check range partition
+	pi := tbInfo.GetPartitionInfo()
+	if pi == nil || pi.Type != model.PartitionTypeRange || len(pi.Columns) > 0 {
+		return errors.New("operation only supported in range partition table")
+	}
+	// check engine
+	found := false
+	engineName := strings.ToUpper(stmt.EngineName)
+	for _, e := range supportedEngineList {
+		if engineName == e {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return errors.Errorf("unknown engine %v", stmt.EngineName)
+	}
+	// check expression
+	err = checkPartitionValuesIsInt(ctx, &ast.PartitionDefinition{}, []ast.ExprNode{stmt.LessThanExpr}, tbInfo)
+	if err != nil {
+		return err
+	}
+	// get expr string
+	buf := new(bytes.Buffer)
+	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags|format.RestoreBracketAroundBinaryOperation, buf)
+	err = stmt.LessThanExpr.Restore(restoreCtx)
+	if err != nil {
+		return err
+	}
+
+	job := &model.Job{
+		SchemaID:   stmt.Table.DBInfo.ID,
+		SchemaName: stmt.Table.DBInfo.Name.L,
+		TableID:    tbInfo.ID,
+		Type:       model.ActionAlterTablePartitionsMove,
+		BinlogInfo: &model.HistoryInfo{},
+		Args:       []interface{}{buf.String(), engineName},
 	}
 	err = d.doDDLJob(ctx, job)
 	err = d.callHookOnChanged(err)

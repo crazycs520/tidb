@@ -832,6 +832,14 @@ type PartitionInfo struct {
 	DroppingDefinitions []PartitionDefinition `json:"dropping_definitions"`
 	States              []PartitionState      `json:"states"`
 	Num                 uint64                `json:"num"`
+	Interval            IntervalInfo          `json:"interval"`
+}
+
+type IntervalInfo struct {
+	AutoIntervalValue int64  `json:"auto_interval_value"`
+	AutoIntervalUnit  string `json:"auto_interval_unit"`
+	MovePartitionExpr string `json:"move_partition_expr"`
+	Engine            string `json:"engine"`
 }
 
 // GetNameByID gets the partition name by ID.

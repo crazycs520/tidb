@@ -120,6 +120,7 @@ type DDL interface {
 	CreatePlacementPolicy(ctx sessionctx.Context, stmt *ast.CreatePlacementPolicyStmt) error
 	DropPlacementPolicy(ctx sessionctx.Context, stmt *ast.DropPlacementPolicyStmt) error
 	AlterPlacementPolicy(ctx sessionctx.Context, stmt *ast.AlterPlacementPolicyStmt) error
+	AlterTablePartitionsMoveEngine(ctx sessionctx.Context, stmt *ast.AlterTableMoveStmt) error
 
 	// CreateSchemaWithInfo creates a database (schema) given its database info.
 	//
