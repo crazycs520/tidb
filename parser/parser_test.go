@@ -2442,6 +2442,10 @@ func TestDDL(t *testing.T) {
 		{`alter table m partition t learner_constraints="ww";`, true, "ALTER TABLE `m` PARTITION `t` LEARNER_CONSTRAINTS = 'ww'"},
 		{`alter table m partition t placement policy="ww";`, true, "ALTER TABLE `m` PARTITION `t` PLACEMENT POLICY = `ww`"},
 
+		//
+		{`alter table m partitions values less than 1 to engine AWS_S3;`, true, "ALTER TABLE `m` PARTITIONS VALUES LESS THAN 1 TO ENGINE AWS_S3"},
+		{`alter table m partitions values less than UNIX_TIMESTAMP(date_sub(now(), interval 1 year)) to engine AWS_S3;`, true, "ALTER TABLE `m` PARTITIONS VALUES LESS THAN UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 1 YEAR)) TO ENGINE AWS_S3"},
+
 		// for check clause
 		{"create table t (c1 bool, c2 bool, check (c1 in (0, 1)) not enforced, check (c2 in (0, 1)))", true, "CREATE TABLE `t` (`c1` TINYINT(1),`c2` TINYINT(1),CHECK(`c1` IN (0,1)) NOT ENFORCED,CHECK(`c2` IN (0,1)) ENFORCED)"},
 		{"CREATE TABLE Customer (SD integer CHECK (SD > 0), First_Name varchar(30));", true, "CREATE TABLE `Customer` (`SD` INT CHECK(`SD`>0) ENFORCED,`First_Name` VARCHAR(30))"},

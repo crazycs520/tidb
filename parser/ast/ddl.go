@@ -3981,6 +3981,47 @@ func (n *AlterPlacementPolicyStmt) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
+type AlterTableMoveStmt struct {
+	ddlNode
+
+	Table        *TableName
+	LessThanExpr ExprNode
+	EngineName   string
+}
+
+func (n *AlterTableMoveStmt) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteKeyWord("ALTER TABLE ")
+	if err := n.Table.Restore(ctx); err != nil {
+		return errors.Annotate(err, "An error occurred while restore AlterTableMoveStmt.Table")
+	}
+	ctx.WriteKeyWord(" PARTITIONS VALUES LESS THAN ")
+	if err := n.LessThanExpr.Restore(ctx); err != nil {
+		return errors.Annotate(err, "An error occurred while restore AlterTableMoveStmt.LessThanExpr")
+	}
+	ctx.WriteKeyWord(" TO ENGINE ")
+	ctx.WritePlain(n.EngineName)
+	return nil
+}
+
+func (n *AlterTableMoveStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*AlterTableMoveStmt)
+	node, ok := n.Table.Accept(v)
+	if !ok {
+		return n, false
+	}
+	n.Table = node.(*TableName)
+	expr, ok := n.LessThanExpr.Accept(v)
+	if !ok {
+		return n, false
+	}
+	n.LessThanExpr = expr.(ExprNode)
+	return v.Leave(n)
+}
+
 // AlterSequenceStmt is a statement to alter sequence option.
 type AlterSequenceStmt struct {
 	ddlNode

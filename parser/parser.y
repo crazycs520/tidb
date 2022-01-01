@@ -1486,6 +1486,14 @@ AlterTableStmt:
 			Specs: specs,
 		}
 	}
+|	"ALTER" IgnoreOptional "TABLE" TableName "PARTITIONS" "VALUES" "LESS" "THAN" BitExpr "TO" "ENGINE" StringName
+	{
+		$$ = &ast.AlterTableMoveStmt{
+			Table:        $4.(*ast.TableName),
+			LessThanExpr: $9,
+			EngineName:   $12,
+		}
+	}
 |	"ALTER" IgnoreOptional "TABLE" TableName "ANALYZE" "PARTITION" PartitionNameList AnalyzeOptionListOpt
 	{
 		$$ = &ast.AnalyzeTableStmt{TableNames: []*ast.TableName{$4.(*ast.TableName)}, PartitionNames: $7.([]model.CIStr), AnalyzeOpts: $8.([]ast.AnalyzeOpt)}
