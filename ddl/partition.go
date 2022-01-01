@@ -400,6 +400,7 @@ func buildTablePartitionInfo(ctx sessionctx.Context, s *ast.PartitionOptions, tb
 		Num:    s.Num,
 	}
 	if s.Tp == model.PartitionTypeRange && s.Interval {
+		pi.Interval.Enable = true
 		pi.Interval.AutoIntervalValue = s.IntervalNum
 		pi.Interval.AutoIntervalUnit = s.Unit.String()
 	}

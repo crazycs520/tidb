@@ -17,6 +17,7 @@ package domain
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/interval"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -91,6 +92,8 @@ type Domain struct {
 	indexUsageSyncLease  time.Duration
 	planReplayer         *planReplayer
 	expiredTimeStamp4PC  types.Time
+
+	ipManager *interval.IntervalPartitionManager
 
 	serverID             uint64
 	serverIDSession      *concurrency.Session
@@ -711,6 +714,9 @@ func (do *Domain) Close() {
 	if do.onClose != nil {
 		do.onClose()
 	}
+	if do.ipManager != nil {
+		do.ipManager.Stop()
+	}
 	logutil.BgLogger().Info("domain closed", zap.Duration("take time", time.Since(startTime)))
 }
 
@@ -830,6 +836,10 @@ func (do *Domain) Init(ddlLease time.Duration, sysExecutorFactory func(*Domain) 
 	if err != nil {
 		return err
 	}
+
+	ipmCtxPool := pools.NewResourcePool(sysFac, 10, 10, resourceIdleTimeout)
+	do.ipManager = interval.NewIntervalPartitionManager(ipmCtxPool, do.infoCache, do.ddl.OwnerManager())
+	do.ipManager.Start()
 
 	if config.GetGlobalConfig().Experimental.EnableGlobalKill {
 		if do.etcdClient != nil {

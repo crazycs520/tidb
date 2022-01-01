@@ -836,6 +836,7 @@ type PartitionInfo struct {
 }
 
 type IntervalInfo struct {
+	Enable            bool
 	AutoIntervalValue int64  `json:"auto_interval_value"`
 	AutoIntervalUnit  string `json:"auto_interval_unit"`
 	MovePartitionExpr string `json:"move_partition_expr"`

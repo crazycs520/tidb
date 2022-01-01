@@ -376,6 +376,15 @@ const (
 		column_ids TEXT(19372),
 		PRIMARY KEY (table_id) CLUSTERED
 	);`
+	CreateAutoIntervalJobsTable = `CREATE TABLE mysql.interval_partition_jobs (
+		db_name VARCHAR(64) NOT NULL,
+		table_name VARCHAR(64) NOT NULL,
+		table_id BIGINT NOT NULL,
+		partition_id BIGINT NOT NULL,
+		status VARCHAR(200),
+		progress DOUBLE,
+		PRIMARY KEY(table_id, partition_id)
+	);`
 )
 
 // bootstrap initiates system DB for a store.
@@ -557,6 +566,7 @@ const (
 	version81 = 81
 	// version82 adds the mysql.analyze_options table
 	version82 = 82
+	version83 = 83
 )
 
 // currentBootstrapVersion is defined as a variable, so we can modify its value for testing.
@@ -647,6 +657,7 @@ var (
 		upgradeToVer80,
 		upgradeToVer81,
 		upgradeToVer82,
+		upgradeToVer83,
 	}
 )
 
@@ -1701,6 +1712,13 @@ func upgradeToVer82(s Session, ver int64) {
 		return
 	}
 	doReentrantDDL(s, CreateAnalyzeOptionsTable)
+}
+
+func upgradeToVer83(s Session, ver int64) {
+	if ver >= version83 {
+		return
+	}
+	doReentrantDDL(s, CreateAutoIntervalJobsTable)
 }
 
 func writeOOMAction(s Session) {
