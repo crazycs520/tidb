@@ -3596,6 +3596,10 @@ type PartitionMethod struct {
 
 	// KeyAlgorithm is the optional hash algorithm type for `PARTITION BY [LINEAR] KEY` syntax.
 	KeyAlgorithm *PartitionKeyAlgorithm
+
+	Interval bool
+
+	IntervalExpr ExprNode
 }
 
 type PartitionKeyAlgorithm struct {
@@ -3653,6 +3657,17 @@ func (n *PartitionMethod) Restore(ctx *format.RestoreCtx) error {
 		ctx.WritePlainf("%d", n.Limit)
 	}
 
+	if n.Interval {
+		ctx.WriteKeyWord(" INTERVAL ")
+		if err := n.IntervalExpr.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore PartitionMethod.IntervalExpr")
+		}
+		if n.Unit != TimeUnitInvalid {
+			ctx.WritePlain(" ")
+			ctx.WriteKeyWord(n.Unit.String())
+		}
+	}
+
 	return nil
 }
 
@@ -3664,6 +3679,13 @@ func (n *PartitionMethod) acceptInPlace(v Visitor) bool {
 			return false
 		}
 		n.Expr = expr.(ExprNode)
+	}
+	if n.IntervalExpr != nil {
+		expr, ok := n.IntervalExpr.Accept(v)
+		if !ok {
+			return false
+		}
+		n.IntervalExpr = expr.(ExprNode)
 	}
 	for i, colName := range n.ColumnNames {
 		newColName, ok := colName.Accept(v)
