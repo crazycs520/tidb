@@ -3599,7 +3599,7 @@ type PartitionMethod struct {
 
 	Interval bool
 
-	IntervalExpr ExprNode
+	IntervalNum int64
 }
 
 type PartitionKeyAlgorithm struct {
@@ -3659,9 +3659,7 @@ func (n *PartitionMethod) Restore(ctx *format.RestoreCtx) error {
 
 	if n.Interval {
 		ctx.WriteKeyWord(" INTERVAL ")
-		if err := n.IntervalExpr.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore PartitionMethod.IntervalExpr")
-		}
+		ctx.WritePlainf("%d", n.IntervalNum)
 		if n.Unit != TimeUnitInvalid {
 			ctx.WritePlain(" ")
 			ctx.WriteKeyWord(n.Unit.String())
@@ -3679,13 +3677,6 @@ func (n *PartitionMethod) acceptInPlace(v Visitor) bool {
 			return false
 		}
 		n.Expr = expr.(ExprNode)
-	}
-	if n.IntervalExpr != nil {
-		expr, ok := n.IntervalExpr.Accept(v)
-		if !ok {
-			return false
-		}
-		n.IntervalExpr = expr.(ExprNode)
 	}
 	for i, colName := range n.ColumnNames {
 		newColName, ok := colName.Accept(v)

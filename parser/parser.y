@@ -3832,14 +3832,23 @@ PartitionMethod:
 			Expr: $3.(ast.ExprNode),
 		}
 	}
-|	"RANGE" '(' BitExpr ')' "INTERVAL" Expression TimeUnit
+|	"RANGE" '(' BitExpr ')' "INTERVAL" Int64Num
 	{
 		$$ = &ast.PartitionMethod{
-			Tp:           model.PartitionTypeRange,
-			Expr:         $3.(ast.ExprNode),
-			Interval:     true,
-			IntervalExpr: $6.(ast.ExprNode),
-			Unit:         $7.(ast.TimeUnitType),
+			Tp:          model.PartitionTypeRange,
+			Expr:        $3.(ast.ExprNode),
+			Interval:    true,
+			IntervalNum: $6.(int64),
+		}
+	}
+|	"RANGE" '(' BitExpr ')' "INTERVAL" Int64Num TimeUnit
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:          model.PartitionTypeRange,
+			Expr:        $3.(ast.ExprNode),
+			Interval:    true,
+			IntervalNum: $6.(int64),
+			Unit:        $7.(ast.TimeUnitType),
 		}
 	}
 |	"RANGE" FieldsOrColumns '(' ColumnNameList ')'
