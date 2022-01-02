@@ -192,8 +192,8 @@ func (pm *IntervalPartitionManager) getTableNeedIntervalPartition(ctx sessionctx
 		return nil
 	}
 	result := []*TablePartition{}
-	for _, pd := range pi.Definitions {
-		rangeValueStr := pd.LessThan[0]
+	for i := range pi.Definitions {
+		rangeValueStr := pi.Definitions[i].LessThan[0]
 		if rangeValueStr == "MAXVALUE" {
 			return nil
 		}
@@ -212,14 +212,15 @@ func (pm *IntervalPartitionManager) getTableNeedIntervalPartition(ctx sessionctx
 		}
 		// check running table
 
+		logutil.BgLogger().Info("fina need move data partition", zap.Reflect("range-value", rangeValue), zap.Reflect("move-expr", moveExprValue))
 		result = append(result, &TablePartition{
 			dbInfo: dbInfo,
 			tbInfo: tbInfo,
-			pdInfo: &pd,
+			pdInfo: &pi.Definitions[i],
 		})
 		logutil.BgLogger().Info("[interval-partition] find need moved table partition",
 			zap.String("table", tbInfo.Name.O),
-			zap.String("partition", pd.Name.O),
+			zap.String("partition", pi.Definitions[i].Name.O),
 			zap.Reflect("range-v", rangeValue),
 			zap.Reflect("move-v", moveExprValue))
 	}
