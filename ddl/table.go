@@ -1602,3 +1602,38 @@ func onAlterTablePartitionsMove(t *meta.Meta, job *model.Job) (ver int64, err er
 	job.FinishTableJob(model.JobStateDone, model.StatePublic, ver, tbInfo)
 	return ver, nil
 }
+func onAlterTablePartitionMeta(t *meta.Meta, job *model.Job) (ver int64, err error) {
+	var info AlterTablePartitionInfo
+	if err := job.DecodeArgs(&info); err != nil {
+		// Invalid arguments, cancel this job.
+		job.State = model.JobStateCancelled
+		return ver, errors.Trace(err)
+	}
+
+	tbInfo, err := getTableInfoAndCancelFaultJob(t, job, job.SchemaID)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	// check range partition
+	pi := tbInfo.GetPartitionInfo()
+	if pi == nil {
+		job.State = model.JobStateCancelled
+		return ver, ErrInvalidDDLState.GenWithStack("operation only supported in range partition table")
+	}
+
+	for i := range pi.Definitions {
+		if pi.Definitions[i].ID == info.PID {
+			pi.Definitions[i].Readonly = info.ReadOnly
+			pi.Definitions[i].Engine = info.Engine
+			break
+		}
+	}
+
+	ver, err = updateVersionAndTableInfo(t, job, tbInfo, true)
+	if err != nil {
+		return ver, errors.Trace(err)
+	}
+	job.FinishTableJob(model.JobStateDone, model.StatePublic, ver, tbInfo)
+	return ver, nil
+}

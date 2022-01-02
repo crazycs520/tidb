@@ -376,15 +376,29 @@ const (
 		column_ids TEXT(19372),
 		PRIMARY KEY (table_id) CLUSTERED
 	);`
-	CreateAutoIntervalJobsTable = `CREATE TABLE mysql.interval_partition_jobs (
+	CreateAutoIntervalJobsTable = `CREATE TABLE IF NOT EXISTS mysql.interval_partition_jobs (
+		id BIGINT,
 		db_name VARCHAR(64) NOT NULL,
 		table_name VARCHAR(64) NOT NULL,
 		table_id BIGINT NOT NULL,
+		partition_name VARCHAR(64) NOT NULL,
 		partition_id BIGINT NOT NULL,
-		status VARCHAR(200),
-		progress DOUBLE,
-		PRIMARY KEY(table_id, partition_id)
+		state VARCHAR(200),
+		PRIMARY KEY(id),
+		UNIQUE INDEX(partition_id)
 	);`
+	CreateAutoIntervalJobsDoneTable = `CREATE TABLE IF NOT EXISTS mysql.interval_partition_jobs_done (
+		id BIGINT,
+		db_name VARCHAR(64) NOT NULL,
+		table_name VARCHAR(64) NOT NULL,
+		table_id BIGINT NOT NULL,
+		partition_name VARCHAR(64) NOT NULL,
+		partition_id BIGINT NOT NULL,
+		state VARCHAR(200),
+		PRIMARY KEY(id),
+		UNIQUE INDEX(partition_id)
+	);`
+	CreateAutoIntervalJobSequence = `CREATE SEQUENCE IF NOT EXISTS mysql.interval_partition_jobs_seq CACHE = 1;`
 )
 
 // bootstrap initiates system DB for a store.
@@ -571,7 +585,7 @@ const (
 
 // currentBootstrapVersion is defined as a variable, so we can modify its value for testing.
 // please make sure this is the largest version
-var currentBootstrapVersion int64 = version82
+var currentBootstrapVersion int64 = version83
 
 var (
 	bootstrapVersion = []func(Session, int64){
@@ -1719,6 +1733,8 @@ func upgradeToVer83(s Session, ver int64) {
 		return
 	}
 	doReentrantDDL(s, CreateAutoIntervalJobsTable)
+	doReentrantDDL(s, CreateAutoIntervalJobsDoneTable)
+	doReentrantDDL(s, CreateAutoIntervalJobSequence)
 }
 
 func writeOOMAction(s Session) {
@@ -1807,6 +1823,11 @@ func doDDLWorks(s Session) {
 	mustExecute(s, CreateTableCacheMetaTable)
 	// Create analyze_options table.
 	mustExecute(s, CreateAnalyzeOptionsTable)
+
+	mustExecute(s, CreateAutoIntervalJobsTable)
+	mustExecute(s, CreateAutoIntervalJobsDoneTable)
+	mustExecute(s, CreateAutoIntervalJobSequence)
+
 }
 
 // doDMLWorks executes DML statements in bootstrap stage.

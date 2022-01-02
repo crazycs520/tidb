@@ -924,6 +924,8 @@ type PartitionDefinition struct {
 	PlacementPolicyRef  *PolicyRefInfo     `json:"policy_ref_info"`
 	DirectPlacementOpts *PlacementSettings `json:"placement_settings"`
 	Comment             string             `json:"comment,omitempty"`
+	Readonly            bool               `json:"readonly"`
+	Engine              string             `json:"engine"`
 }
 
 // Clone clones ConstraintInfo.

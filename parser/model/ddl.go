@@ -96,6 +96,7 @@ const (
 	ActionAlterNoCacheTable             ActionType = 59
 	ActionCreateTables                  ActionType = 60
 	ActionAlterTablePartitionsMove      ActionType = 61
+	ActionAlterTablePartitionMeta       ActionType = 62
 )
 
 var actionMap = map[ActionType]string{
@@ -159,6 +160,7 @@ var actionMap = map[ActionType]string{
 	ActionAlterNoCacheTable:             "alter table nocache",
 	ActionAlterTableStatsOptions:        "alter table statistics options",
 	ActionAlterTablePartitionsMove:      "alter table partitions move",
+	ActionAlterTablePartitionMeta:       "alter table partition meta",
 
 	// `ActionAlterTableAlterPartition` is removed and will never be used.
 	// Just left a tombstone here for compatibility.

@@ -6759,6 +6759,28 @@ func (d *ddl) AlterTablePartitionsMoveEngine(ctx sessionctx.Context, stmt *ast.A
 	return errors.Trace(err)
 }
 
+type AlterTablePartitionInfo struct {
+	PID      int64  `json:"pid"`
+	ReadOnly bool   `json:"readonly"`
+	Engine   string `json:"engine"`
+}
+
+func (d *ddl) AlterTablePartitionMeta(ctx sessionctx.Context, dbInfo *model.DBInfo, tbInfo *model.TableInfo, info *AlterTablePartitionInfo) (err error) {
+	//TODO: validate engine!
+
+	job := &model.Job{
+		SchemaID:   dbInfo.ID,
+		SchemaName: dbInfo.Name.L,
+		TableID:    tbInfo.ID,
+		Type:       model.ActionAlterTablePartitionMeta,
+		BinlogInfo: &model.HistoryInfo{},
+		Args:       []interface{}{info},
+	}
+	err = d.doDDLJob(ctx, job)
+	err = d.callHookOnChanged(err)
+	return errors.Trace(err)
+}
+
 func (d *ddl) AlterTableCache(ctx sessionctx.Context, ti ast.Ident) (err error) {
 	schema, t, err := d.getSchemaAndTableByIdent(ctx, ti)
 	if err != nil {

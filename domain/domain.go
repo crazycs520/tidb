@@ -838,7 +838,7 @@ func (do *Domain) Init(ddlLease time.Duration, sysExecutorFactory func(*Domain) 
 	}
 
 	ipmCtxPool := pools.NewResourcePool(sysFac, 10, 10, resourceIdleTimeout)
-	do.ipManager = interval.NewIntervalPartitionManager(ipmCtxPool, do.infoCache, do.ddl.OwnerManager())
+	do.ipManager = interval.NewIntervalPartitionManager(ipmCtxPool, do.ddl, do.infoCache, do.ddl.OwnerManager())
 	do.ipManager.Start()
 
 	if config.GetGlobalConfig().Experimental.EnableGlobalKill {

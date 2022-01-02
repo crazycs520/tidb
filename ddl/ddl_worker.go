@@ -863,6 +863,8 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 		ver, err = onAlterNoCacheTable(t, job)
 	case model.ActionAlterTablePartitionsMove:
 		ver, err = onAlterTablePartitionsMove(t, job)
+	case model.ActionAlterTablePartitionMeta:
+		ver, err = onAlterTablePartitionMeta(t, job)
 	default:
 		// Invalid job, cancel it.
 		job.State = model.JobStateCancelled
