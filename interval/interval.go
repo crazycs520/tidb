@@ -27,6 +27,9 @@ type IntervalPartitionManager struct {
 	jobCh         chan *TablePartition
 	mu            sync.Mutex
 	handlingInfos map[int64]struct{} // partition id -> struct
+
+	// For auto create partition.
+	taskCh chan *AutoCreatePartitionTask
 }
 
 func NewIntervalPartitionManager(ctxPool *pools.ResourcePool, ddl ddl.DDL, infoCache *infoschema.InfoCache, ownerManager owner.Manager) *IntervalPartitionManager {
@@ -40,6 +43,7 @@ func NewIntervalPartitionManager(ctxPool *pools.ResourcePool, ddl ddl.DDL, infoC
 		ownerManager:  ownerManager,
 		jobCh:         make(chan *TablePartition),
 		handlingInfos: make(map[int64]struct{}),
+		taskCh:        make(chan *AutoCreatePartitionTask),
 	}
 }
 
@@ -47,6 +51,7 @@ func (pm *IntervalPartitionManager) Start() {
 	logutil.BgLogger().Info("[interval-partition] manager started")
 	go util.WithRecovery(pm.RunCheckerLoop, nil)
 	go util.WithRecovery(pm.RunWorkerLoop, nil)
+	go util.WithRecovery(pm.RunAutoCreatePartitionLoop, nil)
 }
 
 func (pm *IntervalPartitionManager) Stop() {

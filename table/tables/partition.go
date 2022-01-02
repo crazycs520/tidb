@@ -984,6 +984,29 @@ func (t *partitionedTable) locateListPartition(ctx sessionctx.Context, pi *model
 	return lp.locateListColumnsPartitionByRow(ctx, r)
 }
 
+type RangeIntervalPartitionTable interface {
+	GetPartitionKeyValue(ctx sessionctx.Context, r []types.Datum) (ret int64, isNull bool, unsigned bool, err error)
+}
+
+func (t *partitionedTable) GetPartitionKeyValue(ctx sessionctx.Context, r []types.Datum) (ret int64, isNull bool, unsigned bool, err error) {
+	if col, ok := t.partitionExpr.Expr.(*expression.Column); ok {
+		if r[col.Index].IsNull() {
+			isNull = true
+		}
+		ret = r[col.Index].GetInt64()
+	} else {
+		evalBuffer := t.evalBufferPool.Get().(*chunk.MutRow)
+		defer t.evalBufferPool.Put(evalBuffer)
+		evalBuffer.SetDatums(r...)
+		ret, isNull, err = t.partitionExpr.Expr.EvalInt(ctx, evalBuffer.ToRow())
+		if err != nil {
+			return
+		}
+	}
+	unsigned = mysql.HasUnsignedFlag(t.partitionExpr.Expr.GetType().Flag)
+	return
+}
+
 func (t *partitionedTable) locateRangePartition(ctx sessionctx.Context, pi *model.PartitionInfo, r []types.Datum) (int, error) {
 	var (
 		ret    int64

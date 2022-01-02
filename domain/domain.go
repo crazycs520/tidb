@@ -1781,6 +1781,10 @@ func (do *Domain) serverIDKeeper() {
 	}
 }
 
+func (do *Domain) TryAutoCreateIntervalPartition(ctx sessionctx.Context, dbName string, tbInfo *model.TableInfo, val int64, unsigned bool) (bool, error) {
+	return do.ipManager.TryAutoCreateIntervalPartition(ctx, dbName, tbInfo, val, unsigned)
+}
+
 // MockInfoCacheAndLoadInfoSchema only used in unit test
 func (do *Domain) MockInfoCacheAndLoadInfoSchema(is infoschema.InfoSchema) {
 	do.infoCache = infoschema.NewCache(16)

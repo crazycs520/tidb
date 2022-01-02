@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/domain"
 	"math"
 	"sync"
 	"time"
@@ -1134,9 +1135,9 @@ func (e *InsertValues) addRecordWithAutoIDHint(ctx context.Context, row []types.
 		vars.PresumeKeyNotExists = true
 	}
 	if reserveAutoIDCount > 0 {
-		_, err = e.Table.AddRecord(e.ctx, row, table.WithCtx(ctx), table.WithReserveAutoIDHint(reserveAutoIDCount))
+		_, err = addRecordWithRetry(e.Table, e.ctx, row, table.WithCtx(ctx), table.WithReserveAutoIDHint(reserveAutoIDCount))
 	} else {
-		_, err = e.Table.AddRecord(e.ctx, row, table.WithCtx(ctx))
+		_, err = addRecordWithRetry(e.Table, e.ctx, row, table.WithCtx(ctx))
 	}
 	vars.PresumeKeyNotExists = false
 	if err != nil {
@@ -1147,6 +1148,44 @@ func (e *InsertValues) addRecordWithAutoIDHint(ctx context.Context, row []types.
 		vars.SetLastInsertID(e.lastInsertID)
 	}
 	return nil
+}
+
+func addRecordWithRetry(tb table.Table, ctx sessionctx.Context, r []types.Datum, opts ...table.AddRecordOption) (recordID kv.Handle, err error) {
+	recordID, err = tb.AddRecord(ctx, r, opts...)
+	if err == nil {
+		return recordID, nil
+	}
+	if !table.ErrNoPartitionForGivenValue.Equal(err) {
+		return recordID, err
+	}
+	originErr := err
+	pi := tb.Meta().GetPartitionInfo()
+	rangePartitionTable, ok := tb.(tables.RangeIntervalPartitionTable)
+	if !ok || pi == nil || pi.Type != model.PartitionTypeRange || !pi.Interval.Enable || pi.Interval.AutoIntervalValue == 0 {
+		return recordID, err
+	}
+	val, _, unsigned, err := rangePartitionTable.GetPartitionKeyValue(ctx, r)
+	if err != nil {
+		return recordID, err
+	}
+	do := domain.GetDomain(ctx)
+	dbInfo, ok := do.InfoSchema().SchemaByTable(tb.Meta())
+	if !ok {
+		return recordID, originErr
+	}
+	succ, err := do.TryAutoCreateIntervalPartition(ctx, dbInfo.Name.O, tb.Meta(), val, unsigned)
+	if err != nil {
+		return recordID, err
+	}
+	if !succ {
+		return recordID, originErr
+	}
+	// use new schema.
+	tb, ok = do.InfoSchema().TableByID(tb.Meta().ID)
+	if !ok {
+		return recordID, originErr
+	}
+	return tb.AddRecord(ctx, r, opts...)
 }
 
 // InsertRuntimeStat record the stat about insert and check
