@@ -395,8 +395,7 @@ const (
 		partition_name VARCHAR(64) NOT NULL,
 		partition_id BIGINT NOT NULL,
 		state VARCHAR(200),
-		PRIMARY KEY(id),
-		UNIQUE INDEX(partition_id)
+		PRIMARY KEY(id)
 	);`
 	CreateAutoIntervalJobSequence = `CREATE SEQUENCE IF NOT EXISTS mysql.interval_partition_jobs_seq CACHE = 1;`
 )

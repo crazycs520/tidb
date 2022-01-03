@@ -27,6 +27,7 @@ type Job struct {
 
 const (
 	loadJobSQL        = "SELECT HIGH_PRIORITY id, db_name, table_name, table_id, partition_name, partition_id, state FROM mysql.interval_partition_jobs WHERE partition_id = %?"
+	loadOldJobSQL     = "SELECT HIGH_PRIORITY id, db_name, table_name, table_id, partition_name, partition_id, state FROM mysql.interval_partition_jobs LIMIT 1"
 	insertJobSQL      = "INSERT IGNORE INTO mysql.interval_partition_jobs (id, db_name, table_name, table_id, partition_name, partition_id, state) VALUES (%?, %?, %?, %?, %?, %?, %?)"
 	updateJobStateSQL = "UPDATE mysql.interval_partition_jobs SET state = %? WHERE id = %?"
 	insertDoneJobSQL  = "INSERT IGNORE INTO mysql.interval_partition_jobs_done SELECT * FROM mysql.interval_partition_jobs where id = %?"
@@ -60,8 +61,9 @@ func (pm *IntervalPartitionManager) HandleJob(job *Job, info *TablePartition) er
 			zap.String("table", job.tableName),
 			zap.String("partition", job.partitionName))
 
-		// check moving data status and update state
-		time.Sleep(time.Second)
+	// check moving data status and update state
+	//time.Sleep(time.Second)
+	case JobStateCancelled:
 	default:
 		logutil.BgLogger().Info("[interval-partition]  unknown state",
 			zap.String("table", job.tableName),
@@ -138,7 +140,6 @@ func (pm *IntervalPartitionManager) LoadOrCreateJobInfo(info *TablePartition) (*
 		return nil, err
 	}
 	if job != nil {
-		logutil.BgLogger().Info("[interval-partition] load job success", zap.Int64("id", job.id), zap.String("table", job.tableName), zap.String("partition", job.partitionName))
 		return job, nil
 	}
 
@@ -161,8 +162,6 @@ func (pm *IntervalPartitionManager) LoadOrCreateJobInfo(info *TablePartition) (*
 	if err != nil {
 		return nil, err
 	}
-
-	logutil.BgLogger().Info("[interval-partition] create job success", zap.Int64("id", job.id), zap.String("table", job.tableName), zap.String("partition", job.partitionName))
 	return job, nil
 }
 
@@ -217,13 +216,21 @@ func (pm *IntervalPartitionManager) genJobID() (int64, error) {
 }
 
 func (pm *IntervalPartitionManager) LoadJobInfo(info *TablePartition) (*Job, error) {
+	return pm.loadJobInfo(loadJobSQL, info.pdInfo.ID)
+}
+
+func (pm *IntervalPartitionManager) LoadOldJobInfo() (*Job, error) {
+	return pm.loadJobInfo(loadOldJobSQL)
+}
+
+func (pm *IntervalPartitionManager) loadJobInfo(query string, args ...interface{}) (*Job, error) {
 	ctx, err := pm.sessPool.get()
 	if err != nil {
 		return nil, err
 	}
 	defer pm.sessPool.put(ctx)
 
-	rs, err := ctx.(sqlexec.SQLExecutor).ExecuteInternal(context.Background(), loadJobSQL, info.pdInfo.ID)
+	rs, err := ctx.(sqlexec.SQLExecutor).ExecuteInternal(context.Background(), query, args...)
 	if rs != nil {
 		defer terror.Call(rs.Close)
 	}

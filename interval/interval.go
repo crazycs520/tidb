@@ -100,23 +100,32 @@ func (pm *IntervalPartitionManager) getHandlingNum() int {
 func (pm *IntervalPartitionManager) RunWorkerLoop() {
 	var info *TablePartition
 	var job *Job
+	finishOldJob := false
 	for {
 		var err error
-		if info == nil {
-			info = <-pm.jobCh
+		if info != nil && job != nil && job.state == JobStateMovingData {
+			time.Sleep(time.Second)
 		}
-		if job == nil || job.partitionID != info.pdInfo.ID {
-			job, err = pm.LoadOrCreateJobInfo(info)
-			if err != nil {
-				logutil.BgLogger().Error("[interval-partition] load or create job info failed", zap.Error(err))
-				continue
+
+		if info == nil {
+			if !finishOldJob {
+				info = pm.getOldJob()
 			}
+			if info == nil {
+				finishOldJob = true
+				info = <-pm.jobCh
+			}
+		}
+
+		job, err = pm.LoadOrCreateJobInfo(info)
+		if err != nil {
+			logutil.BgLogger().Error("[interval-partition] load or create job info failed", zap.Error(err))
+			continue
 		}
 
 		err = pm.HandleJob(job, info)
 		if err != nil {
 			logutil.BgLogger().Error("[interval-partition] handle job failed", zap.Error(err))
-			time.Sleep(time.Second)
 			continue
 		}
 
@@ -134,17 +143,75 @@ func (pm *IntervalPartitionManager) RunWorkerLoop() {
 				time.Sleep(time.Second)
 				continue
 			}
-			pm.finishHandleInfo(info)
-			logutil.BgLogger().Error("[interval-partition] finish job", zap.String("table", info.tbInfo.Name.O),
+			pm.finishHandleInfo(info.pdInfo.ID)
+			logutil.BgLogger().Info("[interval-partition] finish job", zap.Int64("job-id", job.id), zap.String("table", info.tbInfo.Name.O),
 				zap.String("partition", info.pdInfo.Name.O))
 			info = nil
 		}
 	}
 }
 
-func (pm *IntervalPartitionManager) finishHandleInfo(info *TablePartition) {
+func (pm *IntervalPartitionManager) getOldJob() *TablePartition {
+	job, err := pm.LoadOldJobInfo()
+	if err != nil {
+		logutil.BgLogger().Error("[interval-partition] load old job info failed", zap.Error(err))
+	}
+	if job == nil {
+		return nil
+	}
+	is := pm.infoCache.GetLatest()
+	tb, ok1 := is.TableByID(job.tableID)
+	db, ok2 := is.SchemaByName(model.NewCIStr(job.dbName))
+	if !ok1 || !ok2 {
+		err := pm.cancelAndFinishJob(job)
+		if err != nil {
+			logutil.BgLogger().Error("[interval-partition] cancel and finish job failed", zap.Error(err))
+		}
+		return nil
+	}
+	pi := tb.Meta().GetPartitionInfo()
+	var pdInfo *model.PartitionDefinition
+	for i := range pi.Definitions {
+		if pi.Definitions[i].ID == job.partitionID {
+			pdInfo = &pi.Definitions[i]
+			break
+		}
+	}
+	if pdInfo == nil {
+		err := pm.cancelAndFinishJob(job)
+		if err != nil {
+			logutil.BgLogger().Error("[interval-partition] cancel and finish job failed", zap.Error(err))
+		}
+		return nil
+	}
+	return &TablePartition{
+		dbInfo: db,
+		tbInfo: tb.Meta(),
+		pdInfo: pdInfo,
+	}
+}
+
+func (pm *IntervalPartitionManager) cancelAndFinishJob(job *Job) error {
+	job.state = JobStateCancelled
+	err := pm.updateJobState(job)
+	if err != nil {
+		logutil.BgLogger().Error("[interval-partition] update job state failed", zap.Error(err))
+		return err
+	}
+	err = pm.FinishJob(job)
+	if err != nil {
+		logutil.BgLogger().Error("[interval-partition] finish job failed", zap.Error(err))
+		return err
+	}
+	pm.finishHandleInfo(job.partitionID)
+	logutil.BgLogger().Error("[interval-partition] finish canceled job", zap.Int64("job-id", job.id), zap.String("table", job.tableName),
+		zap.String("partition", job.partitionName))
+	return nil
+}
+
+func (pm *IntervalPartitionManager) finishHandleInfo(pid int64) {
 	pm.mu.Lock()
-	delete(pm.handlingInfos, info.pdInfo.ID)
+	delete(pm.handlingInfos, pid)
 	pm.mu.Unlock()
 }
 
