@@ -2,7 +2,6 @@ package interval
 
 import (
 	"context"
-	"fmt"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
@@ -172,12 +171,7 @@ func (pm *IntervalPartitionManager) createJobInfo(job *Job) error {
 	}
 	defer pm.sessPool.put(ctx)
 
-	sql := fmt.Sprintf("INSERT IGNORE INTO mysql.interval_partition_jobs (id, db_name, table_name, table_id, partition_name, partition_id, state) VALUES (%v, '%v', '%v', %v, '%v', %v, '%v')",
-		job.id, job.dbName, job.tableName, job.tableID, job.partitionName, job.partitionID, job.state)
-
-	logutil.BgLogger().Info("[interval-partition] create job sql", zap.String("sql", sql))
-	//_, err = ctx.(sqlexec.SQLExecutor).ExecuteInternal(context.Background(), insertJobSQL, job.id, job.dbName, job.tableName, job.tableID, job.partitionName, job.partitionID, job.state)
-	_, err = ctx.(sqlexec.SQLExecutor).ExecuteInternal(context.Background(), sql)
+	_, err = ctx.(sqlexec.SQLExecutor).ExecuteInternal(context.Background(), insertJobSQL, job.id, job.dbName, job.tableName, job.tableID, job.partitionName, job.partitionID, job.state)
 	return err
 }
 

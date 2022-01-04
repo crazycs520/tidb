@@ -384,6 +384,8 @@ const (
 		partition_name VARCHAR(64) NOT NULL,
 		partition_id BIGINT NOT NULL,
 		state VARCHAR(200),
+		start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 		PRIMARY KEY(id),
 		UNIQUE INDEX(partition_id)
 	);`
@@ -395,6 +397,8 @@ const (
 		partition_name VARCHAR(64) NOT NULL,
 		partition_id BIGINT NOT NULL,
 		state VARCHAR(200),
+		start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 		PRIMARY KEY(id)
 	);`
 	CreateAutoIntervalJobSequence = `CREATE SEQUENCE IF NOT EXISTS mysql.interval_partition_jobs_seq CACHE = 1;`
