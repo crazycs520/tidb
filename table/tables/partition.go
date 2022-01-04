@@ -1148,6 +1148,13 @@ func partitionedTableAddRecord(ctx sessionctx.Context, t *partitionedTable, r []
 			return nil, errors.WithStack(table.ErrRowDoesNotMatchGivenPartitionSet)
 		}
 	}
+
+	for _, pd := range t.meta.Partition.Definitions {
+		if pd.ID == pid && pd.Readonly {
+			return nil, errors.Errorf("%v partition of %v table is marked readonly", pd.Name.O, t.meta.Name.O)
+		}
+	}
+
 	tbl := t.GetPartition(pid)
 	return tbl.AddRecord(ctx, r, opts...)
 }
@@ -1192,6 +1199,12 @@ func (t *partitionedTable) RemoveRecord(ctx sessionctx.Context, h kv.Handle, r [
 		return errors.Trace(err)
 	}
 
+	for _, pd := range t.meta.Partition.Definitions {
+		if pd.ID == pid && pd.Readonly {
+			return errors.Errorf("%v partition of %v table is marked readonly", pd.Name.O, t.meta.Name.O)
+		}
+	}
+
 	tbl := t.GetPartition(pid)
 	return tbl.RemoveRecord(ctx, h, r)
 }
@@ -1232,6 +1245,12 @@ func partitionedTableUpdateRecord(gctx context.Context, ctx sessionctx.Context, 
 		// Should not have been read from this partition! Checked already in GetPartitionByRow()
 		if _, ok := partitionSelection[from]; !ok {
 			return errors.WithStack(table.ErrRowDoesNotMatchGivenPartitionSet)
+		}
+	}
+
+	for _, pd := range t.meta.Partition.Definitions {
+		if pd.ID == to && pd.Readonly {
+			return errors.Errorf("%v partition of %v table is marked readonly", pd.Name.O, t.meta.Name.O)
 		}
 	}
 
