@@ -11,6 +11,8 @@ import (
 	"github.com/pingcap/tidb/dumpling/context"
 	"github.com/pingcap/tidb/interval/util"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 )
 
 func CreateCli(region string) (*athena.Athena, error) {
@@ -28,6 +30,7 @@ func CreateCli(region string) (*athena.Athena, error) {
 func CreateTable(cli *athena.Athena, db, table string, pid int64, s3BucketName string, tbInfo *model.TableInfo) error {
 	ddlSQL := buildCreateTableSQL(table, pid, s3BucketName, tbInfo)
 	_, err := execQuery(cli, db, ddlSQL)
+	logutil.BgLogger().Info("[athena] create table", zap.String("SQL", ddlSQL), zap.Error(err))
 	return err
 }
 
@@ -104,6 +107,9 @@ func buildCreateTableSQL(table string, pid int64, s3BucketName string, tbInfo *m
 	writeKey(buf, util.GetTablePartitionName(table, pid))
 	buf.WriteString(" (")
 	for i, col := range tbInfo.Columns {
+		if col.State != model.StatePublic || col.Hidden {
+			continue
+		}
 		if i > 0 {
 			buf.WriteString(", ")
 		}

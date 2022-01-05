@@ -281,6 +281,9 @@ func (pm *IntervalPartitionManager) getTableNeedIntervalPartition(ctx sessionctx
 	}
 	result := []*TablePartition{}
 	for i := range pi.Definitions {
+		if pi.Definitions[i].Engine != "" {
+			continue
+		}
 		rangeValueStr := pi.Definitions[i].LessThan[0]
 		if rangeValueStr == "MAXVALUE" {
 			return nil

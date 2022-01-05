@@ -2,6 +2,7 @@ package dumpling
 
 import (
 	"context"
+	"os"
 
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/prometheus/client_golang/prometheus"
@@ -25,7 +26,8 @@ func DumpDataToS3Bucket(host, port, bucketName, s3Region, sql string) error {
 
 func dumpData(host, port, s3Path, s3Region, sql string) error {
 	conf := export.DefaultConfig()
-	conf.DefineFlags(pflag.CommandLine)
+	flagSet := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
+	conf.DefineFlags(flagSet)
 
 	flags := []struct {
 		name  string
@@ -43,13 +45,13 @@ func dumpData(host, port, s3Path, s3Region, sql string) error {
 		{"no-header", "true"},
 	}
 	for _, flag := range flags {
-		err := pflag.Set(flag.name, flag.value)
+		err := flagSet.Set(flag.name, flag.value)
 		if err != nil {
 			return err
 		}
 	}
 
-	err := conf.ParseFromFlags(pflag.CommandLine)
+	err := conf.ParseFromFlags(flagSet)
 	if err != nil {
 		return err
 	}

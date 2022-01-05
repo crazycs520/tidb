@@ -2,6 +2,7 @@ package interval
 
 import (
 	"sync"
+	"time"
 
 	"github.com/ngaut/pools"
 	"github.com/pingcap/errors"
@@ -47,6 +48,8 @@ func (sg *sessionPool) get() (sessionctx.Context, error) {
 	ctx := resource.(sessionctx.Context)
 	ctx.GetSessionVars().SetStatusFlag(mysql.ServerStatusAutocommit, true)
 	ctx.GetSessionVars().InRestrictedSQL = true
+	ctx.GetSessionVars().TimeZone = time.Local
+	ctx.GetSessionVars().StmtCtx.TimeZone = time.Local
 	return ctx, nil
 }
 

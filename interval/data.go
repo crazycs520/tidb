@@ -11,6 +11,8 @@ import (
 	"github.com/pingcap/tidb/interval/dumpling"
 	"github.com/pingcap/tidb/interval/util"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 )
 
 type CopyDataSuite struct {
@@ -37,7 +39,19 @@ func NewCopyDataSuite(job *Job, info *TablePartition, region string) *CopyDataSu
 }
 
 func (s *CopyDataSuite) CopyDataToAWSS3() error {
-	err := s.prepareAWSS3Bucket()
+	var err error
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		err = errors.New("copy data to aws s3 paniced")
+		logutil.BgLogger().Error("panic in the CopyDataToAWSS3",
+			zap.Reflect("r", r),
+			zap.Stack("stack"))
+	}()
+
+	err = s.prepareAWSS3Bucket()
 	if err != nil {
 		return errors.Trace(err)
 	}
