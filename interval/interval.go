@@ -2,6 +2,7 @@ package interval
 
 import (
 	"context"
+	"github.com/pingcap/tidb/config"
 	"sync"
 	"time"
 
@@ -21,7 +22,9 @@ const AWSS3Engine = "aws_s3"
 var GlobalIntervalPartitionManager *IntervalPartitionManager
 
 func Setup(ctxPool *pools.ResourcePool, ddl ddl.DDL, infoCache *infoschema.InfoCache, ownerManager owner.Manager) {
-	GlobalIntervalPartitionManager = NewIntervalPartitionManager(ctxPool, ddl, infoCache, ownerManager)
+	cfg := config.GetGlobalConfig()
+	region := cfg.Aws.Region
+	GlobalIntervalPartitionManager = NewIntervalPartitionManager(region, ctxPool, ddl, infoCache, ownerManager)
 	GlobalIntervalPartitionManager.Start()
 }
 
@@ -40,6 +43,8 @@ func TryAutoCreateIntervalPartition(ctx sessionctx.Context, dbName string, tbInf
 }
 
 type IntervalPartitionManager struct {
+	s3Region string
+
 	ctx          context.Context
 	cancel       context.CancelFunc
 	sessPool     *sessionPool
@@ -55,6 +60,7 @@ type IntervalPartitionManager struct {
 	taskCh chan *AutoCreatePartitionTask
 
 	awsTableMeta sync.Map // partition id -> PartitionTableMeta
+	loadedMeta   bool
 }
 
 type PartitionTableMeta struct {
@@ -64,9 +70,10 @@ type PartitionTableMeta struct {
 	tableName string
 }
 
-func NewIntervalPartitionManager(ctxPool *pools.ResourcePool, ddl ddl.DDL, infoCache *infoschema.InfoCache, ownerManager owner.Manager) *IntervalPartitionManager {
+func NewIntervalPartitionManager(s3Region string, ctxPool *pools.ResourcePool, ddl ddl.DDL, infoCache *infoschema.InfoCache, ownerManager owner.Manager) *IntervalPartitionManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &IntervalPartitionManager{
+		s3Region:      s3Region,
 		ctx:           ctx,
 		cancel:        cancel,
 		sessPool:      newSessionPool(ctxPool),
