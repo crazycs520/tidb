@@ -833,14 +833,19 @@ type PartitionInfo struct {
 	States              []PartitionState      `json:"states"`
 	Num                 uint64                `json:"num"`
 	Interval            IntervalInfo          `json:"interval"`
+	AutoAction          AutoActionInfo        `json:"auto_action"`
+}
+
+type AutoActionInfo struct {
+	MovePartitionExpr   string `json:"move_partition_expr"`
+	MoveToEngine        string `json:"move_to_engine"`
+	DeletePartitionExpr string `json:"delete_partition_expr"`
 }
 
 type IntervalInfo struct {
 	Enable            bool
 	AutoIntervalValue int64  `json:"auto_interval_value"`
 	AutoIntervalUnit  string `json:"auto_interval_unit"`
-	MovePartitionExpr string `json:"move_partition_expr"`
-	Engine            string `json:"engine"`
 }
 
 // GetNameByID gets the partition name by ID.
