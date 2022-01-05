@@ -15,7 +15,6 @@
 package executor
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -397,24 +396,6 @@ func (e *TableReaderExecutor) fetchResultFromAws(pid int64) error {
 	result, err := athena.QueryTableData(cli, "test", query)
 	if err != nil {
 		return err
-	}
-	rowBuf := bytes.NewBuffer(nil)
-	for rowIdx, row := range result.Rows {
-		if rowIdx == 0 {
-			continue
-		}
-		rowBuf.Reset()
-		for i, col := range row.Data {
-			if i > 0 {
-				rowBuf.WriteString(",")
-			}
-			if col.VarCharValue == nil {
-				rowBuf.WriteString("")
-			} else {
-				rowBuf.WriteString(*col.VarCharValue)
-			}
-		}
-		fmt.Println(rowBuf.String())
 	}
 	e.awsQueryResult = result
 	return nil

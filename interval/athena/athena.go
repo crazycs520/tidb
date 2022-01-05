@@ -46,7 +46,6 @@ func QueryTableData(cli *athena.Athena, db, query string) (*athena.ResultSet, er
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("------------------------\n%#v\n", result)
 	return result, nil
 }
 
