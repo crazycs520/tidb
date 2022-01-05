@@ -1,41 +1,19 @@
-//package athena
-package main
+package athena
 
 import (
 	"bytes"
 	"fmt"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/athena"
 	"github.com/pingcap/tidb/dumpling/context"
 	"github.com/pingcap/tidb/interval/util"
-	"os"
-	"time"
+	"github.com/pingcap/tidb/parser/model"
 )
 
-func main() {
-	s3Path := util.GetTablePartitionBucketName("t0", 0)
-	cols := []string{"name", "begin"}
-
-	sql := buildCreateTableSQL("t0", 0, s3Path, cols)
-	fmt.Println(sql)
-	region := "us-west-2"
-	cli, err := createCli(region)
-	mustNil(err)
-	err = createTable(cli, "test", "t0", 0, s3Path, cols)
-	mustNil(err)
-	err = queryTableData(cli, "test", "t0", 0)
-	mustNil(err)
-}
-
-func mustNil(err error) {
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-}
-
-func createCli(region string) (*athena.Athena, error) {
+func CreateCli(region string) (*athena.Athena, error) {
 	awscfg := &aws.Config{}
 	awscfg.WithRegion(region)
 	sess, err := session.NewSession(awscfg)
@@ -47,13 +25,13 @@ func createCli(region string) (*athena.Athena, error) {
 	return svc, nil
 }
 
-func createTable(cli *athena.Athena, db, table string, pid int64, s3Path string, cols []string) error {
-	ddlSQL := buildCreateTableSQL(table, pid, util.GetTablePartitionBucketName(table, pid), cols)
+func CreateTable(cli *athena.Athena, db, table string, pid int64, s3BucketName string, tbInfo *model.TableInfo) error {
+	ddlSQL := buildCreateTableSQL(table, pid, s3BucketName, tbInfo)
 	_, err := execQuery(cli, db, ddlSQL)
 	return err
 }
 
-func queryTableData(cli *athena.Athena, db, table string, pid int64) error {
+func QueryTableData(cli *athena.Athena, db, table string, pid int64) error {
 	tableName := util.GetTablePartitionName(table, pid)
 	query := fmt.Sprintf("SELECT * FROM \"%v\".\"%v\" limit 10;", db, tableName)
 	result, err := execQuery(cli, db, query)
@@ -120,16 +98,16 @@ func execQuery(cli *athena.Athena, db, query string) (*athena.ResultSet, error) 
 
 type DDLEngine struct{}
 
-func buildCreateTableSQL(table string, pid int64, s3BucketName string, cols []string) string {
+func buildCreateTableSQL(table string, pid int64, s3BucketName string, tbInfo *model.TableInfo) string {
 	buf := bytes.NewBuffer(make([]byte, 0, 32))
 	buf.WriteString("CREATE EXTERNAL TABLE ")
 	writeKey(buf, util.GetTablePartitionName(table, pid))
 	buf.WriteString(" (")
-	for i, col := range cols {
+	for i, col := range tbInfo.Columns {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		writeKey(buf, col)
+		writeKey(buf, col.Name.L)
 		buf.WriteString(" string")
 	}
 	buf.WriteString(" ) ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat' ")

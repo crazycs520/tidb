@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/pingcap/tidb/domain"
+	"github.com/pingcap/tidb/interval"
 	"math"
 	"sync"
 	"time"
@@ -1173,7 +1174,7 @@ func addRecordWithRetry(tb table.Table, ctx sessionctx.Context, r []types.Datum,
 	if !ok {
 		return recordID, originErr
 	}
-	succ, err := do.TryAutoCreateIntervalPartition(ctx, dbInfo.Name.O, tb.Meta(), val, unsigned)
+	succ, err := interval.TryAutoCreateIntervalPartition(ctx, dbInfo.Name.O, tb.Meta(), val, unsigned)
 	if err != nil {
 		return recordID, err
 	}

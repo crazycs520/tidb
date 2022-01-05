@@ -1,25 +1,12 @@
-//package dumpling
-package main
+package dumpling
 
 import (
 	"context"
-	"fmt"
-	"github.com/pingcap/tidb/interval/util"
 
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/pflag"
-	"go.uber.org/zap"
 )
-
-func main() {
-	//err := testDumpling("0.0.0.0", "4000", "/tmp/test", "", "select * from test.t0 partition (p0)")
-	s3Path := "s3://" + util.GetTablePartitionBucketName("t0", 0)
-	err := testDumpling("0.0.0.0", "4000", s3Path, "us-west-2", "select * from test.t0 partition (p0)")
-	if err != nil {
-		fmt.Printf("dumpling failed: %+v\n", err)
-	}
-}
 
 var prometheusRegistry = prometheus.NewRegistry()
 
@@ -31,7 +18,12 @@ func init() {
 	prometheus.DefaultGatherer = prometheusRegistry
 }
 
-func testDumpling(host, port, s3Path, s3Region, sql string) error {
+func DumpDataToS3Bucket(host, port, bucketName, s3Region, sql string) error {
+	s3Path := "s3://" + bucketName
+	return dumpData(host, port, s3Path, s3Region, sql)
+}
+
+func dumpData(host, port, s3Path, s3Region, sql string) error {
 	conf := export.DefaultConfig()
 	conf.DefineFlags(pflag.CommandLine)
 
@@ -62,7 +54,6 @@ func testDumpling(host, port, s3Path, s3Region, sql string) error {
 		return err
 	}
 	dumper, err := export.NewDumper(context.Background(), conf)
-	dumper.L().Info("show config", zap.String("cfg", conf.String()))
 	if err != nil {
 		return err
 	}

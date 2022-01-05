@@ -17,7 +17,6 @@ package domain
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/tidb/interval"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -92,8 +91,6 @@ type Domain struct {
 	indexUsageSyncLease  time.Duration
 	planReplayer         *planReplayer
 	expiredTimeStamp4PC  types.Time
-
-	ipManager *interval.IntervalPartitionManager
 
 	serverID             uint64
 	serverIDSession      *concurrency.Session
@@ -714,9 +711,6 @@ func (do *Domain) Close() {
 	if do.onClose != nil {
 		do.onClose()
 	}
-	if do.ipManager != nil {
-		do.ipManager.Stop()
-	}
 	logutil.BgLogger().Info("domain closed", zap.Duration("take time", time.Since(startTime)))
 }
 
@@ -837,10 +831,6 @@ func (do *Domain) Init(ddlLease time.Duration, sysExecutorFactory func(*Domain) 
 		return err
 	}
 
-	ipmCtxPool := pools.NewResourcePool(sysFac, 10, 10, resourceIdleTimeout)
-	do.ipManager = interval.NewIntervalPartitionManager(ipmCtxPool, do.ddl, do.infoCache, do.ddl.OwnerManager())
-	do.ipManager.Start()
-
 	if config.GetGlobalConfig().Experimental.EnableGlobalKill {
 		if do.etcdClient != nil {
 			err := do.acquireServerID(ctx)
@@ -877,6 +867,14 @@ func (do *Domain) Init(ddlLease time.Duration, sysExecutorFactory func(*Domain) 
 	}
 
 	return nil
+}
+
+func (do *Domain) GetIntervalNeeded() (*pools.ResourcePool, ddl.DDL, *infoschema.InfoCache, owner.Manager) {
+	sysFac := func() (pools.Resource, error) {
+		return do.sysExecutorFactory(do)
+	}
+	ipmCtxPool := pools.NewResourcePool(sysFac, 10, 10, resourceIdleTimeout)
+	return ipmCtxPool, do.ddl, do.infoCache, do.ddl.OwnerManager()
 }
 
 type sessionPool struct {
@@ -1779,10 +1777,6 @@ func (do *Domain) serverIDKeeper() {
 			return
 		}
 	}
-}
-
-func (do *Domain) TryAutoCreateIntervalPartition(ctx sessionctx.Context, dbName string, tbInfo *model.TableInfo, val int64, unsigned bool) (bool, error) {
-	return do.ipManager.TryAutoCreateIntervalPartition(ctx, dbName, tbInfo, val, unsigned)
 }
 
 // MockInfoCacheAndLoadInfoSchema only used in unit test

@@ -1,31 +1,14 @@
-//package awss3
-package main
+package awss3
 
 import (
-	"fmt"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
-
-const bucketNamePrefix = "tidb-interval-partition-"
-
-func main() {
-	region := "us-west-2"
-	cli, err := CreateS3Client(region)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	err = CreateBucketForTablePartition(cli, "t0", 0, region)
-	//err = deleteBucketForTablePartition(cli, "t0", 0, region)
-	fmt.Println(err)
-}
 
 func CreateS3Client(region string) (*s3.S3, error) {
 	sess, err := session.NewSession(&aws.Config{
@@ -37,8 +20,7 @@ func CreateS3Client(region string) (*s3.S3, error) {
 	return s3.New(sess), nil
 }
 
-func CreateBucketForTablePartition(svc *s3.S3, table string, pid int64, region string) error {
-	name := getTablePartitionBucketName(table, pid)
+func CreateBucketForTablePartition(svc *s3.S3, name, region string) error {
 	input := &s3.CreateBucketInput{
 		Bucket: aws.String(name),
 		CreateBucketConfiguration: &s3.CreateBucketConfiguration{
@@ -59,9 +41,7 @@ func CreateBucketForTablePartition(svc *s3.S3, table string, pid int64, region s
 	return err
 }
 
-func deleteBucketForTablePartition(svc *s3.S3, table string, pid int64) error {
-	name := getTablePartitionBucketName(table, pid)
-
+func DeleteBucketForTablePartition(svc *s3.S3, name string) error {
 	err := deleteAllBucketItem(svc, name)
 	if err != nil {
 		return err
@@ -86,8 +66,4 @@ func deleteAllBucketItem(svc *s3.S3, bucked string) error {
 		return err
 	}
 	return nil
-}
-
-func getTablePartitionBucketName(table string, pid int64) string {
-	return bucketNamePrefix + table + "-p" + strconv.FormatInt(pid, 10)
 }

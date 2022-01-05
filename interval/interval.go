@@ -16,6 +16,27 @@ import (
 	"go.uber.org/zap"
 )
 
+var GlobalIntervalPartitionManager *IntervalPartitionManager
+
+func Setup(ctxPool *pools.ResourcePool, ddl ddl.DDL, infoCache *infoschema.InfoCache, ownerManager owner.Manager) {
+	GlobalIntervalPartitionManager = NewIntervalPartitionManager(ctxPool, ddl, infoCache, ownerManager)
+	GlobalIntervalPartitionManager.Start()
+}
+
+func Close() {
+	if GlobalIntervalPartitionManager == nil {
+		return
+	}
+	GlobalIntervalPartitionManager.Stop()
+}
+
+func TryAutoCreateIntervalPartition(ctx sessionctx.Context, dbName string, tbInfo *model.TableInfo, val int64, unsigned bool) (bool, error) {
+	if GlobalIntervalPartitionManager == nil {
+		return false, nil
+	}
+	return GlobalIntervalPartitionManager.TryAutoCreateIntervalPartition(ctx, dbName, tbInfo, val, unsigned)
+}
+
 type IntervalPartitionManager struct {
 	ctx          context.Context
 	cancel       context.CancelFunc

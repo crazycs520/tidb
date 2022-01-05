@@ -56,12 +56,32 @@ func (pm *IntervalPartitionManager) HandleJob(job *Job, info *TablePartition) er
 		}
 		job.state = JobStateMovingData
 	case JobStateMovingData:
-		logutil.BgLogger().Info("[interval-partition] moving table partition data",
+		start := time.Now()
+		suite := NewCopyDataSuite(job, info, "us-west-2")
+		err := suite.CopyDataToAWSS3()
+		if err != nil {
+			job.state = JobStateCancelled
+			logutil.BgLogger().Info("[interval-partition] move table partition data to aws s3 failed",
+				zap.Int64("job-id", job.id),
+				zap.Duration("cost", time.Since(start)),
+				zap.String("table", job.tableName),
+				zap.String("partition", job.partitionName),
+				zap.Error(err))
+			break
+		}
+
+		job.state = JobStateUpdateTableMeta
+		logutil.BgLogger().Info("[interval-partition] move table partition data to aws s3 success",
+			zap.Int64("job-id", job.id),
+			zap.Duration("cost", time.Since(start)),
 			zap.String("table", job.tableName),
 			zap.String("partition", job.partitionName))
-
-	// check moving data status and update state
-	//time.Sleep(time.Second)
+	case JobStateUpdateTableMeta:
+		err := pm.updatePartitionEngine(ctx, info)
+		if err != nil {
+			return err
+		}
+		job.state = JobStateDone
 	case JobStateCancelled:
 	default:
 		logutil.BgLogger().Info("[interval-partition]  unknown state",
@@ -117,6 +137,13 @@ func (pm *IntervalPartitionManager) FinishJob(job *Job) error {
 	}
 	defer pm.sessPool.put(ctx)
 
+	if job.state != JobStateDone {
+		//err = RemoveDataInAWSS3(job.tableName, job.partitionID, "us-west-2")
+		//if err != nil {
+		//	logutil.BgLogger().Warn("[interval-partition] remove data in aws s3 failed", zap.Error(err))
+		//}
+	}
+
 	_, err = ctx.(sqlexec.SQLExecutor).ExecuteInternal(context.Background(), insertDoneJobSQL, job.id)
 	if err != nil {
 		return err
@@ -130,6 +157,14 @@ func (pm *IntervalPartitionManager) markPartitionReadOnly(ctx sessionctx.Context
 	return pm.ddl.AlterTablePartitionMeta(ctx, info.dbInfo, info.tbInfo, &ddl.AlterTablePartitionInfo{
 		PID:      info.pdInfo.ID,
 		ReadOnly: true,
+	})
+}
+
+func (pm *IntervalPartitionManager) updatePartitionEngine(ctx sessionctx.Context, info *TablePartition) error {
+	return pm.ddl.AlterTablePartitionMeta(ctx, info.dbInfo, info.tbInfo, &ddl.AlterTablePartitionInfo{
+		PID:      info.pdInfo.ID,
+		ReadOnly: true,
+		Engine:   "AWS_S3",
 	})
 }
 

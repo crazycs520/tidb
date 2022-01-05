@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/executor"
+	"github.com/pingcap/tidb/interval"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -212,9 +213,14 @@ func main() {
 		svr.Close()
 		cleanup(svr, storage, dom, graceful)
 		cpuprofile.StopCPUProfiler()
+		interval.Close()
 		close(exited)
 	})
 	topsql.SetupTopSQL()
+
+	sessionPool, ddl, infoCache, ownerManager := dom.GetIntervalNeeded()
+	interval.Setup(sessionPool, ddl, infoCache, ownerManager)
+
 	terror.MustNil(svr.Run())
 	<-exited
 	syncLog()
