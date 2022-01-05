@@ -13,5 +13,6 @@ func GetTablePartitionBucketName(table string, pid int64) string {
 }
 
 func GetTablePartitionName(table string, pid int64) string {
+	table = strings.ToLower(table)
 	return table + "-p" + strconv.FormatInt(pid, 10)
 }

@@ -41,15 +41,13 @@ func DropTable(cli *athena.Athena, db, table string, pid int64) error {
 	return err
 }
 
-func QueryTableData(cli *athena.Athena, db, table string, pid int64) error {
-	tableName := util.GetTablePartitionName(table, pid)
-	query := fmt.Sprintf("SELECT * FROM \"%v\".\"%v\" limit 10;", db, tableName)
+func QueryTableData(cli *athena.Athena, db, query string) (*athena.ResultSet, error) {
 	result, err := execQuery(cli, db, query)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	fmt.Printf("%v\n", result)
-	return nil
+	fmt.Printf("------------------------\n%#v\n", result)
+	return result, nil
 }
 
 const (
