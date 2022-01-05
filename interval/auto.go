@@ -61,23 +61,31 @@ func (pm *IntervalPartitionManager) handleAutoCreatePartitionTask(task *AutoCrea
 
 	ctx.GetSessionVars().TimeZone = task.TimeZone
 	ctx.GetSessionVars().StmtCtx.TimeZone = task.TimeZone
-	value, isMaxValue, err := pm.getTablePartitionMaxValue(ctx, task.tbInfo, task.unsigned)
+	tb, ok := pm.infoCache.GetLatest().TableByID(task.tbInfo.ID)
+	if !ok {
+		return false, nil
+	}
+	tbInfo := tb.Meta()
+	value, isMaxValue, err := pm.getTablePartitionMaxValue(ctx, tbInfo, task.unsigned)
 	if err != nil {
 		return false, err
 	}
 	if isMaxValue {
 		return false, nil
 	}
-	nextValue, err := pm.calculateNextPartitionValue(ctx, task.tbInfo, value)
+	if value >= task.value {
+		return true, nil
+	}
+	nextValue, err := pm.calculateNextPartitionValue(ctx, tbInfo, value)
 	if err != nil {
 		return false, err
 	}
 	if nextValue < task.value {
 		return false, nil
 	}
-	partName := fmt.Sprintf("auto_p%v", len(task.tbInfo.Partition.Definitions))
+	partName := fmt.Sprintf("auto_p%v", len(tbInfo.Partition.Definitions))
 	ddlSQL := fmt.Sprintf("ALTER TABLE `%v`.`%v` ADD PARTITION ( PARTITION %v VALUES LESS THAN (%v))",
-		task.dbName, task.tbInfo.Name.O, partName, nextValue)
+		task.dbName, tbInfo.Name.O, partName, nextValue)
 
 	_, err = ctx.(sqlexec.SQLExecutor).ExecuteInternal(context.Background(), ddlSQL)
 	if err != nil {
