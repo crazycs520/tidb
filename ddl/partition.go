@@ -1191,6 +1191,7 @@ func onTruncateTablePartition(d *ddlCtx, t *meta.Meta, job *model.Job) (int64, e
 				}
 				def.ID = pid
 				def.Readonly = false
+				def.Engine = ""
 				// Shallow copy only use the def.ID in event handle.
 				newPartitions = append(newPartitions, *def)
 				break

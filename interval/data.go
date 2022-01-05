@@ -66,13 +66,22 @@ func (s *CopyDataSuite) CopyDataToAWSS3() error {
 	return nil
 }
 
-func RemoveDataInAWSS3(table string, pid int64, region string) error {
+func RemoveDataInAWSS3(db, table string, pid int64, region string) error {
 	s3Cli, err := awss3.CreateS3Client(region)
 	if err != nil {
 		return err
 	}
 	s3BucketName := util.GetTablePartitionBucketName(table, pid)
-	return awss3.DeleteBucketForTablePartition(s3Cli, s3BucketName)
+	err = awss3.DeleteBucketForTablePartition(s3Cli, s3BucketName)
+	if err != nil {
+		return err
+	}
+
+	cli, err := athena.CreateCli(region)
+	if err != nil {
+		return err
+	}
+	return athena.DropTable(cli, db, table, pid)
 }
 
 func (s *CopyDataSuite) prepareAWSS3Bucket() error {

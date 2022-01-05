@@ -16,6 +16,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const AWSS3Engine = "aws_s3"
+
 var GlobalIntervalPartitionManager *IntervalPartitionManager
 
 func Setup(ctxPool *pools.ResourcePool, ddl ddl.DDL, infoCache *infoschema.InfoCache, ownerManager owner.Manager) {
@@ -51,6 +53,15 @@ type IntervalPartitionManager struct {
 
 	// For auto create partition.
 	taskCh chan *AutoCreatePartitionTask
+
+	awsTableMeta sync.Map // partition id -> PartitionTableMeta
+}
+
+type PartitionTableMeta struct {
+	tableID   int64
+	pid       int64
+	db        string
+	tableName string
 }
 
 func NewIntervalPartitionManager(ctxPool *pools.ResourcePool, ddl ddl.DDL, infoCache *infoschema.InfoCache, ownerManager owner.Manager) *IntervalPartitionManager {
@@ -65,6 +76,7 @@ func NewIntervalPartitionManager(ctxPool *pools.ResourcePool, ddl ddl.DDL, infoC
 		jobCh:         make(chan *TablePartition),
 		handlingInfos: make(map[int64]struct{}),
 		taskCh:        make(chan *AutoCreatePartitionTask),
+		awsTableMeta:  sync.Map{},
 	}
 }
 
@@ -73,6 +85,7 @@ func (pm *IntervalPartitionManager) Start() {
 	go util.WithRecovery(pm.RunCheckerLoop, nil)
 	go util.WithRecovery(pm.RunWorkerLoop, nil)
 	go util.WithRecovery(pm.RunAutoCreatePartitionLoop, nil)
+	go util.WithRecovery(pm.RunMetaMaintainLoop, nil)
 }
 
 func (pm *IntervalPartitionManager) Stop() {
@@ -246,6 +259,9 @@ func (pm *IntervalPartitionManager) GetNeedIntervalTablePartitions(cnt int) []*T
 	}
 	defer pm.sessPool.put(ctx)
 	for _, db := range dbs {
+		if util.IsMemDB(db.Name.L) || util.IsSysDB(db.Name.L) {
+			continue
+		}
 		tbs := is.SchemaTables(db.Name)
 		for _, tb := range tbs {
 			tmp := pm.getTableNeedIntervalPartition(ctx, db, tb.Meta())

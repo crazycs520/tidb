@@ -138,10 +138,17 @@ func (pm *IntervalPartitionManager) FinishJob(job *Job) error {
 	defer pm.sessPool.put(ctx)
 
 	if job.state != JobStateDone {
-		//err = RemoveDataInAWSS3(job.tableName, job.partitionID, "us-west-2")
-		//if err != nil {
-		//	logutil.BgLogger().Warn("[interval-partition] remove data in aws s3 failed", zap.Error(err))
-		//}
+		err = RemoveDataInAWSS3(job.dbName, job.tableName, job.partitionID, "us-west-2")
+		if err != nil {
+			logutil.BgLogger().Warn("[interval-partition] remove data in aws s3 failed", zap.Error(err))
+		}
+	} else if job.state == JobStateDone {
+		pm.awsTableMeta.Store(job.partitionID, &PartitionTableMeta{
+			tableID:   job.tableID,
+			pid:       job.partitionID,
+			db:        job.dbName,
+			tableName: job.tableName,
+		})
 	}
 
 	_, err = ctx.(sqlexec.SQLExecutor).ExecuteInternal(context.Background(), insertDoneJobSQL, job.id)
@@ -164,7 +171,7 @@ func (pm *IntervalPartitionManager) updatePartitionEngine(ctx sessionctx.Context
 	return pm.ddl.AlterTablePartitionMeta(ctx, info.dbInfo, info.tbInfo, &ddl.AlterTablePartitionInfo{
 		PID:      info.pdInfo.ID,
 		ReadOnly: true,
-		Engine:   "AWS_S3",
+		Engine:   AWSS3Engine,
 	})
 }
 

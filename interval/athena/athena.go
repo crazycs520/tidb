@@ -34,6 +34,13 @@ func CreateTable(cli *athena.Athena, db, table string, pid int64, s3BucketName s
 	return err
 }
 
+func DropTable(cli *athena.Athena, db, table string, pid int64) error {
+	ddlSQL := fmt.Sprintf("DROP TABLE IF EXISTS `%v`.`%v`;", db, util.GetTablePartitionName(table, pid))
+	_, err := execQuery(cli, db, ddlSQL)
+	logutil.BgLogger().Info("[athena] drop table", zap.String("SQL", ddlSQL), zap.Error(err))
+	return err
+}
+
 func QueryTableData(cli *athena.Athena, db, table string, pid int64) error {
 	tableName := util.GetTablePartitionName(table, pid)
 	query := fmt.Sprintf("SELECT * FROM \"%v\".\"%v\" limit 10;", db, tableName)

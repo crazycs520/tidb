@@ -6712,7 +6712,7 @@ func (d *ddl) AlterPlacementPolicy(ctx sessionctx.Context, stmt *ast.AlterPlacem
 	return errors.Trace(err)
 }
 
-var supportedEngineList = []string{"AWS_S3"}
+var supportedEngineList = []string{"aws_s3"}
 
 func (d *ddl) AlterTablePartitionsMoveEngine(ctx sessionctx.Context, stmt *ast.AlterTableMoveStmt) (err error) {
 	tbInfo := stmt.Table.TableInfo
@@ -6723,7 +6723,7 @@ func (d *ddl) AlterTablePartitionsMoveEngine(ctx sessionctx.Context, stmt *ast.A
 	}
 	// check engine
 	found := false
-	engineName := strings.ToUpper(stmt.EngineName)
+	engineName := strings.ToLower(stmt.EngineName)
 	for _, e := range supportedEngineList {
 		if engineName == e {
 			found = true

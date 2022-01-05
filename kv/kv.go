@@ -271,6 +271,8 @@ const (
 	TiFlash
 	// TiDB means the type of a store is TiDB.
 	TiDB
+
+	AwsS3
 	// UnSpecified means the store type is unknown
 	UnSpecified = 255
 )
@@ -283,9 +285,13 @@ func (t StoreType) Name() string {
 		return "tidb"
 	} else if t == TiKV {
 		return "tikv"
+	} else if t == AwsS3 {
+		return AWSS3Engine
 	}
 	return "unspecified"
 }
+
+const AWSS3Engine = "aws_s3"
 
 // Request represents a kv request.
 type Request struct {
