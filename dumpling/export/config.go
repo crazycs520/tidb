@@ -478,7 +478,7 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		conf.SessionParams[k] = v
 	}
 
-	err = conf.BackendOptions.ParseFromFlags(pflag.CommandLine)
+	err = conf.BackendOptions.ParseFromFlags(flags)
 	if err != nil {
 		return errors.Trace(err)
 	}

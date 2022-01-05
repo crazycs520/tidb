@@ -171,7 +171,7 @@ func buildCopTasks(bo *Backoffer, cache *RegionCache, ranges *KeyRanges, req *kv
 		cmdType = tikvrpc.CmdCopStream
 	}
 
-	if req.StoreType == kv.TiDB {
+	if req.StoreType == kv.TiDB || req.StoreType == kv.AwsS3 {
 		return buildTiDBMemCopTasks(ranges, req)
 	}
 

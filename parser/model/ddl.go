@@ -94,12 +94,16 @@ const (
 	ActionAlterCacheTable               ActionType = 57
 	ActionAlterTableStatsOptions        ActionType = 58
 	ActionAlterNoCacheTable             ActionType = 59
+	ActionCreateTables                  ActionType = 60
+	ActionAlterTablePartitionsMove      ActionType = 61
+	ActionAlterTablePartitionMeta       ActionType = 62
 )
 
 var actionMap = map[ActionType]string{
 	ActionCreateSchema:                  "create schema",
 	ActionDropSchema:                    "drop schema",
 	ActionCreateTable:                   "create table",
+	ActionCreateTables:                  "create tables",
 	ActionDropTable:                     "drop table",
 	ActionAddColumn:                     "add column",
 	ActionDropColumn:                    "drop column",
@@ -155,6 +159,8 @@ var actionMap = map[ActionType]string{
 	ActionAlterCacheTable:               "alter table cache",
 	ActionAlterNoCacheTable:             "alter table nocache",
 	ActionAlterTableStatsOptions:        "alter table statistics options",
+	ActionAlterTablePartitionsMove:      "alter table partitions move",
+	ActionAlterTablePartitionMeta:       "alter table partition meta",
 
 	// `ActionAlterTableAlterPartition` is removed and will never be used.
 	// Just left a tombstone here for compatibility.
@@ -192,6 +198,15 @@ func (h *HistoryInfo) AddDBInfo(schemaVer int64, dbInfo *DBInfo) {
 func (h *HistoryInfo) AddTableInfo(schemaVer int64, tblInfo *TableInfo) {
 	h.SchemaVersion = schemaVer
 	h.TableInfo = tblInfo
+}
+
+// SetTableInfos is like AddTableInfo, but will add multiple table infos to the binlog.
+func (h *HistoryInfo) SetTableInfos(schemaVer int64, tblInfos []*TableInfo) {
+	h.SchemaVersion = schemaVer
+	h.MultipleTableInfos = make([]*TableInfo, len(tblInfos))
+	for i, info := range tblInfos {
+		h.MultipleTableInfos[i] = info
+	}
 }
 
 // Clean cleans history information.

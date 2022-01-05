@@ -16,11 +16,15 @@ package executor
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
+	awsathena "github.com/aws/aws-sdk-go/service/athena"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/expression"
+	"github.com/pingcap/tidb/interval/athena"
+	"github.com/pingcap/tidb/interval/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -111,6 +115,8 @@ type TableReaderExecutor struct {
 
 	// extraPIDColumnIndex is used for partition reader to add an extra partition ID column.
 	extraPIDColumnIndex offsetOptional
+
+	awsQueryResult *awsathena.ResultSet
 }
 
 // offsetOptional may be a positive integer, or invalid.
@@ -138,6 +144,13 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 
 	e.memTracker = memory.NewTracker(e.id, -1)
 	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
+
+	pid, storeType := getPhysicalTableEngine(e.table)
+	if storeType == kv.AWSS3Engine {
+		e.storeType = kv.AwsS3
+		fmt.Printf("store type is awss3 ------")
+		return e.fetchResultFromAws(pid)
+	}
 
 	var err error
 	if e.corColInFilter {
@@ -221,6 +234,34 @@ func (e *TableReaderExecutor) Next(ctx context.Context, req *chunk.Chunk) error 
 	if e.table.Meta() != nil && e.table.Meta().TempTableType != model.TempTableNone {
 		// Treat temporary table as dummy table, avoid sending distsql request to TiKV.
 		req.Reset()
+		return nil
+	}
+	req.Reset()
+	if e.storeType == kv.AwsS3 {
+		result := e.awsQueryResult
+		e.awsQueryResult = nil
+		if result == nil {
+			return nil
+		}
+		stmtCtx := e.ctx.GetSessionVars().StmtCtx
+		for rowIdx, row := range result.Rows {
+			if rowIdx == 0 {
+				continue
+			}
+			for colIdx, col := range row.Data {
+				var d types.Datum
+				if col.VarCharValue == nil {
+					d = types.NewDatum(nil)
+				} else {
+					d = types.NewStringDatum(*col.VarCharValue)
+				}
+				d, err := d.ConvertTo(stmtCtx, e.retFieldTypes[colIdx])
+				if err != nil {
+					return err
+				}
+				req.AppendDatum(colIdx, &d)
+			}
+		}
 		return nil
 	}
 
@@ -343,6 +384,21 @@ func (e *TableReaderExecutor) buildKVReqSeparately(ctx context.Context, ranges [
 		kvReqs = append(kvReqs, kvReq)
 	}
 	return kvReqs, nil
+}
+
+func (e *TableReaderExecutor) fetchResultFromAws(pid int64) error {
+	tableName := util.GetTablePartitionName(e.table.Meta().Name.L, pid)
+	query := fmt.Sprintf("SELECT * FROM \"%v\".\"%v\" ", "test", tableName)
+	cli, err := athena.CreateCli("us-west-2")
+	if err != nil {
+		return nil
+	}
+	result, err := athena.QueryTableData(cli, "test", query)
+	if err != nil {
+		return err
+	}
+	e.awsQueryResult = result
+	return nil
 }
 
 func (e *TableReaderExecutor) buildKVReq(ctx context.Context, ranges []*ranger.Range) (*kv.Request, error) {

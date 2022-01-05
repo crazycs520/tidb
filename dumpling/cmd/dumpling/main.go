@@ -66,6 +66,7 @@ func main() {
 	export.RegisterMetrics(registry)
 	prometheus.DefaultGatherer = registry
 	dumper, err := export.NewDumper(context.Background(), conf)
+	dumper.L().Info("show config", zap.String("cfg", conf.String()))
 	if err != nil {
 		fmt.Printf("\ncreate dumper failed: %s\n", err.Error())
 		os.Exit(1)

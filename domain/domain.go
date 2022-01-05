@@ -869,6 +869,14 @@ func (do *Domain) Init(ddlLease time.Duration, sysExecutorFactory func(*Domain) 
 	return nil
 }
 
+func (do *Domain) GetIntervalNeeded() (*pools.ResourcePool, ddl.DDL, *infoschema.InfoCache, owner.Manager) {
+	sysFac := func() (pools.Resource, error) {
+		return do.sysExecutorFactory(do)
+	}
+	ipmCtxPool := pools.NewResourcePool(sysFac, 10, 10, resourceIdleTimeout)
+	return ipmCtxPool, do.ddl, do.infoCache, do.ddl.OwnerManager()
+}
+
 type sessionPool struct {
 	resources chan pools.Resource
 	factory   pools.Factory

@@ -104,7 +104,7 @@ func (d *Dumper) Dump() (dumpErr error) {
 	m := newGlobalMetadata(tctx, d.extStore, conf.Snapshot)
 	repeatableRead := needRepeatableRead(conf.ServerInfo.ServerType, conf.Consistency)
 	defer func() {
-		if dumpErr == nil {
+		if dumpErr != nil {
 			_ = m.writeGlobalMetaData()
 		}
 	}()

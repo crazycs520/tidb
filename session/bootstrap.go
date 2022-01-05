@@ -376,6 +376,32 @@ const (
 		column_ids TEXT(19372),
 		PRIMARY KEY (table_id) CLUSTERED
 	);`
+	CreateAutoIntervalJobsTable = `CREATE TABLE IF NOT EXISTS mysql.interval_partition_jobs (
+		id BIGINT,
+		db_name VARCHAR(64) NOT NULL,
+		table_name VARCHAR(64) NOT NULL,
+		table_id BIGINT NOT NULL,
+		partition_name VARCHAR(64) NOT NULL,
+		partition_id BIGINT NOT NULL,
+		state VARCHAR(200),
+		start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		PRIMARY KEY(id),
+		UNIQUE INDEX(partition_id)
+	);`
+	CreateAutoIntervalJobsDoneTable = `CREATE TABLE IF NOT EXISTS mysql.interval_partition_jobs_done (
+		id BIGINT,
+		db_name VARCHAR(64) NOT NULL,
+		table_name VARCHAR(64) NOT NULL,
+		table_id BIGINT NOT NULL,
+		partition_name VARCHAR(64) NOT NULL,
+		partition_id BIGINT NOT NULL,
+		state VARCHAR(200),
+		start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		PRIMARY KEY(id)
+	);`
+	CreateAutoIntervalJobSequence = `CREATE SEQUENCE IF NOT EXISTS mysql.interval_partition_jobs_seq CACHE = 1;`
 )
 
 // bootstrap initiates system DB for a store.
@@ -557,11 +583,12 @@ const (
 	version81 = 81
 	// version82 adds the mysql.analyze_options table
 	version82 = 82
+	version83 = 83
 )
 
 // currentBootstrapVersion is defined as a variable, so we can modify its value for testing.
 // please make sure this is the largest version
-var currentBootstrapVersion int64 = version82
+var currentBootstrapVersion int64 = version83
 
 var (
 	bootstrapVersion = []func(Session, int64){
@@ -647,6 +674,7 @@ var (
 		upgradeToVer80,
 		upgradeToVer81,
 		upgradeToVer82,
+		upgradeToVer83,
 	}
 )
 
@@ -1703,6 +1731,15 @@ func upgradeToVer82(s Session, ver int64) {
 	doReentrantDDL(s, CreateAnalyzeOptionsTable)
 }
 
+func upgradeToVer83(s Session, ver int64) {
+	if ver >= version83 {
+		return
+	}
+	doReentrantDDL(s, CreateAutoIntervalJobsTable)
+	doReentrantDDL(s, CreateAutoIntervalJobsDoneTable)
+	doReentrantDDL(s, CreateAutoIntervalJobSequence)
+}
+
 func writeOOMAction(s Session) {
 	comment := "oom-action is `log` by default in v3.0.x, `cancel` by default in v4.0.11+"
 	mustExecute(s, `INSERT HIGH_PRIORITY INTO %n.%n VALUES (%?, %?, %?) ON DUPLICATE KEY UPDATE VARIABLE_VALUE= %?`,
@@ -1789,6 +1826,11 @@ func doDDLWorks(s Session) {
 	mustExecute(s, CreateTableCacheMetaTable)
 	// Create analyze_options table.
 	mustExecute(s, CreateAnalyzeOptionsTable)
+
+	mustExecute(s, CreateAutoIntervalJobsTable)
+	mustExecute(s, CreateAutoIntervalJobsDoneTable)
+	mustExecute(s, CreateAutoIntervalJobSequence)
+
 }
 
 // doDMLWorks executes DML statements in bootstrap stage.
