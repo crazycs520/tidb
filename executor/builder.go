@@ -3113,7 +3113,7 @@ func buildAWSQueryInfo(v *plannercore.PhysicalTableReader, id int64) *RestoreDat
 	for _, p := range v.TablePlans {
 		switch x := p.(type) {
 		case *plannercore.PhysicalTableScan:
-			info.Table = intervalutil.GetTablePartitionName(x.TableAsName.L, id)
+			info.Table = intervalutil.GetTablePartitionName(x.Table.Name.L, id)
 			info.DB = "test"
 			var unsignedIntHandle bool
 			if ts.Table.PKIsHandle {

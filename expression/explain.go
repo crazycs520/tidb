@@ -17,12 +17,11 @@ package expression
 import (
 	"bytes"
 	"fmt"
-	"sort"
-	"strings"
-
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
+	"sort"
+	"strings"
 )
 
 // ExplainInfo implements the Expression interface.
@@ -120,9 +119,17 @@ func (expr *ScalarFunction) ExplainNormalizedInfo() string {
 	return expr.explainInfo(true)
 }
 
+func onlyColumnName(s string) string {
+	v := strings.Split(s, ".")
+	if len(v) == 0 {
+		return ""
+	}
+	return v[len(v)-1]
+}
+
 // ExplainInfo implements the Expression interface.
 func (col *Column) ExplainInfo() string {
-	return col.String()
+	return onlyColumnName(col.String())
 }
 
 // ExplainNormalizedInfo implements the Expression interface.
