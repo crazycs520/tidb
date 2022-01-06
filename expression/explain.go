@@ -60,6 +60,61 @@ func (expr *ScalarFunction) explainInfo(normalized bool) string {
 	return buffer.String()
 }
 
+func (expr *ScalarFunction) Restore() string {
+	return expr.restore()
+}
+
+func (expr *ScalarFunction) restore() string {
+	var buffer bytes.Buffer
+	switch expr.FuncName.L {
+	case ast.LT:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore())
+		fmt.Fprint(&buffer, " < ")
+		buffer.WriteString(expr.GetArgs()[1].Restore())
+		fmt.Fprint(&buffer, ")")
+	case ast.GT:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore())
+		fmt.Fprint(&buffer, " > ")
+		buffer.WriteString(expr.GetArgs()[1].Restore())
+		fmt.Fprint(&buffer, ")")
+	case ast.LE:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore())
+		fmt.Fprint(&buffer, " <= ")
+		buffer.WriteString(expr.GetArgs()[1].Restore())
+		fmt.Fprint(&buffer, ")")
+	case ast.GE:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore())
+		fmt.Fprint(&buffer, " >= ")
+		buffer.WriteString(expr.GetArgs()[1].Restore())
+		fmt.Fprint(&buffer, ")")
+	case ast.EQ:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore())
+		fmt.Fprint(&buffer, " = ")
+		buffer.WriteString(expr.GetArgs()[1].Restore())
+		fmt.Fprint(&buffer, ")")
+	case ast.NE:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore())
+		fmt.Fprint(&buffer, " != ")
+		buffer.WriteString(expr.GetArgs()[1].Restore())
+		fmt.Fprint(&buffer, ")")
+	}
+	return buffer.String()
+}
+
+func (col *Column) Restore() string {
+	return col.ExplainInfo()
+}
+
+func (expr *Constant) Restore() string {
+	return expr.ExplainInfo()
+}
+
 // ExplainNormalizedInfo implements the Expression interface.
 func (expr *ScalarFunction) ExplainNormalizedInfo() string {
 	return expr.explainInfo(true)

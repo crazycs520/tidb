@@ -568,6 +568,16 @@ func (t *TableInfo) GetPkColInfo() *ColumnInfo {
 	return nil
 }
 
+func (t *TableInfo) GetPkColName() []string {
+	ret := make([]string, 0, 1)
+	for _, colInfo := range t.Columns {
+		if mysql.HasPriKeyFlag(colInfo.Flag) {
+			return append(ret, colInfo.Name.L)
+		}
+	}
+	return ret
+}
+
 func (t *TableInfo) GetAutoIncrementColInfo() *ColumnInfo {
 	for _, colInfo := range t.Columns {
 		if mysql.HasAutoIncrementFlag(colInfo.Flag) {

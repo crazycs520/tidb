@@ -181,6 +181,40 @@ func (ran *Range) String() string {
 	return l + strings.Join(lowStrs, " ") + "," + strings.Join(highStrs, " ") + r
 }
 
+func (ran *Range) RestoreString(col []string) []string {
+	if len(col) != len(ran.LowVal) {
+		return nil
+	}
+	lowStrs := make([]string, 0, len(ran.LowVal))
+	for _, d := range ran.LowVal {
+		lowStrs = append(lowStrs, formatDatum(d, true))
+	}
+	highStrs := make([]string, 0, len(ran.LowVal))
+	for _, d := range ran.HighVal {
+		highStrs = append(highStrs, formatDatum(d, false))
+	}
+
+	ret := make([]string, 0, len(col)*2)
+
+	for i := range col {
+		if strings.Compare(lowStrs[i], "-inf") != 0 {
+			if ran.LowExclude {
+				ret = append(ret, fmt.Sprintf("%v > %v", col[i], lowStrs[i]))
+			} else {
+				ret = append(ret, fmt.Sprintf("%v >= %v", col[i], lowStrs[i]))
+			}
+		}
+		if strings.Compare(highStrs[i], "+inf") != 0 {
+			if ran.HighExclude {
+				ret = append(ret, fmt.Sprintf("%v < %v", col[i], highStrs[i]))
+			} else {
+				ret = append(ret, fmt.Sprintf("%v <= %v", col[i], highStrs[i]))
+			}
+		}
+	}
+	return ret
+}
+
 // Encode encodes the range to its encoded value.
 func (ran *Range) Encode(sc *stmtctx.StatementContext, lowBuffer, highBuffer []byte) ([]byte, []byte, error) {
 	var err error

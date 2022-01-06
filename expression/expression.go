@@ -176,6 +176,8 @@ type Expression interface {
 	// Column: ColumnFlag+encoded value
 	// ScalarFunction: SFFlag+encoded function name + encoded arg_1 + encoded arg_2 + ...
 	HashCode(sc *stmtctx.StatementContext) []byte
+
+	Restore() string
 }
 
 // CNFExprs stands for a CNF expression.
