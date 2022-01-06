@@ -2,6 +2,7 @@ package interval
 
 import (
 	"context"
+	"github.com/pingcap/tidb/config"
 	"sync"
 	"time"
 
@@ -21,7 +22,9 @@ const AWSS3Engine = "aws_s3"
 var GlobalIntervalPartitionManager *IntervalPartitionManager
 
 func Setup(ctxPool *pools.ResourcePool, ddl ddl.DDL, infoCache *infoschema.InfoCache, ownerManager owner.Manager) {
-	GlobalIntervalPartitionManager = NewIntervalPartitionManager(ctxPool, ddl, infoCache, ownerManager)
+	cfg := config.GetGlobalConfig()
+	region := cfg.Aws.Region
+	GlobalIntervalPartitionManager = NewIntervalPartitionManager(region, ctxPool, ddl, infoCache, ownerManager)
 	GlobalIntervalPartitionManager.Start()
 }
 
@@ -40,6 +43,8 @@ func TryAutoCreateIntervalPartition(ctx sessionctx.Context, dbName string, tbInf
 }
 
 type IntervalPartitionManager struct {
+	s3Region string
+
 	ctx          context.Context
 	cancel       context.CancelFunc
 	sessPool     *sessionPool
@@ -55,6 +60,7 @@ type IntervalPartitionManager struct {
 	taskCh chan *AutoCreatePartitionTask
 
 	awsTableMeta sync.Map // partition id -> PartitionTableMeta
+	loadedMeta   bool
 }
 
 type PartitionTableMeta struct {
@@ -64,9 +70,10 @@ type PartitionTableMeta struct {
 	tableName string
 }
 
-func NewIntervalPartitionManager(ctxPool *pools.ResourcePool, ddl ddl.DDL, infoCache *infoschema.InfoCache, ownerManager owner.Manager) *IntervalPartitionManager {
+func NewIntervalPartitionManager(s3Region string, ctxPool *pools.ResourcePool, ddl ddl.DDL, infoCache *infoschema.InfoCache, ownerManager owner.Manager) *IntervalPartitionManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &IntervalPartitionManager{
+		s3Region:      s3Region,
 		ctx:           ctx,
 		cancel:        cancel,
 		sessPool:      newSessionPool(ctxPool),
@@ -86,6 +93,7 @@ func (pm *IntervalPartitionManager) Start() {
 	go util.WithRecovery(pm.RunWorkerLoop, nil)
 	go util.WithRecovery(pm.RunAutoCreatePartitionLoop, nil)
 	go util.WithRecovery(pm.RunMetaMaintainLoop, nil)
+	go util.WithRecovery(pm.RunAutoDeletePartitionLoop, nil)
 }
 
 func (pm *IntervalPartitionManager) Stop() {
@@ -285,13 +293,14 @@ type TablePartition struct {
 
 func (pm *IntervalPartitionManager) getTableNeedIntervalPartition(ctx sessionctx.Context, dbInfo *model.DBInfo, tbInfo *model.TableInfo) []*TablePartition {
 	pi := tbInfo.GetPartitionInfo()
+	auto := pi.AutoAction
 	if pi == nil || pi.Type != model.PartitionTypeRange || pi.Expr == "" ||
-		len(pi.Definitions) == 0 || len(pi.Definitions[0].LessThan) != 1 || pi.Interval.MovePartitionExpr == "" {
+		len(pi.Definitions) == 0 || len(pi.Definitions[0].LessThan) != 1 || auto.MovePartitionExpr == "" || auto.MoveToEngine == "" {
 		return nil
 	}
 
 	isUnsigned := isColUnsigned(tbInfo.Columns, pi)
-	moveExprValue, _, err := getRangeValue(ctx, pi.Interval.MovePartitionExpr, isUnsigned)
+	moveExprValue, _, err := getRangeValue(ctx, auto.MovePartitionExpr, isUnsigned)
 	if err != nil {
 		return nil
 	}
@@ -319,7 +328,6 @@ func (pm *IntervalPartitionManager) getTableNeedIntervalPartition(ctx sessionctx
 		}
 		// check running table
 
-		logutil.BgLogger().Info("fina need move data partition", zap.Reflect("range-value", rangeValue), zap.Reflect("move-expr", moveExprValue))
 		result = append(result, &TablePartition{
 			dbInfo: dbInfo,
 			tbInfo: tbInfo,
@@ -332,4 +340,73 @@ func (pm *IntervalPartitionManager) getTableNeedIntervalPartition(ctx sessionctx
 			zap.Reflect("move-v", moveExprValue))
 	}
 	return result
+}
+
+func (pm *IntervalPartitionManager) GetNeedDeleteTablePartition() *TablePartition {
+	is := pm.infoCache.GetLatest()
+	dbs := is.AllSchemas()
+	ctx, err := pm.sessPool.get()
+	if err != nil {
+		return nil
+	}
+	defer pm.sessPool.put(ctx)
+	for _, db := range dbs {
+		if util.IsMemDB(db.Name.L) || util.IsSysDB(db.Name.L) {
+			continue
+		}
+		tbs := is.SchemaTables(db.Name)
+		for _, tb := range tbs {
+			tp := pm.getNeedDeleteTablePartition(ctx, db, tb.Meta())
+			if tp != nil {
+				return tp
+			}
+		}
+	}
+	return nil
+}
+
+func (pm *IntervalPartitionManager) getNeedDeleteTablePartition(ctx sessionctx.Context, dbInfo *model.DBInfo, tbInfo *model.TableInfo) *TablePartition {
+	pi := tbInfo.GetPartitionInfo()
+	auto := pi.AutoAction
+	if pi == nil || pi.Type != model.PartitionTypeRange || pi.Expr == "" ||
+		len(pi.Definitions) < 2 || len(pi.Definitions[0].LessThan) != 1 || auto.DeletePartitionExpr == "" {
+		return nil
+	}
+
+	isUnsigned := isColUnsigned(tbInfo.Columns, pi)
+	deleteExprValue, _, err := getRangeValue(ctx, auto.DeletePartitionExpr, isUnsigned)
+	if err != nil {
+		return nil
+	}
+	for i := range pi.Definitions {
+		rangeValueStr := pi.Definitions[i].LessThan[0]
+		if rangeValueStr == "MAXVALUE" {
+			return nil
+		}
+		rangeValue, _, err := getRangeValue(ctx, rangeValueStr, isUnsigned)
+		if err != nil {
+			return nil
+		}
+		less := false
+		if isUnsigned {
+			less = rangeValue.(uint64) < deleteExprValue.(uint64)
+		} else {
+			less = rangeValue.(int64) < deleteExprValue.(int64)
+		}
+		if !less {
+			return nil
+		}
+
+		logutil.BgLogger().Info("[interval-partition] find need delete table partition",
+			zap.String("table", tbInfo.Name.O),
+			zap.String("partition", pi.Definitions[i].Name.O),
+			zap.Reflect("range-v", rangeValue),
+			zap.Reflect("move-v", deleteExprValue))
+		return &TablePartition{
+			dbInfo: dbInfo,
+			tbInfo: tbInfo,
+			pdInfo: &pi.Definitions[i],
+		}
+	}
+	return nil
 }

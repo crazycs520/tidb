@@ -459,6 +459,7 @@ import (
 	mode                  "MODE"
 	modify                "MODIFY"
 	month                 "MONTH"
+	move                  "MOVE"
 	names                 "NAMES"
 	national              "NATIONAL"
 	ncharType             "NCHAR"
@@ -944,6 +945,8 @@ import (
 	AlterTableSpec                         "Alter table specification"
 	AlterTableSpecList                     "Alter table specification list"
 	AlterTableSpecListOpt                  "Alter table specification list optional"
+	AlterTableAutoActionOpt                "Alter table auto action optional"
+	AlterTableAutoActionExpr               "Alter table auto action expression"
 	AlterSequenceOption                    "Alter sequence option"
 	AlterSequenceOptionList                "Alter sequence option list"
 	AnalyzeOption                          "Analyze option"
@@ -954,6 +957,7 @@ import (
 	AssignmentList                         "assignment list"
 	AssignmentListOpt                      "assignment list opt"
 	AuthOption                             "User auth option"
+	AutoAction                             "Auto action"
 	Boolean                                "Boolean (0, 1, false, true)"
 	OptionalBraces                         "optional braces"
 	CastType                               "Cast function target type"
@@ -1486,12 +1490,13 @@ AlterTableStmt:
 			Specs: specs,
 		}
 	}
-|	"ALTER" IgnoreOptional "TABLE" TableName "PARTITIONS" "VALUES" "LESS" "THAN" BitExpr "TO" "ENGINE" StringName
+|	"ALTER" IgnoreOptional "TABLE" TableName AutoAction AlterTableAutoActionExpr AlterTableAutoActionOpt
 	{
-		$$ = &ast.AlterTableMoveStmt{
+		$$ = &ast.AlterTablePartitionsAutoActionStmt{
 			Table:        $4.(*ast.TableName),
-			LessThanExpr: $9,
-			EngineName:   $12,
+			Action:       $5.(ast.AutoActionType),
+			LessThanExpr: $6.(ast.ExprNode),
+			EngineName:   $7.(string),
 		}
 	}
 |	"ALTER" IgnoreOptional "TABLE" TableName "ANALYZE" "PARTITION" PartitionNameList AnalyzeOptionListOpt
@@ -2255,6 +2260,16 @@ WithClustered:
 		$$ = model.PrimaryKeyTypeNonClustered
 	}
 
+AutoAction:
+	"MOVE"
+	{
+		$$ = ast.AutoActionMove
+	}
+|	"DELETE"
+	{
+		$$ = ast.AutoActionDelete
+	}
+
 AlgorithmClause:
 	"ALGORITHM" EqOpt "DEFAULT"
 	{
@@ -2353,6 +2368,22 @@ AlterTableSpecList:
 |	AlterTableSpecList ',' AlterTableSpec
 	{
 		$$ = append($1.([]*ast.AlterTableSpec), $3.(*ast.AlterTableSpec))
+	}
+
+AlterTableAutoActionOpt:
+	/* empty */
+	{
+		$$ = ""
+	}
+|	"TO" "ENGINE" StringName
+	{
+		$$ = $3
+	}
+
+AlterTableAutoActionExpr:
+	"PARTITIONS" "VALUES" "LESS" "THAN" BitExpr
+	{
+		$$ = $5
 	}
 
 PartitionNameList:

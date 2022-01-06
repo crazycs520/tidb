@@ -3,17 +3,57 @@ package athena
 import (
 	"bytes"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/athena"
 	"github.com/pingcap/tidb/dumpling/context"
-	"github.com/pingcap/tidb/interval/util"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 )
+
+type AthenaDB struct {
+	region string
+	cli    *athena.Athena
+
+	metaMu   sync.Mutex
+	dbTables map[string]map[string]struct{} // dbName -> []tableName
+}
+
+func NewAthenaDB(region string) *AthenaDB {
+	return &AthenaDB{
+		region:   region,
+		dbTables: make(map[string]map[string]struct{}),
+	}
+}
+
+func (db *AthenaDB) Init() error {
+	cli, err := CreateCli(db.region)
+	if err != nil {
+		return err
+	}
+
+	dbs, err := GetAllDatabase(cli)
+	if err != nil {
+		return nil
+	}
+	for _, dbName := range dbs {
+		tbs, err := GetAllTables(cli, dbName)
+		if err != nil {
+			return nil
+		}
+		tbMaps := make(map[string]struct{})
+		for _, tb := range tbs {
+			tbMaps[tb] = struct{}{}
+		}
+		db.dbTables[dbName] = tbMaps
+	}
+	return nil
+}
 
 func CreateCli(region string) (*athena.Athena, error) {
 	awscfg := &aws.Config{}
@@ -27,22 +67,87 @@ func CreateCli(region string) (*athena.Athena, error) {
 	return svc, nil
 }
 
-func CreateTable(cli *athena.Athena, db, table string, pid int64, s3BucketName string, tbInfo *model.TableInfo) error {
-	ddlSQL := buildCreateTableSQL(table, pid, s3BucketName, tbInfo)
-	_, err := execQuery(cli, db, ddlSQL)
+func CreateTable(cli *athena.Athena, db, table string, s3BucketName string, tbInfo *model.TableInfo) error {
+	ddlSQL := buildCreateTableSQL(table, s3BucketName, tbInfo)
+	_, err := ExecSQL(cli, db, ddlSQL)
 	logutil.BgLogger().Info("[athena] create table", zap.String("SQL", ddlSQL), zap.Error(err))
 	return err
 }
 
-func DropTable(cli *athena.Athena, db, table string, pid int64) error {
-	ddlSQL := fmt.Sprintf("DROP TABLE IF EXISTS `%v`.`%v`;", db, util.GetTablePartitionName(table, pid))
-	_, err := execQuery(cli, db, ddlSQL)
+func DropTable(cli *athena.Athena, db, table string) error {
+	ddlSQL := fmt.Sprintf("DROP TABLE IF EXISTS `%v`.`%v`;", db, table)
+	_, err := ExecSQL(cli, db, ddlSQL)
 	logutil.BgLogger().Info("[athena] drop table", zap.String("SQL", ddlSQL), zap.Error(err))
 	return err
 }
 
+func GetAllTables(cli *athena.Athena, db string) ([]string, error) {
+	query := "show tables"
+	result, err := ExecSQL(cli, db, query)
+	if err != nil {
+		return nil, err
+	}
+	return fetchOneColumnResult(result), nil
+}
+
+func GetAllDatabase(cli *athena.Athena) ([]string, error) {
+	query := "show databases"
+	result, err := ExecSQL(cli, "", query)
+	if err != nil {
+		return nil, err
+	}
+	return fetchOneColumnResult(result), nil
+}
+
+func fetchOneColumnResult(result *athena.ResultSet) []string {
+	if result == nil || len(result.Rows) == 0 {
+		return nil
+	}
+	rows := make([]string, 0, len(result.Rows))
+	for _, row := range result.Rows {
+		if len(row.Data) == 0 || row.Data[0].VarCharValue == nil {
+			continue
+		}
+		rows = append(rows, *row.Data[0].VarCharValue)
+	}
+	return rows
+}
+
+func CreateDatabase(cli *athena.Athena, db string) error {
+	query := fmt.Sprintf("create database if not exists `%v`;", db)
+	_, err := ExecSQL(cli, "", query)
+	return err
+}
+
+func DropDatabase(cli *athena.Athena, db string) error {
+	query := fmt.Sprintf("drop database if exists `%v`;", db)
+	_, err := ExecSQL(cli, db, query)
+	return err
+}
+
+func DropDatabaseAndAllTables(cli *athena.Athena, db string) error {
+	err := DropDatabase(cli, db)
+	if err == nil {
+		return nil
+	}
+	if !strings.Contains(err.Error(), "is not empty") {
+		return err
+	}
+	tbs, err := GetAllTables(cli, db)
+	if err != nil {
+		return err
+	}
+	for _, tb := range tbs {
+		err = DropTable(cli, db, tb)
+		if err != nil {
+			return err
+		}
+	}
+	return DropDatabase(cli, db)
+}
+
 func QueryTableData(cli *athena.Athena, db, query string) (*athena.ResultSet, error) {
-	result, err := execQuery(cli, db, query)
+	result, err := ExecSQL(cli, db, query)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +160,12 @@ const (
 	QueryCancelled = "CANCELLED"
 )
 
-func execQuery(cli *athena.Athena, db, query string) (*athena.ResultSet, error) {
+var defaultDB = "default"
+
+func ExecSQL(cli *athena.Athena, db, query string) (*athena.ResultSet, error) {
+	if db == "" {
+		db = defaultDB
+	}
 	var s athena.StartQueryExecutionInput
 	s.SetQueryString(query)
 
@@ -76,13 +186,16 @@ func execQuery(cli *athena.Athena, db, query string) (*athena.ResultSet, error) 
 	qri.SetQueryExecutionId(*result.QueryExecutionId)
 
 	var qrop *athena.GetQueryExecutionOutput
-	var state string
+	var state, reason string
 	for {
 		qrop, err = cli.GetQueryExecutionWithContext(context.Background(), &qri)
 		if err != nil {
 			return nil, err
 		}
 		state = *qrop.QueryExecution.Status.State
+		if qrop.QueryExecution.Status.StateChangeReason != nil {
+			reason = *qrop.QueryExecution.Status.StateChangeReason
+		}
 		if state == QuerySucceeded || state == QueryFailed || state == QueryCancelled {
 			break
 		}
@@ -90,9 +203,8 @@ func execQuery(cli *athena.Athena, db, query string) (*athena.ResultSet, error) 
 
 	}
 	if state != QuerySucceeded {
-		return nil, fmt.Errorf("execute query %v", state)
+		return nil, fmt.Errorf("execute %v, detail: %v, sql: %v", state, reason, query)
 	}
-
 	var ip athena.GetQueryResultsInput
 	ip.SetQueryExecutionId(*result.QueryExecutionId)
 
@@ -105,10 +217,10 @@ func execQuery(cli *athena.Athena, db, query string) (*athena.ResultSet, error) 
 
 type DDLEngine struct{}
 
-func buildCreateTableSQL(table string, pid int64, s3BucketName string, tbInfo *model.TableInfo) string {
+func buildCreateTableSQL(table string, s3BucketName string, tbInfo *model.TableInfo) string {
 	buf := bytes.NewBuffer(make([]byte, 0, 32))
 	buf.WriteString("CREATE EXTERNAL TABLE ")
-	writeKey(buf, util.GetTablePartitionName(table, pid))
+	writeKey(buf, table)
 	buf.WriteString(" (")
 	for i, col := range tbInfo.Columns {
 		if col.State != model.StatePublic || col.Hidden {
