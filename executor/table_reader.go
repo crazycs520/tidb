@@ -173,7 +173,6 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 	pid, storeType := getPhysicalTableEngine(e.table)
 	if storeType == kv.AWSS3Engine {
 		e.storeType = kv.AwsS3
-		fmt.Printf("store type is awss3 ------")
 		return e.fetchResultFromAws(pid)
 	}
 
