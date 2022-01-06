@@ -128,14 +128,16 @@ type RestoreData struct {
 
 func (d *RestoreData) String() string {
 	var buffer bytes.Buffer
-	fmt.Fprint(&buffer, "select * from ")
+	fmt.Fprint(&buffer, `select * from "`)
 	fmt.Fprint(&buffer, d.DB)
-	fmt.Fprint(&buffer, ".")
+	fmt.Fprint(&buffer, `"."`)
 	fmt.Fprint(&buffer, d.Table)
-	fmt.Fprint(&buffer, " where ")
+	fmt.Fprint(&buffer, `"`)
 	for i, c := range d.Where {
 		if i != 0 {
 			fmt.Fprint(&buffer, " and ")
+		} else {
+			fmt.Fprint(&buffer, " where ")
 		}
 		fmt.Fprint(&buffer, c)
 	}

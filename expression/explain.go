@@ -110,7 +110,7 @@ func (expr *ScalarFunction) restore(t *model.TableInfo) string {
 func (col *Column) Restore(t *model.TableInfo) string {
 	for _, c := range t.Columns {
 		if c.ID == col.ID {
-			return c.Name.L
+			return fmt.Sprintf(`"%v"`, c.Name.L)
 		}
 	}
 	return ""
