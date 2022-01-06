@@ -3981,34 +3981,50 @@ func (n *AlterPlacementPolicyStmt) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-type AlterTableMoveStmt struct {
+type AutoActionType = int
+
+const (
+	AutoActionMove   AutoActionType = 1
+	AutoActionDelete AutoActionType = 2
+)
+
+type AlterTablePartitionsAutoActionStmt struct {
 	ddlNode
 
+	Action       AutoActionType
 	Table        *TableName
 	LessThanExpr ExprNode
 	EngineName   string
 }
 
-func (n *AlterTableMoveStmt) Restore(ctx *format.RestoreCtx) error {
+func (n *AlterTablePartitionsAutoActionStmt) Restore(ctx *format.RestoreCtx) error {
 	ctx.WriteKeyWord("ALTER TABLE ")
 	if err := n.Table.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore AlterTableMoveStmt.Table")
+		return errors.Annotate(err, "An error occurred while restore AlterTablePartitionsAutoActionStmt.Table")
+	}
+	switch n.Action {
+	case AutoActionMove:
+		ctx.WriteKeyWord(" MOVE")
+	case AutoActionDelete:
+		ctx.WriteKeyWord(" DELETE")
 	}
 	ctx.WriteKeyWord(" PARTITIONS VALUES LESS THAN ")
 	if err := n.LessThanExpr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore AlterTableMoveStmt.LessThanExpr")
+		return errors.Annotate(err, "An error occurred while restore AlterTablePartitionsAutoActionStmt.LessThanExpr")
 	}
-	ctx.WriteKeyWord(" TO ENGINE ")
-	ctx.WritePlain(n.EngineName)
+	if n.Action == AutoActionMove {
+		ctx.WriteKeyWord(" TO ENGINE ")
+		ctx.WritePlain(n.EngineName)
+	}
 	return nil
 }
 
-func (n *AlterTableMoveStmt) Accept(v Visitor) (Node, bool) {
+func (n *AlterTablePartitionsAutoActionStmt) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
 	if skipChildren {
 		return v.Leave(newNode)
 	}
-	n = newNode.(*AlterTableMoveStmt)
+	n = newNode.(*AlterTablePartitionsAutoActionStmt)
 	node, ok := n.Table.Accept(v)
 	if !ok {
 		return n, false

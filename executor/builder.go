@@ -17,7 +17,6 @@ package executor
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"github.com/pingcap/tipb/go-tipb"
 	"math"
 	"sort"
@@ -39,7 +38,6 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/infoschema"
-	intervalutil "github.com/pingcap/tidb/interval/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/parser/ast"
@@ -3108,67 +3106,6 @@ func (b *executorBuilder) buildMPPGather(v *plannercore.PhysicalTableReader) Exe
 	return gather
 }
 
-func buildAWSQueryInfo(v *plannercore.PhysicalTableReader, id int64) *RestoreData {
-	info := RestoreData{Where: make([]string, 0)}
-	ts := v.GetTableScan()
-	var tableInfo *model.TableInfo
-	for _, p := range v.TablePlans {
-		switch x := p.(type) {
-		case *plannercore.PhysicalTableScan:
-			info.Table = intervalutil.GetTablePartitionName(x.Table.Name.L, id)
-			info.DB = "test"
-			tableInfo = x.Table
-			var unsignedIntHandle bool
-			if ts.Table.PKIsHandle {
-				if pkColInfo := ts.Table.GetPkColInfo(); pkColInfo != nil {
-					unsignedIntHandle = mysql.HasUnsignedFlag(pkColInfo.Flag)
-				}
-			}
-			for _, r := range x.Ranges {
-				if r.IsFullRange(unsignedIntHandle) {
-					continue
-				}
-				info.Where = append(info.Where, r.RestoreString(x.Table.GetPkColName())...)
-			}
-		case *plannercore.PhysicalSelection:
-			for _, c := range x.Conditions {
-				info.Where = append(info.Where, c.Restore(tableInfo))
-			}
-		case *plannercore.PhysicalHashAgg:
-			if len(x.AggFuncs) == 1 {
-				f := x.AggFuncs[0]
-				var buffer bytes.Buffer
-				buffer.WriteString(f.Name)
-				fmt.Fprint(&buffer, "(")
-				for i, arg := range f.Args {
-					if i != 0 {
-						fmt.Fprint(&buffer, ",")
-					}
-					buffer.WriteString(arg.Restore(tableInfo))
-				}
-				fmt.Fprint(&buffer, ")")
-				info.Agg = buffer.String()
-			}
-		case *plannercore.PhysicalStreamAgg:
-			if len(x.AggFuncs) == 1 {
-				f := x.AggFuncs[0]
-				var buffer bytes.Buffer
-				buffer.WriteString(f.Name)
-				fmt.Fprint(&buffer, "(")
-				for i, arg := range f.Args {
-					if i != 0 {
-						fmt.Fprint(&buffer, ",")
-					}
-					buffer.WriteString(arg.Restore(tableInfo))
-				}
-				fmt.Fprint(&buffer, ")")
-				info.Agg = buffer.String()
-			}
-		}
-	}
-	return &info
-}
-
 // buildTableReader builds a table reader executor. It first build a no range table reader,
 // and then update it ranges from table scan plan.
 func (b *executorBuilder) buildTableReader(v *plannercore.PhysicalTableReader) Executor {
@@ -3205,8 +3142,8 @@ func (b *executorBuilder) buildTableReader(v *plannercore.PhysicalTableReader) E
 	sctx := b.ctx.GetSessionVars().StmtCtx
 	sctx.TableIDs = append(sctx.TableIDs, ts.Table.ID)
 
-	if ok, id := readFromS3(ts); ok {
-		ret.AWSQueryInfo = buildAWSQueryInfo(v, id)
+	if ok, id := plannercore.IsReadFromS3(ts); ok {
+		ret.AWSQueryInfo = plannercore.BuildAWSQueryInfo(v, id)
 	}
 
 	if !b.ctx.GetSessionVars().UseDynamicPartitionPrune() {
@@ -4625,17 +4562,6 @@ func getPhysicalTableID(t table.Table) int64 {
 		return p.GetPhysicalID()
 	}
 	return t.Meta().ID
-}
-
-func readFromS3(t *plannercore.PhysicalTableScan) (bool, int64) {
-	if ok, id := t.IsPartition(); ok {
-		for _, p := range t.Table.Partition.Definitions {
-			if p.ID == id {
-				return p.Engine == kv.AWSS3Engine, p.ID
-			}
-		}
-	}
-	return false, 0
 }
 
 func getPhysicalTableEngine(t table.Table) (int64, string) {

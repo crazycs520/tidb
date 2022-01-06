@@ -1,11 +1,12 @@
 package interval
 
 import (
+	"github.com/pingcap/tidb/interval/athena"
+	util2 "github.com/pingcap/tidb/interval/util"
 	"time"
 
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 )
@@ -15,12 +16,19 @@ func (pm *IntervalPartitionManager) RunMetaMaintainLoop() {
 	defer ticker.Stop()
 
 	version := int64(0)
-	pm.buildAwsTableMeta()
+	err := pm.loadAwsTableMeta()
+	if err != nil {
+		logutil.BgLogger().Warn("load aws table meta failed", zap.Error(err))
+	}
 	for {
 		select {
 		case <-ticker.C:
 			if !pm.ownerManager.IsOwner() {
 				continue
+			}
+			err := pm.loadAwsTableMeta()
+			if err != nil {
+				logutil.BgLogger().Warn("load aws table meta failed", zap.Error(err))
 			}
 			is := pm.infoCache.GetLatest()
 			latest := is.SchemaMetaVersion()
@@ -48,7 +56,7 @@ func (pm *IntervalPartitionManager) removeDroppedTableInAWSS3() {
 					zap.String("table", meta.tableName), zap.Int64("table-id", meta.tableID),
 					zap.Int64("partition-id", pid), zap.Error(err))
 			} else {
-				logutil.BgLogger().Warn("[interval-partition] remove data in aws s3 successs",
+				logutil.BgLogger().Warn("[interval-partition] remove data in aws s3 success",
 					zap.String("table", meta.tableName), zap.Int64("table-id", meta.tableID), zap.Int64("partition-id", pid))
 				pm.awsTableMeta.Delete(pid)
 			}
@@ -73,31 +81,46 @@ func (pm *IntervalPartitionManager) checkPartitionExist(is infoschema.InfoSchema
 	return exist
 }
 
-func (pm *IntervalPartitionManager) buildAwsTableMeta() {
+func (pm *IntervalPartitionManager) loadAwsTableMeta() error {
+	if pm.loadedMeta {
+		return nil
+	}
+
+	cli, err := athena.CreateCli(pm.s3Region)
+	if err != nil {
+		return err
+	}
 	is := pm.infoCache.GetLatest()
-	dbs := is.AllSchemas()
-	for _, db := range dbs {
-		if util.IsMemDB(db.Name.L) || util.IsSysDB(db.Name.L) {
-			continue
+
+	dbs, err := athena.GetAllDatabase(cli)
+	if err != nil {
+		return nil
+	}
+	for _, dbName := range dbs {
+		tbs, err := athena.GetAllTables(cli, dbName)
+		if err != nil {
+			return nil
 		}
-		tbs := is.SchemaTables(db.Name)
-		for _, tb := range tbs {
-			tbInfo := tb.Meta()
-			pi := tbInfo.GetPartitionInfo()
-			if pi == nil || pi.Type != model.PartitionTypeRange || pi.Expr == "" ||
-				len(pi.Definitions) == 0 || len(pi.Definitions[0].LessThan) != 1 || pi.Interval.MovePartitionExpr == "" {
+		for _, tpName := range tbs {
+			tbName, pid, valid := util2.ParseTablePartitionName(tpName)
+			if !valid {
 				continue
 			}
-			for _, pd := range pi.Definitions {
-				if pd.Readonly && pd.Engine == AWSS3Engine {
-					pm.awsTableMeta.Store(pd.ID, &PartitionTableMeta{
-						tableID:   tbInfo.ID,
-						pid:       pd.ID,
-						db:        db.Name.L,
-						tableName: tbInfo.Name.L,
-					})
-				}
+			table, err := is.TableByName(model.NewCIStr(dbName), model.NewCIStr(tbName))
+			if err != nil || table == nil {
+				continue
 			}
+			pm.awsTableMeta.Store(pid, &PartitionTableMeta{
+				tableID:   table.Meta().ID,
+				pid:       pid,
+				db:        dbName,
+				tableName: tbName,
+			})
+			logutil.BgLogger().Info("load table meta from s3 succ",
+				zap.String("table", tbName), zap.String("db", dbName),
+				zap.Int64("tid", table.Meta().ID), zap.Int64("pid", pid))
 		}
 	}
+	pm.loadedMeta = true
+	return nil
 }

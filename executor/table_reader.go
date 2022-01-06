@@ -15,7 +15,6 @@
 package executor
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -116,39 +115,8 @@ type TableReaderExecutor struct {
 	// extraPIDColumnIndex is used for partition reader to add an extra partition ID column.
 	extraPIDColumnIndex offsetOptional
 
-	AWSQueryInfo   *RestoreData
+	AWSQueryInfo   *plannercore.RestoreData
 	awsQueryResult *awsathena.ResultSet
-}
-
-type RestoreData struct {
-	DB    string
-	Table string
-	Agg   string
-	Where []string
-}
-
-func (d *RestoreData) String() string {
-	var buffer bytes.Buffer
-	fmt.Fprint(&buffer, `select `)
-	if len(d.Agg) == 0 {
-		fmt.Fprint(&buffer, `*`)
-	} else {
-		fmt.Fprint(&buffer, d.Agg)
-	}
-	fmt.Fprint(&buffer, ` from "`)
-	fmt.Fprint(&buffer, d.DB)
-	fmt.Fprint(&buffer, `"."`)
-	fmt.Fprint(&buffer, d.Table)
-	fmt.Fprint(&buffer, `"`)
-	for i, c := range d.Where {
-		if i != 0 {
-			fmt.Fprint(&buffer, " and ")
-		} else {
-			fmt.Fprint(&buffer, " where ")
-		}
-		fmt.Fprint(&buffer, c)
-	}
-	return buffer.String()
 }
 
 // offsetOptional may be a positive integer, or invalid.
@@ -180,7 +148,6 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 	pid, storeType := getPhysicalTableEngine(e.table)
 	if storeType == kv.AWSS3Engine {
 		e.storeType = kv.AwsS3
-		fmt.Printf("store type is awss3 ------")
 		return e.fetchResultFromAws(pid)
 	}
 

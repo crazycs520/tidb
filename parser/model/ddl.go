@@ -81,86 +81,86 @@ const (
 	// Just left a tombstone here for compatibility.
 	__DEPRECATED_ActionAlterTableAlterPartition ActionType = 46
 
-	ActionRenameTables                  ActionType = 47
-	ActionDropIndexes                   ActionType = 48
-	ActionAlterTableAttributes          ActionType = 49
-	ActionAlterTablePartitionAttributes ActionType = 50
-	ActionCreatePlacementPolicy         ActionType = 51
-	ActionAlterPlacementPolicy          ActionType = 52
-	ActionDropPlacementPolicy           ActionType = 53
-	ActionAlterTablePartitionPlacement  ActionType = 54
-	ActionModifySchemaDefaultPlacement  ActionType = 55
-	ActionAlterTablePlacement           ActionType = 56
-	ActionAlterCacheTable               ActionType = 57
-	ActionAlterTableStatsOptions        ActionType = 58
-	ActionAlterNoCacheTable             ActionType = 59
-	ActionCreateTables                  ActionType = 60
-	ActionAlterTablePartitionsMove      ActionType = 61
-	ActionAlterTablePartitionMeta       ActionType = 62
+	ActionRenameTables                   ActionType = 47
+	ActionDropIndexes                    ActionType = 48
+	ActionAlterTableAttributes           ActionType = 49
+	ActionAlterTablePartitionAttributes  ActionType = 50
+	ActionCreatePlacementPolicy          ActionType = 51
+	ActionAlterPlacementPolicy           ActionType = 52
+	ActionDropPlacementPolicy            ActionType = 53
+	ActionAlterTablePartitionPlacement   ActionType = 54
+	ActionModifySchemaDefaultPlacement   ActionType = 55
+	ActionAlterTablePlacement            ActionType = 56
+	ActionAlterCacheTable                ActionType = 57
+	ActionAlterTableStatsOptions         ActionType = 58
+	ActionAlterNoCacheTable              ActionType = 59
+	ActionCreateTables                   ActionType = 60
+	ActionAlterTablePartitionsAutoAction ActionType = 61
+	ActionAlterTablePartitionMeta        ActionType = 62
 )
 
 var actionMap = map[ActionType]string{
-	ActionCreateSchema:                  "create schema",
-	ActionDropSchema:                    "drop schema",
-	ActionCreateTable:                   "create table",
-	ActionCreateTables:                  "create tables",
-	ActionDropTable:                     "drop table",
-	ActionAddColumn:                     "add column",
-	ActionDropColumn:                    "drop column",
-	ActionAddIndex:                      "add index",
-	ActionDropIndex:                     "drop index",
-	ActionAddForeignKey:                 "add foreign key",
-	ActionDropForeignKey:                "drop foreign key",
-	ActionTruncateTable:                 "truncate table",
-	ActionModifyColumn:                  "modify column",
-	ActionRebaseAutoID:                  "rebase auto_increment ID",
-	ActionRenameTable:                   "rename table",
-	ActionRenameTables:                  "rename tables",
-	ActionSetDefaultValue:               "set default value",
-	ActionShardRowID:                    "shard row ID",
-	ActionModifyTableComment:            "modify table comment",
-	ActionRenameIndex:                   "rename index",
-	ActionAddTablePartition:             "add partition",
-	ActionDropTablePartition:            "drop partition",
-	ActionCreateView:                    "create view",
-	ActionModifyTableCharsetAndCollate:  "modify table charset and collate",
-	ActionTruncateTablePartition:        "truncate partition",
-	ActionDropView:                      "drop view",
-	ActionRecoverTable:                  "recover table",
-	ActionModifySchemaCharsetAndCollate: "modify schema charset and collate",
-	ActionLockTable:                     "lock table",
-	ActionUnlockTable:                   "unlock table",
-	ActionRepairTable:                   "repair table",
-	ActionSetTiFlashReplica:             "set tiflash replica",
-	ActionUpdateTiFlashReplicaStatus:    "update tiflash replica status",
-	ActionAddPrimaryKey:                 "add primary key",
-	ActionDropPrimaryKey:                "drop primary key",
-	ActionCreateSequence:                "create sequence",
-	ActionAlterSequence:                 "alter sequence",
-	ActionDropSequence:                  "drop sequence",
-	ActionAddColumns:                    "add multi-columns",
-	ActionDropColumns:                   "drop multi-columns",
-	ActionModifyTableAutoIdCache:        "modify auto id cache",
-	ActionRebaseAutoRandomBase:          "rebase auto_random ID",
-	ActionAlterIndexVisibility:          "alter index visibility",
-	ActionExchangeTablePartition:        "exchange partition",
-	ActionAddCheckConstraint:            "add check constraint",
-	ActionDropCheckConstraint:           "drop check constraint",
-	ActionAlterCheckConstraint:          "alter check constraint",
-	ActionDropIndexes:                   "drop multi-indexes",
-	ActionAlterTableAttributes:          "alter table attributes",
-	ActionAlterTablePartitionPlacement:  "alter table partition placement",
-	ActionAlterTablePartitionAttributes: "alter table partition attributes",
-	ActionCreatePlacementPolicy:         "create placement policy",
-	ActionAlterPlacementPolicy:          "alter placement policy",
-	ActionDropPlacementPolicy:           "drop placement policy",
-	ActionModifySchemaDefaultPlacement:  "modify schema default placement",
-	ActionAlterTablePlacement:           "alter table placement",
-	ActionAlterCacheTable:               "alter table cache",
-	ActionAlterNoCacheTable:             "alter table nocache",
-	ActionAlterTableStatsOptions:        "alter table statistics options",
-	ActionAlterTablePartitionsMove:      "alter table partitions move",
-	ActionAlterTablePartitionMeta:       "alter table partition meta",
+	ActionCreateSchema:                   "create schema",
+	ActionDropSchema:                     "drop schema",
+	ActionCreateTable:                    "create table",
+	ActionCreateTables:                   "create tables",
+	ActionDropTable:                      "drop table",
+	ActionAddColumn:                      "add column",
+	ActionDropColumn:                     "drop column",
+	ActionAddIndex:                       "add index",
+	ActionDropIndex:                      "drop index",
+	ActionAddForeignKey:                  "add foreign key",
+	ActionDropForeignKey:                 "drop foreign key",
+	ActionTruncateTable:                  "truncate table",
+	ActionModifyColumn:                   "modify column",
+	ActionRebaseAutoID:                   "rebase auto_increment ID",
+	ActionRenameTable:                    "rename table",
+	ActionRenameTables:                   "rename tables",
+	ActionSetDefaultValue:                "set default value",
+	ActionShardRowID:                     "shard row ID",
+	ActionModifyTableComment:             "modify table comment",
+	ActionRenameIndex:                    "rename index",
+	ActionAddTablePartition:              "add partition",
+	ActionDropTablePartition:             "drop partition",
+	ActionCreateView:                     "create view",
+	ActionModifyTableCharsetAndCollate:   "modify table charset and collate",
+	ActionTruncateTablePartition:         "truncate partition",
+	ActionDropView:                       "drop view",
+	ActionRecoverTable:                   "recover table",
+	ActionModifySchemaCharsetAndCollate:  "modify schema charset and collate",
+	ActionLockTable:                      "lock table",
+	ActionUnlockTable:                    "unlock table",
+	ActionRepairTable:                    "repair table",
+	ActionSetTiFlashReplica:              "set tiflash replica",
+	ActionUpdateTiFlashReplicaStatus:     "update tiflash replica status",
+	ActionAddPrimaryKey:                  "add primary key",
+	ActionDropPrimaryKey:                 "drop primary key",
+	ActionCreateSequence:                 "create sequence",
+	ActionAlterSequence:                  "alter sequence",
+	ActionDropSequence:                   "drop sequence",
+	ActionAddColumns:                     "add multi-columns",
+	ActionDropColumns:                    "drop multi-columns",
+	ActionModifyTableAutoIdCache:         "modify auto id cache",
+	ActionRebaseAutoRandomBase:           "rebase auto_random ID",
+	ActionAlterIndexVisibility:           "alter index visibility",
+	ActionExchangeTablePartition:         "exchange partition",
+	ActionAddCheckConstraint:             "add check constraint",
+	ActionDropCheckConstraint:            "drop check constraint",
+	ActionAlterCheckConstraint:           "alter check constraint",
+	ActionDropIndexes:                    "drop multi-indexes",
+	ActionAlterTableAttributes:           "alter table attributes",
+	ActionAlterTablePartitionPlacement:   "alter table partition placement",
+	ActionAlterTablePartitionAttributes:  "alter table partition attributes",
+	ActionCreatePlacementPolicy:          "create placement policy",
+	ActionAlterPlacementPolicy:           "alter placement policy",
+	ActionDropPlacementPolicy:            "drop placement policy",
+	ActionModifySchemaDefaultPlacement:   "modify schema default placement",
+	ActionAlterTablePlacement:            "alter table placement",
+	ActionAlterCacheTable:                "alter table cache",
+	ActionAlterNoCacheTable:              "alter table nocache",
+	ActionAlterTableStatsOptions:         "alter table statistics options",
+	ActionAlterTablePartitionsAutoAction: "alter table auto action",
+	ActionAlterTablePartitionMeta:        "alter table partition meta",
 
 	// `ActionAlterTableAlterPartition` is removed and will never be used.
 	// Just left a tombstone here for compatibility.

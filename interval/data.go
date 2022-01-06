@@ -67,21 +67,22 @@ func (s *CopyDataSuite) CopyDataToAWSS3() error {
 }
 
 func RemoveDataInAWSS3(db, table string, pid int64, region string) error {
+	cli, err := athena.CreateCli(region)
+	if err != nil {
+		return err
+	}
+	tableName := util.GetTablePartitionName(table, pid)
+	err = athena.DropTable(cli, db, tableName)
+	if err != nil {
+		return err
+	}
+
 	s3Cli, err := awss3.CreateS3Client(region)
 	if err != nil {
 		return err
 	}
 	s3BucketName := util.GetTablePartitionBucketName(table, pid)
-	err = awss3.DeleteBucketForTablePartition(s3Cli, s3BucketName)
-	if err != nil {
-		return err
-	}
-
-	cli, err := athena.CreateCli(region)
-	if err != nil {
-		return err
-	}
-	return athena.DropTable(cli, db, table, pid)
+	return awss3.DeleteBucketForTablePartition(s3Cli, s3BucketName)
 }
 
 func (s *CopyDataSuite) prepareAWSS3Bucket() error {
@@ -110,5 +111,11 @@ func (s *CopyDataSuite) createTableInAthena() error {
 		return err
 	}
 
-	return athena.CreateTable(cli, s.db, s.table, s.pid, s.s3BucketName, s.tbInfo)
+	err = athena.CreateDatabase(cli, s.db)
+	if err != nil {
+		return err
+	}
+
+	tableName := util.GetTablePartitionName(s.table, s.pid)
+	return athena.CreateTable(cli, s.db, tableName, s.s3BucketName, s.tbInfo)
 }

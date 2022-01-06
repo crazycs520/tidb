@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
+	intervalutil "github.com/pingcap/tidb/interval/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/parser/ast"
@@ -1345,6 +1346,11 @@ func (e *Explain) explainPlanInRowFormat(p Plan, taskType, driverSide, indent st
 		if x.BatchCop {
 			taskName = "batchCop"
 		}
+		ts := x.GetTableScan()
+		ok, _ := IsReadFromS3(ts)
+		if ok {
+			storeType = kv.AWSS3Engine
+		}
 		err = e.explainPlanInRowFormat(x.tablePlan, taskName+"["+storeType+"]", "", childIndent, true)
 	case *PhysicalIndexReader:
 		err = e.explainPlanInRowFormat(x.indexPlan, "cop[tikv]", "", childIndent, true)
@@ -1604,4 +1610,70 @@ func IsPointGetWithPKOrUniqueKeyByAutoCommit(ctx sessionctx.Context, p Plan) (bo
 // used for fast plan like point get
 func IsAutoCommitTxn(ctx sessionctx.Context) bool {
 	return ctx.GetSessionVars().IsAutocommit() && !ctx.GetSessionVars().InTxn()
+}
+
+type RestoreData struct {
+	DB    string
+	Table string
+	Where []string
+}
+
+func (d *RestoreData) String() string {
+	var buffer bytes.Buffer
+	fmt.Fprint(&buffer, `select * from "`)
+	fmt.Fprint(&buffer, d.DB)
+	fmt.Fprint(&buffer, `"."`)
+	fmt.Fprint(&buffer, d.Table)
+	fmt.Fprint(&buffer, `"`)
+	for i, c := range d.Where {
+		if i != 0 {
+			fmt.Fprint(&buffer, " and ")
+		} else {
+			fmt.Fprint(&buffer, " where ")
+		}
+		fmt.Fprint(&buffer, c)
+	}
+	return buffer.String()
+}
+
+func IsReadFromS3(t *PhysicalTableScan) (bool, int64) {
+	if ok, id := t.IsPartition(); ok {
+		for _, p := range t.Table.Partition.Definitions {
+			if p.ID == id {
+				return p.Engine == kv.AWSS3Engine, p.ID
+			}
+		}
+	}
+	return false, 0
+}
+
+func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
+	info := RestoreData{Where: make([]string, 0)}
+	ts := v.GetTableScan()
+	var tableInfo *model.TableInfo
+	for _, p := range v.TablePlans {
+		switch x := p.(type) {
+		case *PhysicalTableScan:
+			info.Table = intervalutil.GetTablePartitionName(x.Table.Name.L, id)
+			info.DB = "test"
+			tableInfo = x.Table
+			var unsignedIntHandle bool
+			if ts.Table.PKIsHandle {
+				if pkColInfo := ts.Table.GetPkColInfo(); pkColInfo != nil {
+					unsignedIntHandle = mysql.HasUnsignedFlag(pkColInfo.Flag)
+				}
+			}
+			for _, r := range x.Ranges {
+				if r.IsFullRange(unsignedIntHandle) {
+					continue
+				}
+				info.Where = append(info.Where, r.RestoreString(x.Table.GetPkColName())...)
+			}
+		case *PhysicalSelection:
+			for _, c := range x.Conditions {
+				info.Where = append(info.Where, c.Restore(tableInfo))
+			}
+		}
+	}
+	return &info
 }

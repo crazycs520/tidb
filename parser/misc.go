@@ -474,6 +474,7 @@ var tokenMap = map[string]int{
 	"MODE":                     mode,
 	"MODIFY":                   modify,
 	"MONTH":                    month,
+	"MOVE":                     move,
 	"NAMES":                    names,
 	"NATIONAL":                 national,
 	"NATURAL":                  natural,
