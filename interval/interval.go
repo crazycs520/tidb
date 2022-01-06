@@ -293,12 +293,12 @@ type TablePartition struct {
 
 func (pm *IntervalPartitionManager) getTableNeedIntervalPartition(ctx sessionctx.Context, dbInfo *model.DBInfo, tbInfo *model.TableInfo) []*TablePartition {
 	pi := tbInfo.GetPartitionInfo()
-	auto := pi.AutoAction
 	if pi == nil || pi.Type != model.PartitionTypeRange || pi.Expr == "" ||
-		len(pi.Definitions) == 0 || len(pi.Definitions[0].LessThan) != 1 || auto.MovePartitionExpr == "" || auto.MoveToEngine == "" {
+		len(pi.Definitions) == 0 || len(pi.Definitions[0].LessThan) != 1 || pi.AutoAction.MovePartitionExpr == "" || pi.AutoAction.MoveToEngine == "" {
 		return nil
 	}
 
+	auto := pi.AutoAction
 	isUnsigned := isColUnsigned(tbInfo.Columns, pi)
 	moveExprValue, _, err := getRangeValue(ctx, auto.MovePartitionExpr, isUnsigned)
 	if err != nil {
@@ -367,14 +367,13 @@ func (pm *IntervalPartitionManager) GetNeedDeleteTablePartition() *TablePartitio
 
 func (pm *IntervalPartitionManager) getNeedDeleteTablePartition(ctx sessionctx.Context, dbInfo *model.DBInfo, tbInfo *model.TableInfo) *TablePartition {
 	pi := tbInfo.GetPartitionInfo()
-	auto := pi.AutoAction
 	if pi == nil || pi.Type != model.PartitionTypeRange || pi.Expr == "" ||
-		len(pi.Definitions) < 2 || len(pi.Definitions[0].LessThan) != 1 || auto.DeletePartitionExpr == "" {
+		len(pi.Definitions) < 2 || len(pi.Definitions[0].LessThan) != 1 || pi.AutoAction.DeletePartitionExpr == "" {
 		return nil
 	}
 
 	isUnsigned := isColUnsigned(tbInfo.Columns, pi)
-	deleteExprValue, _, err := getRangeValue(ctx, auto.DeletePartitionExpr, isUnsigned)
+	deleteExprValue, _, err := getRangeValue(ctx, pi.AutoAction.DeletePartitionExpr, isUnsigned)
 	if err != nil {
 		return nil
 	}
