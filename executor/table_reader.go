@@ -15,7 +15,6 @@
 package executor
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -116,32 +115,8 @@ type TableReaderExecutor struct {
 	// extraPIDColumnIndex is used for partition reader to add an extra partition ID column.
 	extraPIDColumnIndex offsetOptional
 
-	AWSQueryInfo   *RestoreData
+	AWSQueryInfo   *plannercore.RestoreData
 	awsQueryResult *awsathena.ResultSet
-}
-
-type RestoreData struct {
-	DB    string
-	Table string
-	Where []string
-}
-
-func (d *RestoreData) String() string {
-	var buffer bytes.Buffer
-	fmt.Fprint(&buffer, `select * from "`)
-	fmt.Fprint(&buffer, d.DB)
-	fmt.Fprint(&buffer, `"."`)
-	fmt.Fprint(&buffer, d.Table)
-	fmt.Fprint(&buffer, `"`)
-	for i, c := range d.Where {
-		if i != 0 {
-			fmt.Fprint(&buffer, " and ")
-		} else {
-			fmt.Fprint(&buffer, " where ")
-		}
-		fmt.Fprint(&buffer, c)
-	}
-	return buffer.String()
 }
 
 // offsetOptional may be a positive integer, or invalid.

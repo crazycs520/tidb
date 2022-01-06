@@ -324,6 +324,12 @@ func (p *PhysicalTableScan) isFullScan() bool {
 
 // ExplainInfo implements Plan interface.
 func (p *PhysicalTableReader) ExplainInfo() string {
+	ts := p.GetTableScan()
+	ok, pid := IsReadFromS3(ts)
+	if ok {
+		awsQueryInfo := BuildAWSQueryInfo(p, pid)
+		return "athena_query: " + awsQueryInfo.String()
+	}
 	return "data:" + p.tablePlan.ExplainID().String()
 }
 
