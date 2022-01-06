@@ -159,7 +159,7 @@ var actionMap = map[ActionType]string{
 	ActionAlterCacheTable:                "alter table cache",
 	ActionAlterNoCacheTable:              "alter table nocache",
 	ActionAlterTableStatsOptions:         "alter table statistics options",
-	ActionAlterTablePartitionsAutoAction: "alter table partitions move",
+	ActionAlterTablePartitionsAutoAction: "alter table auto action",
 	ActionAlterTablePartitionMeta:        "alter table partition meta",
 
 	// `ActionAlterTableAlterPartition` is removed and will never be used.
