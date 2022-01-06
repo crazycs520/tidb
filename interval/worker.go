@@ -101,7 +101,7 @@ func (pm *IntervalPartitionManager) checkJobValid(job *Job) bool {
 		return false
 	}
 	pi := tb.Meta().GetPartitionInfo()
-	if pi == nil || pi.Interval.MovePartitionExpr == "" {
+	if pi == nil || pi.AutoAction.MovePartitionExpr == "" || pi.AutoAction.MoveToEngine == "" {
 		return false
 	}
 	found := false

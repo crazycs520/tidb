@@ -1573,9 +1573,9 @@ func onAlterNoCacheTable(t *meta.Meta, job *model.Job) (ver int64, err error) {
 	return ver, err
 }
 
-func onAlterTablePartitionsMove(t *meta.Meta, job *model.Job) (ver int64, err error) {
-	var exprStr, engineName string
-	if err := job.DecodeArgs(&exprStr, &engineName); err != nil {
+func onAlterTablePartitionsAutoAction(t *meta.Meta, job *model.Job) (ver int64, err error) {
+	var autoActionInfo AutoActionInfo
+	if err := job.DecodeArgs(&autoActionInfo); err != nil {
 		// Invalid arguments, cancel this job.
 		job.State = model.JobStateCancelled
 		return ver, errors.Trace(err)
@@ -1592,8 +1592,14 @@ func onAlterTablePartitionsMove(t *meta.Meta, job *model.Job) (ver int64, err er
 		job.State = model.JobStateCancelled
 		return ver, ErrInvalidDDLState.GenWithStack("operation only supported in range partition table")
 	}
-	pi.Interval.MovePartitionExpr = exprStr
-	pi.Interval.Engine = engineName
+
+	switch autoActionInfo.Action {
+	case ast.AutoActionMove:
+		pi.AutoAction.MovePartitionExpr = autoActionInfo.LessThanExpr
+		pi.AutoAction.MoveToEngine = autoActionInfo.Engine
+	case ast.AutoActionDelete:
+		pi.AutoAction.DeletePartitionExpr = autoActionInfo.LessThanExpr
+	}
 
 	ver, err = updateVersionAndTableInfo(t, job, tbInfo, true)
 	if err != nil {

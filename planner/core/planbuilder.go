@@ -4363,7 +4363,7 @@ func (b *PlanBuilder) buildDDL(ctx context.Context, node ast.DDLNode) (Plan, err
 		b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SuperPriv, "", "", "", nil)
 	case *ast.LockTablesStmt, *ast.UnlockTablesStmt:
 		// TODO: add Lock Table privilege check.
-	case *ast.CleanupTableLockStmt, *ast.AlterTableAutoActionStmt:
+	case *ast.CleanupTableLockStmt, *ast.AlterTablePartitionsAutoActionStmt:
 		// This command can only be executed by administrator.
 		b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SuperPriv, "", "", "", nil)
 	case *ast.RepairTableStmt:

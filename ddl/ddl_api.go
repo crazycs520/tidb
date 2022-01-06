@@ -6714,24 +6714,29 @@ func (d *ddl) AlterPlacementPolicy(ctx sessionctx.Context, stmt *ast.AlterPlacem
 
 var supportedEngineList = []string{"aws_s3"}
 
-func (d *ddl) AlterTablePartitionsMoveEngine(ctx sessionctx.Context, stmt *ast.AlterTableAutoActionStmt) (err error) {
+func (d *ddl) AlterTablePartitionsAutoAction(ctx sessionctx.Context, stmt *ast.AlterTablePartitionsAutoActionStmt) (err error) {
 	tbInfo := stmt.Table.TableInfo
 	// check range partition
 	pi := tbInfo.GetPartitionInfo()
 	if pi == nil || pi.Type != model.PartitionTypeRange || len(pi.Columns) > 0 {
 		return errors.New("operation only supported in range partition table")
 	}
-	// check engine
-	found := false
-	engineName := strings.ToLower(stmt.EngineName)
-	for _, e := range supportedEngineList {
-		if engineName == e {
-			found = true
-			break
+
+	autoInfo := &AutoActionInfo{Action: stmt.Action}
+	if stmt.Action == ast.AutoActionMove {
+		// check engine
+		found := false
+		engineName := strings.ToLower(stmt.EngineName)
+		for _, e := range supportedEngineList {
+			if engineName == e {
+				found = true
+				break
+			}
 		}
-	}
-	if !found {
-		return errors.Errorf("unknown engine %v", stmt.EngineName)
+		if !found {
+			return errors.Errorf("unknown engine %v", stmt.EngineName)
+		}
+		autoInfo.Engine = engineName
 	}
 	// check expression
 	err = checkPartitionValuesIsInt(ctx, &ast.PartitionDefinition{}, []ast.ExprNode{stmt.LessThanExpr}, tbInfo)
@@ -6745,18 +6750,25 @@ func (d *ddl) AlterTablePartitionsMoveEngine(ctx sessionctx.Context, stmt *ast.A
 	if err != nil {
 		return err
 	}
+	autoInfo.LessThanExpr = buf.String()
 
 	job := &model.Job{
 		SchemaID:   stmt.Table.DBInfo.ID,
 		SchemaName: stmt.Table.DBInfo.Name.L,
 		TableID:    tbInfo.ID,
-		Type:       model.ActionAlterTablePartitionsMove,
+		Type:       model.ActionAlterTablePartitionsAutoAction,
 		BinlogInfo: &model.HistoryInfo{},
-		Args:       []interface{}{buf.String(), engineName},
+		Args:       []interface{}{autoInfo},
 	}
 	err = d.doDDLJob(ctx, job)
 	err = d.callHookOnChanged(err)
 	return errors.Trace(err)
+}
+
+type AutoActionInfo struct {
+	Action       ast.AutoActionType `json:"type"`
+	LessThanExpr string             `json:"expr"`
+	Engine       string             `json:"engine"`
 }
 
 type AlterTablePartitionInfo struct {

@@ -945,7 +945,7 @@ import (
 	AlterTableSpec                         "Alter table specification"
 	AlterTableSpecList                     "Alter table specification list"
 	AlterTableSpecListOpt                  "Alter table specification list optional"
-	AlterTableAutoActionOpt                 "Alter table auto action optional"
+	AlterTableAutoActionOpt                "Alter table auto action optional"
 	AlterTableAutoActionExpr               "Alter table auto action expression"
 	AlterSequenceOption                    "Alter sequence option"
 	AlterSequenceOptionList                "Alter sequence option list"
@@ -1491,14 +1491,14 @@ AlterTableStmt:
 		}
 	}
 |	"ALTER" IgnoreOptional "TABLE" TableName AutoAction AlterTableAutoActionExpr AlterTableAutoActionOpt
-    	{
-    		$$ = &ast.AlterTableAutoActionStmt{
-    			Table:        $4.(*ast.TableName),
-    			Action:       $5,
-    			LessThanExpr: $6,
-    			EngineName:   $7,
-    		}
-    	}
+	{
+		$$ = &ast.AlterTablePartitionsAutoActionStmt{
+			Table:        $4.(*ast.TableName),
+			Action:       $5.(ast.AutoActionType),
+			LessThanExpr: $6.(ast.ExprNode),
+			EngineName:   $7.(string),
+		}
+	}
 |	"ALTER" IgnoreOptional "TABLE" TableName "ANALYZE" "PARTITION" PartitionNameList AnalyzeOptionListOpt
 	{
 		$$ = &ast.AnalyzeTableStmt{TableNames: []*ast.TableName{$4.(*ast.TableName)}, PartitionNames: $7.([]model.CIStr), AnalyzeOpts: $8.([]ast.AnalyzeOpt)}
@@ -2265,9 +2265,9 @@ AutoAction:
 	{
 		$$ = ast.AutoActionMove
 	}
-|	"DROP"
+|	"DELETE"
 	{
-		$$ = ast.AutoActionDrop
+		$$ = ast.AutoActionDelete
 	}
 
 AlgorithmClause:

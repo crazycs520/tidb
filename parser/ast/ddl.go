@@ -3981,14 +3981,14 @@ func (n *AlterPlacementPolicyStmt) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-type AutoActionType int
+type AutoActionType = int
 
 const (
-	AutoActionMove AutoActionType = 1
-	AutoActionDrop AutoActionType = 2
+	AutoActionMove   AutoActionType = 1
+	AutoActionDelete AutoActionType = 2
 )
 
-type AlterTableAutoActionStmt struct {
+type AlterTablePartitionsAutoActionStmt struct {
 	ddlNode
 
 	Action       AutoActionType
@@ -3997,20 +3997,20 @@ type AlterTableAutoActionStmt struct {
 	EngineName   string
 }
 
-func (n *AlterTableAutoActionStmt) Restore(ctx *format.RestoreCtx) error {
+func (n *AlterTablePartitionsAutoActionStmt) Restore(ctx *format.RestoreCtx) error {
 	ctx.WriteKeyWord("ALTER TABLE ")
 	if err := n.Table.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore AlterTableAutoActionStmt.Table")
+		return errors.Annotate(err, "An error occurred while restore AlterTablePartitionsAutoActionStmt.Table")
 	}
 	switch n.Action {
 	case AutoActionMove:
 		ctx.WriteKeyWord(" MOVE")
-	case AutoActionDrop:
-		ctx.WriteKeyWord(" DROP")
+	case AutoActionDelete:
+		ctx.WriteKeyWord(" DELETE")
 	}
 	ctx.WriteKeyWord(" PARTITIONS VALUES LESS THAN ")
 	if err := n.LessThanExpr.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore AlterTableAutoActionStmt.LessThanExpr")
+		return errors.Annotate(err, "An error occurred while restore AlterTablePartitionsAutoActionStmt.LessThanExpr")
 	}
 	if n.Action == AutoActionMove {
 		ctx.WriteKeyWord(" TO ENGINE ")
@@ -4019,12 +4019,12 @@ func (n *AlterTableAutoActionStmt) Restore(ctx *format.RestoreCtx) error {
 	return nil
 }
 
-func (n *AlterTableAutoActionStmt) Accept(v Visitor) (Node, bool) {
+func (n *AlterTablePartitionsAutoActionStmt) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
 	if skipChildren {
 		return v.Leave(newNode)
 	}
-	n = newNode.(*AlterTableAutoActionStmt)
+	n = newNode.(*AlterTablePartitionsAutoActionStmt)
 	node, ok := n.Table.Accept(v)
 	if !ok {
 		return n, false

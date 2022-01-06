@@ -49,6 +49,24 @@ func (pm *IntervalPartitionManager) RunAutoCreatePartitionLoop() {
 	}
 }
 
+func (pm *IntervalPartitionManager) RunAutoDeletePartitionLoop() {
+	ticker := time.NewTicker(defCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if !pm.ownerManager.IsOwner() {
+				continue
+			}
+			tp := pm.GetNeedDeleteTablePartition()
+			if tp != nil {
+				pm.handleAutoDeletePartitionTask(tp)
+			}
+		}
+	}
+}
+
 func (pm *IntervalPartitionManager) handleAutoCreatePartitionTask(task *AutoCreatePartitionTask) (bool, error) {
 	if !pm.isValidTask(task) {
 		return false, nil
@@ -83,7 +101,8 @@ func (pm *IntervalPartitionManager) handleAutoCreatePartitionTask(task *AutoCrea
 	if nextValue < task.value {
 		return false, nil
 	}
-	partName := fmt.Sprintf("auto_p%v", len(tbInfo.Partition.Definitions))
+	length := len(tbInfo.Partition.Definitions)
+	partName := fmt.Sprintf("auto_p%v", tbInfo.Partition.Definitions[length-1].ID)
 	ddlSQL := fmt.Sprintf("ALTER TABLE `%v`.`%v` ADD PARTITION ( PARTITION %v VALUES LESS THAN (%v))",
 		task.dbName, tbInfo.Name.O, partName, nextValue)
 
@@ -96,6 +115,30 @@ func (pm *IntervalPartitionManager) handleAutoCreatePartitionTask(task *AutoCrea
 		zap.String("table", task.tbInfo.Name.O),
 		zap.Int64("next-value", nextValue))
 	return true, nil
+}
+
+func (pm *IntervalPartitionManager) handleAutoDeletePartitionTask(tb *TablePartition) {
+	if tb == nil {
+		return
+	}
+
+	ctx, err := pm.sessPool.get()
+	if err != nil {
+		return
+	}
+	defer pm.sessPool.put(ctx)
+
+	ddlSQL := fmt.Sprintf("ALTER TABLE `%v`.`%v` DROP PARTITION `%v`",
+		tb.dbInfo.Name.L, tb.tbInfo.Name.L, tb.pdInfo.Name.L)
+
+	_, err = ctx.(sqlexec.SQLExecutor).ExecuteInternal(context.Background(), ddlSQL)
+	if err != nil {
+		return
+	}
+	logutil.BgLogger().Error("[interval-partition] auto drop partition success",
+		zap.String("db", tb.dbInfo.Name.L),
+		zap.String("table", tb.tbInfo.Name.L),
+		zap.String("partition", tb.pdInfo.Name.L))
 }
 
 func (pm *IntervalPartitionManager) calculateNextPartitionValue(ctx sessionctx.Context, tbInfo *model.TableInfo, lastValue int64) (int64, error) {

@@ -201,7 +201,7 @@ func (e *DDLExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 		err = e.executeDropPlacementPolicy(x)
 	case *ast.AlterPlacementPolicyStmt:
 		err = e.executeAlterPlacementPolicy(x)
-	case *ast.AlterTableAutoActionStmt:
+	case *ast.AlterTablePartitionsAutoActionStmt:
 		err = e.executeAlterTablePartitionsMoveEngine(x)
 	}
 	if err != nil {
@@ -876,6 +876,6 @@ func (e *DDLExec) executeAlterPlacementPolicy(s *ast.AlterPlacementPolicyStmt) e
 	return domain.GetDomain(e.ctx).DDL().AlterPlacementPolicy(e.ctx, s)
 }
 
-func (e *DDLExec) executeAlterTablePartitionsMoveEngine(s *ast.AlterTableAutoActionStmt) error {
-	return domain.GetDomain(e.ctx).DDL().AlterTablePartitionsMoveEngine(e.ctx, s)
+func (e *DDLExec) executeAlterTablePartitionsMoveEngine(s *ast.AlterTablePartitionsAutoActionStmt) error {
+	return domain.GetDomain(e.ctx).DDL().AlterTablePartitionsAutoAction(e.ctx, s)
 }

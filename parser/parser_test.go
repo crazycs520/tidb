@@ -2445,8 +2445,8 @@ func TestDDL(t *testing.T) {
 		//
 		{`alter table m move partitions values less than 1 to engine AWS_S3;`, true, "ALTER TABLE `m` MOVE PARTITIONS VALUES LESS THAN 1 TO ENGINE AWS_S3"},
 		{`alter table m move partitions values less than UNIX_TIMESTAMP(date_sub(now(), interval 1 year)) to engine AWS_S3;`, true, "ALTER TABLE `m` MOVE PARTITIONS VALUES LESS THAN UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 1 YEAR)) TO ENGINE AWS_S3"},
-		{`alter table m drop partitions values less than 1;`, true, "ALTER TABLE `m` MOVE PARTITIONS VALUES LESS THAN 1"},
-		{`alter table m drop partitions values less than UNIX_TIMESTAMP(date_sub(now(), interval 1 year));`, true, "ALTER TABLE `m` MOVE PARTITIONS VALUES LESS THAN UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 1 YEAR))"},
+		{`alter table m delete partitions values less than 1;`, true, "ALTER TABLE `m` DELETE PARTITIONS VALUES LESS THAN 1"},
+		{`alter table m delete partitions values less than UNIX_TIMESTAMP(date_sub(now(), interval 1 year));`, true, "ALTER TABLE `m` DELETE PARTITIONS VALUES LESS THAN UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 1 YEAR))"},
 
 		// for check clause
 		{"create table t (c1 bool, c2 bool, check (c1 in (0, 1)) not enforced, check (c2 in (0, 1)))", true, "CREATE TABLE `t` (`c1` TINYINT(1),`c2` TINYINT(1),CHECK(`c1` IN (0,1)) NOT ENFORCED,CHECK(`c2` IN (0,1)) ENFORCED)"},
