@@ -3110,11 +3110,13 @@ func (b *executorBuilder) buildMPPGather(v *plannercore.PhysicalTableReader) Exe
 func buildAWSQueryInfo(v *plannercore.PhysicalTableReader, id int64) *RestoreData {
 	info := RestoreData{Where: make([]string, 0)}
 	ts := v.GetTableScan()
+	var tableInfo *model.TableInfo
 	for _, p := range v.TablePlans {
 		switch x := p.(type) {
 		case *plannercore.PhysicalTableScan:
 			info.Table = intervalutil.GetTablePartitionName(x.Table.Name.L, id)
 			info.DB = "test"
+			tableInfo = x.Table
 			var unsignedIntHandle bool
 			if ts.Table.PKIsHandle {
 				if pkColInfo := ts.Table.GetPkColInfo(); pkColInfo != nil {
@@ -3129,7 +3131,7 @@ func buildAWSQueryInfo(v *plannercore.PhysicalTableReader, id int64) *RestoreDat
 			}
 		case *plannercore.PhysicalSelection:
 			for _, c := range x.Conditions {
-				info.Where = append(info.Where, c.Restore())
+				info.Where = append(info.Where, c.Restore(tableInfo))
 			}
 		}
 	}

@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"sort"
@@ -59,58 +60,63 @@ func (expr *ScalarFunction) explainInfo(normalized bool) string {
 	return buffer.String()
 }
 
-func (expr *ScalarFunction) Restore() string {
-	return expr.restore()
+func (expr *ScalarFunction) Restore(t *model.TableInfo) string {
+	return expr.restore(t)
 }
 
-func (expr *ScalarFunction) restore() string {
+func (expr *ScalarFunction) restore(t *model.TableInfo) string {
 	var buffer bytes.Buffer
 	switch expr.FuncName.L {
 	case ast.LT:
 		fmt.Fprint(&buffer, "(")
-		buffer.WriteString(expr.GetArgs()[0].Restore())
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
 		fmt.Fprint(&buffer, " < ")
-		buffer.WriteString(expr.GetArgs()[1].Restore())
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
 		fmt.Fprint(&buffer, ")")
 	case ast.GT:
 		fmt.Fprint(&buffer, "(")
-		buffer.WriteString(expr.GetArgs()[0].Restore())
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
 		fmt.Fprint(&buffer, " > ")
-		buffer.WriteString(expr.GetArgs()[1].Restore())
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
 		fmt.Fprint(&buffer, ")")
 	case ast.LE:
 		fmt.Fprint(&buffer, "(")
-		buffer.WriteString(expr.GetArgs()[0].Restore())
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
 		fmt.Fprint(&buffer, " <= ")
-		buffer.WriteString(expr.GetArgs()[1].Restore())
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
 		fmt.Fprint(&buffer, ")")
 	case ast.GE:
 		fmt.Fprint(&buffer, "(")
-		buffer.WriteString(expr.GetArgs()[0].Restore())
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
 		fmt.Fprint(&buffer, " >= ")
-		buffer.WriteString(expr.GetArgs()[1].Restore())
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
 		fmt.Fprint(&buffer, ")")
 	case ast.EQ:
 		fmt.Fprint(&buffer, "(")
-		buffer.WriteString(expr.GetArgs()[0].Restore())
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
 		fmt.Fprint(&buffer, " = ")
-		buffer.WriteString(expr.GetArgs()[1].Restore())
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
 		fmt.Fprint(&buffer, ")")
 	case ast.NE:
 		fmt.Fprint(&buffer, "(")
-		buffer.WriteString(expr.GetArgs()[0].Restore())
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
 		fmt.Fprint(&buffer, " != ")
-		buffer.WriteString(expr.GetArgs()[1].Restore())
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
 		fmt.Fprint(&buffer, ")")
 	}
 	return buffer.String()
 }
 
-func (col *Column) Restore() string {
-	return col.ExplainInfo()
+func (col *Column) Restore(t *model.TableInfo) string {
+	for _, c := range t.Columns {
+		if c.ID == col.ID {
+			return c.Name.L
+		}
+	}
+	return ""
 }
 
-func (expr *Constant) Restore() string {
+func (expr *Constant) Restore(t *model.TableInfo) string {
 	return expr.ExplainInfo()
 }
 
@@ -119,17 +125,9 @@ func (expr *ScalarFunction) ExplainNormalizedInfo() string {
 	return expr.explainInfo(true)
 }
 
-func onlyColumnName(s string) string {
-	v := strings.Split(s, ".")
-	if len(v) == 0 {
-		return ""
-	}
-	return v[len(v)-1]
-}
-
 // ExplainInfo implements the Expression interface.
 func (col *Column) ExplainInfo() string {
-	return onlyColumnName(col.String())
+	return col.String()
 }
 
 // ExplainNormalizedInfo implements the Expression interface.
