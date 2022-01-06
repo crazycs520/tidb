@@ -57,6 +57,8 @@ type RowReceiverStringer interface {
 type Stringer interface {
 	WriteToBuffer(*bytes.Buffer, bool)
 	WriteToBufferInCsv(*bytes.Buffer, bool, *csvOption)
+
+	String() string
 }
 
 // RowReceiver is an interface which represents sql types that support bind address for *sql.Rows
