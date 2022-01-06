@@ -103,6 +103,12 @@ func (expr *ScalarFunction) restore(t *model.TableInfo) string {
 		fmt.Fprint(&buffer, " != ")
 		buffer.WriteString(expr.GetArgs()[1].Restore(t))
 		fmt.Fprint(&buffer, ")")
+	case ast.LogicOr:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
+		fmt.Fprint(&buffer, " or ")
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
+		fmt.Fprint(&buffer, ")")
 	}
 	return buffer.String()
 }
@@ -117,7 +123,7 @@ func (col *Column) Restore(t *model.TableInfo) string {
 }
 
 func (expr *Constant) Restore(t *model.TableInfo) string {
-	return expr.ExplainInfo()
+	return expr.restore4S3()
 }
 
 // ExplainNormalizedInfo implements the Expression interface.
@@ -136,6 +142,25 @@ func (col *Column) ExplainNormalizedInfo() string {
 		return col.OrigName
 	}
 	return "?"
+}
+
+func (expr *Constant) restore4S3() string {
+	dt, err := expr.Eval(chunk.Row{})
+	if err != nil {
+		return "not recognized const vanue"
+	}
+	return expr.format4S3(dt)
+}
+
+func (expr *Constant) format4S3(dt types.Datum) string {
+	switch dt.Kind() {
+	case types.KindNull:
+		return "NULL"
+	case types.KindString, types.KindBytes, types.KindMysqlEnum, types.KindMysqlSet,
+		types.KindMysqlJSON, types.KindBinaryLiteral, types.KindMysqlBit, types.KindMysqlTime:
+		return fmt.Sprintf("'%v'", dt.GetValue())
+	}
+	return fmt.Sprintf("%v", dt.GetValue())
 }
 
 // ExplainInfo implements the Expression interface.
