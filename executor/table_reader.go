@@ -15,6 +15,7 @@
 package executor
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -24,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/interval/athena"
-	"github.com/pingcap/tidb/interval/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -116,7 +116,30 @@ type TableReaderExecutor struct {
 	// extraPIDColumnIndex is used for partition reader to add an extra partition ID column.
 	extraPIDColumnIndex offsetOptional
 
+	AWSQueryInfo   *RestoreData
 	awsQueryResult *awsathena.ResultSet
+}
+
+type RestoreData struct {
+	DB    string
+	Table string
+	Where []string
+}
+
+func (d *RestoreData) String() string {
+	var buffer bytes.Buffer
+	fmt.Fprint(&buffer, "select * from ")
+	fmt.Fprint(&buffer, d.DB)
+	fmt.Fprint(&buffer, ".")
+	fmt.Fprint(&buffer, d.Table)
+	fmt.Fprint(&buffer, " where ")
+	for i, c := range d.Where {
+		if i != 0 {
+			fmt.Fprint(&buffer, " and ")
+		}
+		fmt.Fprint(&buffer, c)
+	}
+	return buffer.String()
 }
 
 // offsetOptional may be a positive integer, or invalid.
@@ -387,8 +410,8 @@ func (e *TableReaderExecutor) buildKVReqSeparately(ctx context.Context, ranges [
 }
 
 func (e *TableReaderExecutor) fetchResultFromAws(pid int64) error {
-	tableName := util.GetTablePartitionName(e.table.Meta().Name.L, pid)
-	query := fmt.Sprintf("SELECT * FROM \"%v\".\"%v\" ", "test", tableName)
+	query := e.AWSQueryInfo.String()
+	logutil.BgLogger().Info(fmt.Sprintf("[aws query] %v", query))
 	cli, err := athena.CreateCli("us-west-2")
 	if err != nil {
 		return nil

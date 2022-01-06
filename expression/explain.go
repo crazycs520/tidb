@@ -17,12 +17,12 @@ package expression
 import (
 	"bytes"
 	"fmt"
-	"sort"
-	"strings"
-
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
+	"sort"
+	"strings"
 )
 
 // ExplainInfo implements the Expression interface.
@@ -58,6 +58,66 @@ func (expr *ScalarFunction) explainInfo(normalized bool) string {
 	}
 	buffer.WriteString(")")
 	return buffer.String()
+}
+
+func (expr *ScalarFunction) Restore(t *model.TableInfo) string {
+	return expr.restore(t)
+}
+
+func (expr *ScalarFunction) restore(t *model.TableInfo) string {
+	var buffer bytes.Buffer
+	switch expr.FuncName.L {
+	case ast.LT:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
+		fmt.Fprint(&buffer, " < ")
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
+		fmt.Fprint(&buffer, ")")
+	case ast.GT:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
+		fmt.Fprint(&buffer, " > ")
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
+		fmt.Fprint(&buffer, ")")
+	case ast.LE:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
+		fmt.Fprint(&buffer, " <= ")
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
+		fmt.Fprint(&buffer, ")")
+	case ast.GE:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
+		fmt.Fprint(&buffer, " >= ")
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
+		fmt.Fprint(&buffer, ")")
+	case ast.EQ:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
+		fmt.Fprint(&buffer, " = ")
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
+		fmt.Fprint(&buffer, ")")
+	case ast.NE:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
+		fmt.Fprint(&buffer, " != ")
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
+		fmt.Fprint(&buffer, ")")
+	}
+	return buffer.String()
+}
+
+func (col *Column) Restore(t *model.TableInfo) string {
+	for _, c := range t.Columns {
+		if c.ID == col.ID {
+			return c.Name.L
+		}
+	}
+	return ""
+}
+
+func (expr *Constant) Restore(t *model.TableInfo) string {
+	return expr.ExplainInfo()
 }
 
 // ExplainNormalizedInfo implements the Expression interface.
