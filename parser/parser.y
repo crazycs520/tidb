@@ -459,6 +459,7 @@ import (
 	mode                  "MODE"
 	modify                "MODIFY"
 	month                 "MONTH"
+	move                  "MOVE"
 	names                 "NAMES"
 	national              "NATIONAL"
 	ncharType             "NCHAR"
@@ -944,6 +945,8 @@ import (
 	AlterTableSpec                         "Alter table specification"
 	AlterTableSpecList                     "Alter table specification list"
 	AlterTableSpecListOpt                  "Alter table specification list optional"
+	AlterTableAutoActionOpt                 "Alter table auto action optional"
+	AlterTableAutoActionExpr               "Alter table auto action expression"
 	AlterSequenceOption                    "Alter sequence option"
 	AlterSequenceOptionList                "Alter sequence option list"
 	AnalyzeOption                          "Analyze option"
@@ -954,6 +957,7 @@ import (
 	AssignmentList                         "assignment list"
 	AssignmentListOpt                      "assignment list opt"
 	AuthOption                             "User auth option"
+	AutoAction                             "Auto action"
 	Boolean                                "Boolean (0, 1, false, true)"
 	OptionalBraces                         "optional braces"
 	CastType                               "Cast function target type"
@@ -1486,14 +1490,15 @@ AlterTableStmt:
 			Specs: specs,
 		}
 	}
-|	"ALTER" IgnoreOptional "TABLE" TableName "PARTITIONS" "VALUES" "LESS" "THAN" BitExpr "TO" "ENGINE" StringName
-	{
-		$$ = &ast.AlterTableMoveStmt{
-			Table:        $4.(*ast.TableName),
-			LessThanExpr: $9,
-			EngineName:   $12,
-		}
-	}
+|	"ALTER" IgnoreOptional "TABLE" TableName AutoAction AlterTableAutoActionExpr AlterTableAutoActionOpt
+    	{
+    		$$ = &ast.AlterTableAutoActionStmt{
+    			Table:        $4.(*ast.TableName),
+    			Action:       $5,
+    			LessThanExpr: $6,
+    			EngineName:   $7,
+    		}
+    	}
 |	"ALTER" IgnoreOptional "TABLE" TableName "ANALYZE" "PARTITION" PartitionNameList AnalyzeOptionListOpt
 	{
 		$$ = &ast.AnalyzeTableStmt{TableNames: []*ast.TableName{$4.(*ast.TableName)}, PartitionNames: $7.([]model.CIStr), AnalyzeOpts: $8.([]ast.AnalyzeOpt)}
@@ -2255,6 +2260,16 @@ WithClustered:
 		$$ = model.PrimaryKeyTypeNonClustered
 	}
 
+AutoAction:
+	"MOVE"
+	{
+		$$ = ast.AutoActionMove
+	}
+|	"DROP"
+	{
+		$$ = ast.AutoActionDrop
+	}
+
 AlgorithmClause:
 	"ALGORITHM" EqOpt "DEFAULT"
 	{
@@ -2353,6 +2368,22 @@ AlterTableSpecList:
 |	AlterTableSpecList ',' AlterTableSpec
 	{
 		$$ = append($1.([]*ast.AlterTableSpec), $3.(*ast.AlterTableSpec))
+	}
+
+AlterTableAutoActionOpt:
+	/* empty */
+	{
+		$$ = ""
+	}
+|	"TO" "ENGINE" StringName
+	{
+		$$ = $3
+	}
+
+AlterTableAutoActionExpr:
+	"PARTITIONS" "VALUES" "LESS" "THAN" BitExpr
+	{
+		$$ = $5
 	}
 
 PartitionNameList:

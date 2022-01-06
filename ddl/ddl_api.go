@@ -6714,7 +6714,7 @@ func (d *ddl) AlterPlacementPolicy(ctx sessionctx.Context, stmt *ast.AlterPlacem
 
 var supportedEngineList = []string{"aws_s3"}
 
-func (d *ddl) AlterTablePartitionsMoveEngine(ctx sessionctx.Context, stmt *ast.AlterTableMoveStmt) (err error) {
+func (d *ddl) AlterTablePartitionsMoveEngine(ctx sessionctx.Context, stmt *ast.AlterTableAutoActionStmt) (err error) {
 	tbInfo := stmt.Table.TableInfo
 	// check range partition
 	pi := tbInfo.GetPartitionInfo()
