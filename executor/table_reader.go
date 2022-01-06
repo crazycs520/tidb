@@ -123,12 +123,19 @@ type TableReaderExecutor struct {
 type RestoreData struct {
 	DB    string
 	Table string
+	Agg   string
 	Where []string
 }
 
 func (d *RestoreData) String() string {
 	var buffer bytes.Buffer
-	fmt.Fprint(&buffer, `select * from "`)
+	fmt.Fprint(&buffer, `select `)
+	if len(d.Agg) == 0 {
+		fmt.Fprint(&buffer, `*`)
+	} else {
+		fmt.Fprint(&buffer, d.Agg)
+	}
+	fmt.Fprint(&buffer, ` from "`)
 	fmt.Fprint(&buffer, d.DB)
 	fmt.Fprint(&buffer, `"."`)
 	fmt.Fprint(&buffer, d.Table)

@@ -17,6 +17,7 @@ package executor
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"github.com/pingcap/tipb/go-tipb"
 	"math"
 	"sort"
@@ -3132,6 +3133,36 @@ func buildAWSQueryInfo(v *plannercore.PhysicalTableReader, id int64) *RestoreDat
 		case *plannercore.PhysicalSelection:
 			for _, c := range x.Conditions {
 				info.Where = append(info.Where, c.Restore(tableInfo))
+			}
+		case *plannercore.PhysicalHashAgg:
+			if len(x.AggFuncs) == 1 {
+				f := x.AggFuncs[0]
+				var buffer bytes.Buffer
+				buffer.WriteString(f.Name)
+				fmt.Fprint(&buffer, "(")
+				for i, arg := range f.Args {
+					if i != 0 {
+						fmt.Fprint(&buffer, ",")
+					}
+					buffer.WriteString(arg.Restore(tableInfo))
+				}
+				fmt.Fprint(&buffer, ")")
+				info.Agg = buffer.String()
+			}
+		case *plannercore.PhysicalStreamAgg:
+			if len(x.AggFuncs) == 1 {
+				f := x.AggFuncs[0]
+				var buffer bytes.Buffer
+				buffer.WriteString(f.Name)
+				fmt.Fprint(&buffer, "(")
+				for i, arg := range f.Args {
+					if i != 0 {
+						fmt.Fprint(&buffer, ",")
+					}
+					buffer.WriteString(arg.Restore(tableInfo))
+				}
+				fmt.Fprint(&buffer, ")")
+				info.Agg = buffer.String()
 			}
 		}
 	}
