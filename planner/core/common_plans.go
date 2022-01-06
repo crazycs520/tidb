@@ -1615,12 +1615,19 @@ func IsAutoCommitTxn(ctx sessionctx.Context) bool {
 type RestoreData struct {
 	DB    string
 	Table string
+	Agg   string
 	Where []string
 }
 
 func (d *RestoreData) String() string {
 	var buffer bytes.Buffer
-	fmt.Fprint(&buffer, `select * from "`)
+	fmt.Fprint(&buffer, `select `)
+	if len(d.Agg) == 0 {
+		fmt.Fprint(&buffer, `*`)
+	} else {
+		fmt.Fprint(&buffer, d.Agg)
+	}
+	fmt.Fprint(&buffer, ` from "`)
 	fmt.Fprint(&buffer, d.DB)
 	fmt.Fprint(&buffer, `"."`)
 	fmt.Fprint(&buffer, d.Table)
@@ -1672,6 +1679,36 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 		case *PhysicalSelection:
 			for _, c := range x.Conditions {
 				info.Where = append(info.Where, c.Restore(tableInfo))
+			}
+		case *PhysicalHashAgg:
+			if len(x.AggFuncs) == 1 {
+				f := x.AggFuncs[0]
+				var buffer bytes.Buffer
+				buffer.WriteString(f.Name)
+				fmt.Fprint(&buffer, "(")
+				for i, arg := range f.Args {
+					if i != 0 {
+						fmt.Fprint(&buffer, ",")
+					}
+					buffer.WriteString(arg.Restore(tableInfo))
+				}
+				fmt.Fprint(&buffer, ")")
+				info.Agg = buffer.String()
+			}
+		case *PhysicalStreamAgg:
+			if len(x.AggFuncs) == 1 {
+				f := x.AggFuncs[0]
+				var buffer bytes.Buffer
+				buffer.WriteString(f.Name)
+				fmt.Fprint(&buffer, "(")
+				for i, arg := range f.Args {
+					if i != 0 {
+						fmt.Fprint(&buffer, ",")
+					}
+					buffer.WriteString(arg.Restore(tableInfo))
+				}
+				fmt.Fprint(&buffer, ")")
+				info.Agg = buffer.String()
 			}
 		}
 	}
