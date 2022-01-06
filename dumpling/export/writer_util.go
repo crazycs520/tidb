@@ -396,6 +396,11 @@ func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR
 	return counter, wp.Error()
 }
 
+var parquetTypeMap = map[string]string{
+	"INT":     "INT_64",
+	"VARCHAR": "BYTE_ARRAY",
+}
+
 func WriteInsertInParquet(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.ExternalFileWriter) (u uint64, err error) {
 	fileRowIter := tblIR.Rows()
 	if !fileRowIter.HasNext() {
@@ -405,8 +410,12 @@ func WriteInsertInParquet(pCtx *tcontext.Context, cfg *Config, meta TableMeta, t
 	// Build metadata that parquet needs.
 	md := make([]string, meta.ColumnCount())
 	for k, v := range meta.ColumnNames() {
-		// TODO: convert type into parquet.
-		md[k] = fmt.Sprintf("name=%s, type=%s", v, meta.ColumnTypes()[k])
+		ot := meta.ColumnTypes()[k]
+		pt, ok := parquetTypeMap[ot]
+		if !ok {
+			panic(fmt.Errorf("type %s is not supported", ot))
+		}
+		md[k] = fmt.Sprintf("name=%s, type=%s", v, pt)
 	}
 
 	bf := pool.Get().(*bytes.Buffer)
@@ -415,7 +424,7 @@ func WriteInsertInParquet(pCtx *tcontext.Context, cfg *Config, meta TableMeta, t
 	}
 	parquetWriter, err := writer.NewCSVWriterFromWriter(md, bf, 4)
 	if err != nil {
-		return 0, errors.Trace(err)
+		panic(fmt.Errorf("init parquet writer: %v", err))
 	}
 
 	wp := newWriterPipe(w, cfg.FileSize, UnspecifiedSize, cfg.Labels)
@@ -462,16 +471,15 @@ func WriteInsertInParquet(pCtx *tcontext.Context, cfg *Config, meta TableMeta, t
 	}()
 
 	for fileRowIter.HasNext() {
-		lastBfSize := parquetWriter.Size
-
+		size := 0
 		if selectedFields != "" {
 			if err = fileRowIter.Decode(row); err != nil {
 				return counter, errors.Trace(err)
 			}
-			row.WriteToParquet(parquetWriter)
+			size = row.WriteToParquet(parquetWriter)
 		}
 		counter++
-		wp.currentFileSize += uint64(parquetWriter.Size - lastBfSize)
+		wp.currentFileSize += uint64(size)
 
 		if parquetWriter.Size >= lengthLimit {
 			err = parquetWriter.WriteStop()
@@ -505,7 +513,7 @@ func WriteInsertInParquet(pCtx *tcontext.Context, cfg *Config, meta TableMeta, t
 		}
 	}
 
-	if parquetWriter.Size > 0 {
+	if wp.currentFileSize > 0 {
 		err = parquetWriter.WriteStop()
 		if err != nil {
 			panic(fmt.Errorf("stop parquet writer: %v", err))

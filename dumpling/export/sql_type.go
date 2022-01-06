@@ -231,11 +231,14 @@ func (r RowReceiverArr) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash boo
 }
 
 // WriteToParquet implements Stringer.WriteToBufferInCsv
-func (r RowReceiverArr) WriteToParquet(bf *writer.CSVWriter) {
+func (r RowReceiverArr) WriteToParquet(bf *writer.CSVWriter) int {
 	s := make([]*string, len(r.receivers))
+
+	size := 0
 
 	for i, receiver := range r.receivers {
 		v := receiver.String()
+		size += len(v)
 		s[i] = &v
 	}
 
@@ -243,6 +246,7 @@ func (r RowReceiverArr) WriteToParquet(bf *writer.CSVWriter) {
 	if err != nil {
 		panic("failed to write to parquet")
 	}
+	return size
 }
 
 // SQLTypeNumber implements RowReceiverStringer which represents numeric type columns in database
