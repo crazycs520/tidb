@@ -1676,8 +1676,12 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 	for _, p := range v.TablePlans {
 		switch x := p.(type) {
 		case *PhysicalTableScan:
+			db, ok := domain.GetDomain(v.ctx).InfoSchema().SchemaByTable(x.Table)
+			if !ok {
+				panic("should never happen")
+			}
 			info.Table = intervalutil.GetTablePartitionName(x.Table.Name.L, id)
-			info.DB = "test"
+			info.DB = db.Name.L
 			tableInfo = x.Table
 			var buffer bytes.Buffer
 			for i, c := range x.schema.Columns {
