@@ -41,8 +41,6 @@ func (pm *IntervalPartitionManager) RunMetaMaintainLoop() {
 	}
 }
 
-const awsRegion = "us-west-2"
-
 func (pm *IntervalPartitionManager) removeDroppedTableInAWSS3() {
 	is := pm.infoCache.GetLatest()
 	pm.awsTableMeta.Range(func(key, value interface{}) bool {
@@ -50,7 +48,7 @@ func (pm *IntervalPartitionManager) removeDroppedTableInAWSS3() {
 		meta := value.(*PartitionTableMeta)
 		exist := pm.checkPartitionExist(is, pid, meta)
 		if !exist {
-			err := RemoveDataInAWSS3(meta.db, meta.tableName, pid, awsRegion)
+			err := RemoveDataInAWSS3(meta.db, meta.tableName, pid)
 			if err != nil {
 				logutil.BgLogger().Warn("[interval-partition] remove data in aws s3 failed",
 					zap.String("table", meta.tableName), zap.Int64("table-id", meta.tableID),

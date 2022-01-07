@@ -1,19 +1,17 @@
 package awss3
 
 import (
+	"github.com/pingcap/tidb/interval/util"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
-func CreateS3Client(region string) (*s3.S3, error) {
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(region)},
-	)
+func CreateS3Client() (*s3.S3, error) {
+	sess, err := util.NewSession()
 	if err != nil {
 		return nil, err
 	}

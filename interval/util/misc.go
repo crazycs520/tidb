@@ -3,7 +3,25 @@ package util
 import (
 	"strconv"
 	"strings"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/pingcap/tidb/config"
 )
+
+func NewSession() (*session.Session, error) {
+	cfg := config.GetGlobalConfig().Aws
+	conf := aws.Config{
+		Region: aws.String(cfg.Region),
+		Credentials: credentials.NewStaticCredentials(
+			cfg.AccessKey,
+			cfg.SecretAccessKey,
+			"",
+		),
+	}
+	return session.NewSession(&conf)
+}
 
 const bucketNamePrefix = "tidb-interval-partition-"
 

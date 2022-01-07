@@ -26,14 +26,14 @@ type CopyDataSuite struct {
 	s3BucketName string
 }
 
-func NewCopyDataSuite(job *Job, info *TablePartition, region string) *CopyDataSuite {
+func NewCopyDataSuite(job *Job, info *TablePartition) *CopyDataSuite {
 	return &CopyDataSuite{
 		db:            job.dbName,
 		table:         job.tableName,
 		partitionName: job.partitionName,
 		pid:           job.partitionID,
 		tbInfo:        info.tbInfo,
-		region:        region,
+		region:        config.GetGlobalConfig().Aws.Region,
 		s3BucketName:  util.GetTablePartitionBucketName(job.tableName, job.partitionID),
 	}
 }
@@ -66,7 +66,8 @@ func (s *CopyDataSuite) CopyDataToAWSS3() error {
 	return nil
 }
 
-func RemoveDataInAWSS3(db, table string, pid int64, region string) error {
+func RemoveDataInAWSS3(db, table string, pid int64) error {
+	region := config.GetGlobalConfig().Aws.Region
 	cli, err := athena.CreateCli(region)
 	if err != nil {
 		return err
@@ -77,7 +78,7 @@ func RemoveDataInAWSS3(db, table string, pid int64, region string) error {
 		return err
 	}
 
-	s3Cli, err := awss3.CreateS3Client(region)
+	s3Cli, err := awss3.CreateS3Client()
 	if err != nil {
 		return err
 	}
@@ -86,7 +87,7 @@ func RemoveDataInAWSS3(db, table string, pid int64, region string) error {
 }
 
 func (s *CopyDataSuite) prepareAWSS3Bucket() error {
-	s3Cli, err := awss3.CreateS3Client(s.region)
+	s3Cli, err := awss3.CreateS3Client()
 	if err != nil {
 		return err
 	}

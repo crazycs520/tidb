@@ -57,7 +57,7 @@ func (pm *IntervalPartitionManager) HandleJob(job *Job, info *TablePartition) er
 		job.state = JobStateMovingData
 	case JobStateMovingData:
 		start := time.Now()
-		suite := NewCopyDataSuite(job, info, "us-west-2")
+		suite := NewCopyDataSuite(job, info)
 		err := suite.CopyDataToAWSS3()
 		if err != nil {
 			job.state = JobStateCancelled
@@ -138,7 +138,7 @@ func (pm *IntervalPartitionManager) FinishJob(job *Job) error {
 	defer pm.sessPool.put(ctx)
 
 	if job.state != JobStateDone {
-		err = RemoveDataInAWSS3(job.dbName, job.tableName, job.partitionID, "us-west-2")
+		err = RemoveDataInAWSS3(job.dbName, job.tableName, job.partitionID)
 		if err != nil {
 			logutil.BgLogger().Warn("[interval-partition] remove data in aws s3 failed", zap.Error(err))
 		}

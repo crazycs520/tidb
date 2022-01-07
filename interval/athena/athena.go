@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/athena"
 	"github.com/pingcap/tidb/dumpling/context"
+	"github.com/pingcap/tidb/interval/util"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/logutil"
@@ -57,9 +57,7 @@ func (db *AthenaDB) Init() error {
 }
 
 func CreateCli(region string) (*athena.Athena, error) {
-	awscfg := &aws.Config{}
-	awscfg.WithRegion(region)
-	sess, err := session.NewSession(awscfg)
+	sess, err := util.NewSession()
 	if err != nil {
 		return nil, err
 	}
