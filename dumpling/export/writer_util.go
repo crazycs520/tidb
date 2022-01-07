@@ -6,7 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/xitongsys/parquet-go/writer"
+
 	"io"
 	"path"
 	"strings"
@@ -16,6 +16,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/xitongsys/parquet-go/writer"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -396,8 +397,10 @@ func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR
 	return counter, wp.Error()
 }
 
+const parquetFileLimit = 64 * 1024 * 1024 // 64MB
+
 var parquetTypeMap = map[string]string{
-	"INT":     "INT_64",
+	"INT":     "INT64",
 	"VARCHAR": "BYTE_ARRAY",
 }
 
@@ -471,46 +474,31 @@ func WriteInsertInParquet(pCtx *tcontext.Context, cfg *Config, meta TableMeta, t
 	}()
 
 	for fileRowIter.HasNext() {
-		size := 0
 		if selectedFields != "" {
 			if err = fileRowIter.Decode(row); err != nil {
 				return counter, errors.Trace(err)
 			}
-			size = row.WriteToParquet(parquetWriter)
+			size := row.WriteToParquet(parquetWriter)
+			wp.currentFileSize += uint64(size)
 		}
 		counter++
-		wp.currentFileSize += uint64(size)
 
-		if parquetWriter.Size >= lengthLimit {
-			err = parquetWriter.WriteStop()
-			if err != nil {
-				panic(fmt.Errorf("stop parquet writer: %v", err))
-			}
-
+		// We treat parquet as a single file instead of multiple buffers.
+		if wp.currentFileSize >= parquetFileLimit {
 			select {
 			case <-pCtx.Done():
 				return counter, pCtx.Err()
 			case err = <-wp.errCh:
 				return counter, err
-			case wp.input <- bf:
-				bf = pool.Get().(*bytes.Buffer)
-				if bfCap := bf.Cap(); bfCap < lengthLimit {
-					bf.Grow(lengthLimit - bfCap)
-				}
-				parquetWriter, err = writer.NewCSVWriterFromWriter(md, bf, 4)
-				if err != nil {
-					return counter, errors.Trace(err)
-				}
-
+			default:
 				AddGauge(finishedRowsGauge, cfg.Labels, float64(counter-lastCounter))
 				lastCounter = counter
+
+				break
 			}
 		}
 
 		fileRowIter.Next()
-		if wp.ShouldSwitchFile() {
-			break
-		}
 	}
 
 	if wp.currentFileSize > 0 {

@@ -237,8 +237,9 @@ func (r RowReceiverArr) WriteToParquet(bf *writer.CSVWriter) int {
 	size := 0
 
 	for i, receiver := range r.receivers {
-		v := receiver.String()
-		size += len(v)
+		bs := receiver.Bytes()
+		size += len(bs)
+		v := string(bs)
 		s[i] = &v
 	}
 
@@ -272,11 +273,11 @@ func (s SQLTypeNumber) WriteToBufferInCsv(bf *bytes.Buffer, _ bool, opt *csvOpti
 	}
 }
 
-func (s SQLTypeNumber) String() string {
+func (s SQLTypeNumber) Bytes() []byte {
 	if s.RawBytes != nil {
-		return string(s.RawBytes)
+		return s.RawBytes
 	} else {
-		return nullValue
+		return []byte(nullValue)
 	}
 }
 
@@ -312,11 +313,11 @@ func (s *SQLTypeString) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash boo
 	}
 }
 
-func (s SQLTypeString) String() string {
+func (s SQLTypeString) Bytes() []byte {
 	if s.RawBytes != nil {
-		return string(s.RawBytes)
+		return s.RawBytes
 	} else {
-		return nullValue
+		return []byte(nullValue)
 	}
 }
 
@@ -350,10 +351,10 @@ func (s *SQLTypeBytes) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool
 	}
 }
 
-func (s SQLTypeBytes) String() string {
+func (s SQLTypeBytes) Bytes() []byte {
 	if s.RawBytes != nil {
-		return string(s.RawBytes)
+		return s.RawBytes
 	} else {
-		return nullValue
+		return []byte(nullValue)
 	}
 }
