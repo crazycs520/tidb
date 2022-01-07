@@ -876,7 +876,7 @@ func InitializeConfig(confPath string, configCheck, configStrict bool, enforceCm
 		}
 	}
 	enforceCmdArgs(cfg)
-	cfg.loadEnv()
+	cfg.LoadEnv()
 
 	if err := cfg.Valid(); err != nil {
 		if !filepath.IsAbs(confPath) {
@@ -895,7 +895,7 @@ func InitializeConfig(confPath string, configCheck, configStrict bool, enforceCm
 	StoreGlobalConfig(cfg)
 }
 
-func (c *Config) loadEnv() {
+func (c *Config) LoadEnv() {
 	if c.Aws.Region == "" {
 		c.Aws.Region = os.Getenv("AWS_DEFAULT_REGION")
 		if c.Aws.Region == "" {

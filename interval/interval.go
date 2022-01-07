@@ -145,10 +145,6 @@ func (pm *IntervalPartitionManager) RunWorkerLoop() {
 	finishOldJob := false
 	for {
 		var err error
-		if info != nil && job != nil && job.state == JobStateMovingData {
-			time.Sleep(time.Second)
-		}
-
 		if info == nil {
 			if !finishOldJob {
 				info = pm.getOldJob()
@@ -157,6 +153,13 @@ func (pm *IntervalPartitionManager) RunWorkerLoop() {
 				finishOldJob = true
 				info = <-pm.jobCh
 			}
+		}
+
+		cfg := config.GetGlobalConfig().Aws
+		if cfg.Region == "" || cfg.AccessKey == "" || cfg.SecretAccessKey == "" {
+			logutil.BgLogger().Error("[interval-partition] need set aws config or os env")
+			time.Sleep(time.Second * 10)
+			continue
 		}
 
 		job, err = pm.LoadOrCreateJobInfo(info)

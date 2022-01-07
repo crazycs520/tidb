@@ -88,7 +88,6 @@ func (pm *IntervalPartitionManager) HandleJob(job *Job, info *TablePartition) er
 			zap.String("table", job.tableName),
 			zap.String("partition", job.partitionName),
 			zap.String("state", job.state))
-
 		time.Sleep(time.Second)
 	}
 	return nil
