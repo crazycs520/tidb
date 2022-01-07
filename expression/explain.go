@@ -109,6 +109,30 @@ func (expr *ScalarFunction) restore(t *model.TableInfo) string {
 		fmt.Fprint(&buffer, " or ")
 		buffer.WriteString(expr.GetArgs()[1].Restore(t))
 		fmt.Fprint(&buffer, ")")
+	case ast.Plus:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
+		fmt.Fprint(&buffer, " + ")
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
+		fmt.Fprint(&buffer, ")")
+	case ast.Minus:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
+		fmt.Fprint(&buffer, " - ")
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
+		fmt.Fprint(&buffer, ")")
+	case ast.Mul:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
+		fmt.Fprint(&buffer, " * ")
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
+		fmt.Fprint(&buffer, ")")
+	case ast.Div:
+		fmt.Fprint(&buffer, "(")
+		buffer.WriteString(expr.GetArgs()[0].Restore(t))
+		fmt.Fprint(&buffer, " / ")
+		buffer.WriteString(expr.GetArgs()[1].Restore(t))
+		fmt.Fprint(&buffer, ")")
 	}
 	return buffer.String()
 }
