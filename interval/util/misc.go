@@ -12,13 +12,9 @@ import (
 
 func NewSession() (*session.Session, error) {
 	cfg := config.GetGlobalConfig().Aws
-	conf := aws.Config{
-		Region: aws.String(cfg.Region),
-		Credentials: credentials.NewStaticCredentials(
-			cfg.AccessKey,
-			cfg.SecretAccessKey,
-			"",
-		),
+	conf := aws.Config{Region: aws.String(cfg.Region)}
+	if cfg.AccessKey != "" && cfg.SecretAccessKey != "" {
+		conf.Credentials = credentials.NewStaticCredentials(cfg.AccessKey, cfg.SecretAccessKey, "")
 	}
 	return session.NewSession(&conf)
 }

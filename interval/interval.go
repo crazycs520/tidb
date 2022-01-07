@@ -155,13 +155,6 @@ func (pm *IntervalPartitionManager) RunWorkerLoop() {
 			}
 		}
 
-		cfg := config.GetGlobalConfig().Aws
-		if cfg.Region == "" || cfg.AccessKey == "" || cfg.SecretAccessKey == "" {
-			logutil.BgLogger().Error("[interval-partition] need set aws config or os env")
-			time.Sleep(time.Second * 10)
-			continue
-		}
-
 		job, err = pm.LoadOrCreateJobInfo(info)
 		if err != nil {
 			logutil.BgLogger().Error("[interval-partition] load or create job info failed", zap.Error(err))
