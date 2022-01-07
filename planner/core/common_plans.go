@@ -1613,19 +1613,25 @@ func IsAutoCommitTxn(ctx sessionctx.Context) bool {
 }
 
 type RestoreData struct {
-	DB    string
-	Table string
-	Agg   string
-	Where []string
+	DB      string
+	Table   string
+	Col     string
+	Agg     string
+	GroupBy string
+	Where   []string
 }
 
 func (d *RestoreData) String() string {
 	var buffer bytes.Buffer
 	fmt.Fprint(&buffer, `select `)
-	if len(d.Agg) == 0 {
-		fmt.Fprint(&buffer, `*`)
-	} else {
+	if len(d.Col) != 0 {
+		fmt.Fprint(&buffer, d.Col)
+	} else if len(d.Agg) != 0 {
 		fmt.Fprint(&buffer, d.Agg)
+	} else if len(d.GroupBy) != 0 {
+		fmt.Fprint(&buffer, d.GroupBy)
+	} else {
+		fmt.Fprint(&buffer, `*`)
 	}
 	fmt.Fprint(&buffer, ` from "`)
 	fmt.Fprint(&buffer, d.DB)
@@ -1639,6 +1645,10 @@ func (d *RestoreData) String() string {
 			fmt.Fprint(&buffer, " where ")
 		}
 		fmt.Fprint(&buffer, c)
+	}
+	if len(d.GroupBy) != 0 {
+		fmt.Fprint(&buffer, " group by ")
+		fmt.Fprint(&buffer, d.GroupBy)
 	}
 	return buffer.String()
 }
@@ -1664,6 +1674,14 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 			info.Table = intervalutil.GetTablePartitionName(x.Table.Name.L, id)
 			info.DB = "test"
 			tableInfo = x.Table
+			var buffer bytes.Buffer
+			for i, c := range x.schema.Columns {
+				if i != 0 {
+					fmt.Fprint(&buffer, ", ")
+				}
+				fmt.Fprint(&buffer, c.Restore(tableInfo))
+			}
+			info.Col = buffer.String()
 			var unsignedIntHandle bool
 			if ts.Table.PKIsHandle {
 				if pkColInfo := ts.Table.GetPkColInfo(); pkColInfo != nil {
@@ -1695,6 +1713,16 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 				fmt.Fprint(&buffer, ")")
 				info.Agg = buffer.String()
 			}
+			if len(x.GroupByItems) != 0 {
+				var buffer bytes.Buffer
+				for i, item := range x.GroupByItems {
+					if i != 0 {
+						fmt.Fprint(&buffer, ", ")
+					}
+					buffer.WriteString(item.Restore(tableInfo))
+				}
+				info.GroupBy = buffer.String()
+			}
 		case *PhysicalStreamAgg:
 			if len(x.AggFuncs) == 1 {
 				f := x.AggFuncs[0]
@@ -1709,6 +1737,16 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 				}
 				fmt.Fprint(&buffer, ")")
 				info.Agg = buffer.String()
+			}
+			if len(x.GroupByItems) != 0 {
+				var buffer bytes.Buffer
+				for i, item := range x.GroupByItems {
+					if i != 0 {
+						fmt.Fprint(&buffer, ", ")
+					}
+					buffer.WriteString(item.Restore(tableInfo))
+				}
+				info.GroupBy = buffer.String()
 			}
 		}
 	}
