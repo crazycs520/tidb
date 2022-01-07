@@ -157,8 +157,12 @@ func (expr *Constant) format4S3(dt types.Datum) string {
 	case types.KindNull:
 		return "NULL"
 	case types.KindString, types.KindBytes, types.KindMysqlEnum, types.KindMysqlSet,
-		types.KindMysqlJSON, types.KindBinaryLiteral, types.KindMysqlBit, types.KindMysqlTime:
+		types.KindMysqlJSON, types.KindBinaryLiteral, types.KindMysqlBit:
 		return fmt.Sprintf("'%v'", dt.GetValue())
+	case types.KindMysqlTime:
+		t := dt.Clone().GetMysqlTime()
+		t.SetFsp(0)
+		return fmt.Sprintf("'%v'", t)
 	}
 	return fmt.Sprintf("%v", dt.GetValue())
 }
