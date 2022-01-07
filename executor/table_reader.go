@@ -17,6 +17,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/config"
 	"sort"
 
 	"github.com/opentracing/opentracing-go"
@@ -390,7 +391,7 @@ func (e *TableReaderExecutor) buildKVReqSeparately(ctx context.Context, ranges [
 func (e *TableReaderExecutor) fetchResultFromAws() error {
 	query := e.AWSQueryInfo.String()
 	logutil.BgLogger().Info(fmt.Sprintf("[aws query] %v", query))
-	cli, err := athena.CreateCli("us-west-2")
+	cli, err := athena.CreateCli(config.GetGlobalConfig().Aws.Region)
 	if err != nil {
 		return err
 	}

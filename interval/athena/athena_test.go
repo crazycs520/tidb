@@ -2,6 +2,7 @@ package athena
 
 import (
 	"fmt"
+	"github.com/pingcap/tidb/config"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/model"
@@ -9,6 +10,10 @@ import (
 )
 
 func TestAll(t *testing.T) {
+	cfg := config.NewConfig()
+	cfg.LoadEnv()
+	config.StoreGlobalConfig(cfg)
+	fmt.Println(cfg.Aws)
 	region := "us-west-2"
 	cli, err := CreateCli(region)
 	require.NoError(t, err)

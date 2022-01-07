@@ -489,3 +489,8 @@ allow-expression-index = false
 [isolation-read]
 # engines means allow the tidb server read data from which types of engines. options: "tikv", "tiflash", "tidb".
 engines = ["tikv", "tiflash", "tidb"]
+
+[aws]
+region = ""
+access-key = ""
+secret-access-key = ""

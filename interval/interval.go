@@ -145,10 +145,6 @@ func (pm *IntervalPartitionManager) RunWorkerLoop() {
 	finishOldJob := false
 	for {
 		var err error
-		if info != nil && job != nil && job.state == JobStateMovingData {
-			time.Sleep(time.Second)
-		}
-
 		if info == nil {
 			if !finishOldJob {
 				info = pm.getOldJob()

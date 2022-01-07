@@ -204,7 +204,9 @@ type Config struct {
 }
 
 type AWSConfig struct {
-	Region string `toml:"region" json:"region"`
+	Region          string `toml:"region" json:"region"`
+	AccessKey       string `toml:"access-key" json:"-"`
+	SecretAccessKey string `toml:"secret-access-key" json:"-"`
 }
 
 // UpdateTempStoragePath is to update the `TempStoragePath` if port/statusPort was changed
@@ -782,7 +784,6 @@ var defaultConf = Config{
 	EnableEnumLengthLimit:        true,
 	StoresRefreshInterval:        defTiKVCfg.StoresRefreshInterval,
 	EnableForwarding:             defTiKVCfg.EnableForwarding,
-	Aws:                          AWSConfig{Region: "us-west-2"},
 }
 
 var (
@@ -875,6 +876,7 @@ func InitializeConfig(confPath string, configCheck, configStrict bool, enforceCm
 		}
 	}
 	enforceCmdArgs(cfg)
+	cfg.LoadEnv()
 
 	if err := cfg.Valid(); err != nil {
 		if !filepath.IsAbs(confPath) {
@@ -891,6 +893,21 @@ func InitializeConfig(confPath string, configCheck, configStrict bool, enforceCm
 		os.Exit(0)
 	}
 	StoreGlobalConfig(cfg)
+}
+
+func (c *Config) LoadEnv() {
+	if c.Aws.Region == "" {
+		c.Aws.Region = os.Getenv("AWS_DEFAULT_REGION")
+		if c.Aws.Region == "" {
+			c.Aws.Region = "us-west-2"
+		}
+	}
+	if c.Aws.AccessKey == "" {
+		c.Aws.AccessKey = os.Getenv("AWS_ACCESS_KEY_ID")
+	}
+	if c.Aws.SecretAccessKey == "" {
+		c.Aws.SecretAccessKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	}
 }
 
 // Load loads config options from a toml file.
