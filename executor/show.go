@@ -1279,7 +1279,12 @@ func appendPartitionInfo(partitionInfo *model.PartitionInfo, buf *bytes.Buffer, 
 		}
 		buf.WriteString(")\n(")
 	} else {
-		fmt.Fprintf(buf, "\nPARTITION BY %s (%s)\n(", partitionInfo.Type.String(), partitionInfo.Expr)
+		fmt.Fprintf(buf, "\nPARTITION BY %s (%s)", partitionInfo.Type.String(), partitionInfo.Expr)
+		interval := partitionInfo.Interval
+		if partitionInfo.Type == model.PartitionTypeRange && interval.Enable && interval.AutoIntervalValue > 0 {
+			fmt.Fprintf(buf, " INTERVAL %v %v", interval.AutoIntervalValue, interval.AutoIntervalUnit)
+		}
+		fmt.Fprintf(buf, "\n (")
 	}
 
 	for i, def := range partitionInfo.Definitions {
