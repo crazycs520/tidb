@@ -1619,6 +1619,7 @@ type RestoreData struct {
 	Agg     string
 	GroupBy string
 	Where   []string
+	Limit   string
 }
 
 func (d *RestoreData) String() string {
@@ -1649,6 +1650,10 @@ func (d *RestoreData) String() string {
 	if len(d.GroupBy) != 0 {
 		fmt.Fprint(&buffer, " group by ")
 		fmt.Fprint(&buffer, d.GroupBy)
+	}
+	if len(d.Limit) != 0 {
+		fmt.Fprint(&buffer, " limit ")
+		fmt.Fprint(&buffer, d.Limit)
 	}
 	return buffer.String()
 }
@@ -1748,6 +1753,11 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 				}
 				info.GroupBy = buffer.String()
 			}
+		case *PhysicalLimit:
+			if x.Offset != 0 {
+				logutil.BgLogger().Warn("S3 don't support OFFSET for LIMIT")
+			}
+			info.Limit = fmt.Sprintf("%v", x.Count)
 		}
 	}
 	return &info
