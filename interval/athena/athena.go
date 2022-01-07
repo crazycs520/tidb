@@ -234,7 +234,8 @@ func buildCreateTableSQL(table string, s3BucketName string, tbInfo *model.TableI
 		buf.WriteString(" ")
 		buf.WriteString(getColumnType(col))
 	}
-	buf.WriteString(" ) ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat' ")
+	buf.WriteString(" ) ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe' ")
+	buf.WriteString(" STORED AS INPUTFORMAT  'org.apache.hadoop.mapred.TextInputFormat'  ")
 	buf.WriteString(" OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat' ")
 	buf.WriteString(" LOCATION ")
 	buf.WriteString(fmt.Sprintf(" 's3://%v/' ", s3BucketName))
@@ -252,7 +253,7 @@ func getColumnType(col *model.ColumnInfo) string {
 		return "BIGINT"
 	case mysql.TypeTimestamp:
 		return "VARCHAR(64)"
-	case mysql.TypeDouble, mysql.TypeFloat, mysql.TypeNewDecimal:
+	case mysql.TypeDouble, mysql.TypeFloat:
 		return col.FieldType.String()
 	case mysql.TypeVarchar:
 		return fmt.Sprintf("VARCHAR(%d)", col.FieldType.Flen)
