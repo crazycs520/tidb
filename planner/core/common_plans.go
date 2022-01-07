@@ -1738,7 +1738,7 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 				info.GroupBy = buffer.String()
 				if len(info.Col) == 0 {
 					info.Col = info.GroupBy
-				} else {
+				} else if len(info.Agg) != 0 {
 					info.Col = fmt.Sprintf("%v, %v", info.Col, info.GroupBy)
 				}
 			}
@@ -1773,7 +1773,7 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 				info.GroupBy = buffer.String()
 				if len(info.Col) == 0 {
 					info.Col = info.GroupBy
-				} else {
+				} else if len(info.Agg) != 0 {
 					info.Col = fmt.Sprintf("%v, %v", info.Col, info.GroupBy)
 				}
 			}
