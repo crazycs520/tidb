@@ -4564,20 +4564,20 @@ func getPhysicalTableID(t table.Table) int64 {
 	return t.Meta().ID
 }
 
-func getPhysicalTableEngine(t table.Table) (int64, string) {
+func getPhysicalTableEngine(t table.Table) string {
 	if p, ok := t.(table.PhysicalTable); ok {
 		pid := p.GetPhysicalID()
 		pi := t.Meta().GetPartitionInfo()
 		if pi == nil {
-			return 0, ""
+			return ""
 		}
 		for _, pd := range pi.Definitions {
 			if pd.ID == pid {
-				return pd.ID, pd.Engine
+				return pd.Engine
 			}
 		}
 	}
-	return 0, ""
+	return ""
 }
 
 func getFeedbackStatsTableID(ctx sessionctx.Context, t table.Table) int64 {

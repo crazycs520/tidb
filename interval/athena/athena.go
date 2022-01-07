@@ -147,12 +147,12 @@ func DropDatabaseAndAllTables(cli *athena.Athena, db string) error {
 	return DropDatabase(cli, db)
 }
 
-func QueryTableData(cli *athena.Athena, db, query string) (*athena.ResultSet, error) {
-	result, err := ExecSQL(cli, db, query)
+func ExecSQL(cli *athena.Athena, db, query string) (*athena.ResultSet, error) {
+	rs, err := StartExecSQL(cli, db, query)
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+	return rs.GetResultSet()
 }
 
 const (
@@ -163,33 +163,33 @@ const (
 
 var defaultDB = "default"
 
-func ExecSQL(cli *athena.Athena, db, query string) (*athena.ResultSet, error) {
-	if db == "" {
-		db = defaultDB
-	}
-	var s athena.StartQueryExecutionInput
-	s.SetQueryString(query)
-
-	var q athena.QueryExecutionContext
-	q.SetDatabase(db)
-	s.SetQueryExecutionContext(&q)
-
-	var r athena.ResultConfiguration
-	r.SetOutputLocation("s3://athena-query-result-chenshuang-dev3")
-	s.SetResultConfiguration(&r)
-
-	result, err := cli.StartQueryExecution(&s)
+func StartExecSQL(cli *athena.Athena, db, query string) (*QueryResult, error) {
+	result, err := startSQLExecution(cli, db, query)
 	if err != nil {
 		return nil, err
 	}
+	return &QueryResult{
+		cli:        cli,
+		query:      query,
+		execOutput: result,
+	}, nil
+}
 
+type QueryResult struct {
+	cli        *athena.Athena
+	query      string
+	execOutput *athena.StartQueryExecutionOutput
+}
+
+func (rs *QueryResult) GetResultSet() (*athena.ResultSet, error) {
 	var qri athena.GetQueryExecutionInput
-	qri.SetQueryExecutionId(*result.QueryExecutionId)
+	qri.SetQueryExecutionId(*rs.execOutput.QueryExecutionId)
 
+	var err error
 	var qrop *athena.GetQueryExecutionOutput
 	var state, reason string
 	for {
-		qrop, err = cli.GetQueryExecutionWithContext(context.Background(), &qri)
+		qrop, err = rs.cli.GetQueryExecutionWithContext(context.Background(), &qri)
 		if err != nil {
 			return nil, err
 		}
@@ -204,16 +204,33 @@ func ExecSQL(cli *athena.Athena, db, query string) (*athena.ResultSet, error) {
 
 	}
 	if state != QuerySucceeded {
-		return nil, fmt.Errorf("execute %v, detail: %v, sql: %v", state, reason, query)
+		return nil, fmt.Errorf("execute %v, detail: %v, sql: %v", state, reason, rs.query)
 	}
 	var ip athena.GetQueryResultsInput
-	ip.SetQueryExecutionId(*result.QueryExecutionId)
-
-	op, err := cli.GetQueryResults(&ip)
+	ip.SetQueryExecutionId(*rs.execOutput.QueryExecutionId)
+	op, err := rs.cli.GetQueryResults(&ip)
 	if err != nil {
 		return nil, err
 	}
 	return op.ResultSet, nil
+}
+
+func startSQLExecution(cli *athena.Athena, db, query string) (*athena.StartQueryExecutionOutput, error) {
+	if db == "" {
+		db = defaultDB
+	}
+	var s athena.StartQueryExecutionInput
+	s.SetQueryString(query)
+
+	var q athena.QueryExecutionContext
+	q.SetDatabase(db)
+	s.SetQueryExecutionContext(&q)
+
+	var r athena.ResultConfiguration
+	r.SetOutputLocation("s3://athena-query-result-chenshuang-dev3")
+	s.SetResultConfiguration(&r)
+
+	return cli.StartQueryExecution(&s)
 }
 
 type DDLEngine struct{}
