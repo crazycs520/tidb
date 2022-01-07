@@ -1615,6 +1615,7 @@ func IsAutoCommitTxn(ctx sessionctx.Context) bool {
 type RestoreData struct {
 	DB      string
 	Table   string
+	Col     string
 	Agg     string
 	GroupBy string
 	Where   []string
@@ -1623,7 +1624,9 @@ type RestoreData struct {
 func (d *RestoreData) String() string {
 	var buffer bytes.Buffer
 	fmt.Fprint(&buffer, `select `)
-	if len(d.Agg) != 0 {
+	if len(d.Col) != 0 {
+		fmt.Fprint(&buffer, d.Col)
+	} else if len(d.Agg) != 0 {
 		fmt.Fprint(&buffer, d.Agg)
 	} else if len(d.GroupBy) != 0 {
 		fmt.Fprint(&buffer, d.GroupBy)
@@ -1671,6 +1674,14 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 			info.Table = intervalutil.GetTablePartitionName(x.Table.Name.L, id)
 			info.DB = "test"
 			tableInfo = x.Table
+			var buffer bytes.Buffer
+			for i, c := range x.schema.Columns {
+				if i != 0 {
+					fmt.Fprint(&buffer, ", ")
+				}
+				fmt.Fprint(&buffer, c.Restore(tableInfo))
+			}
+			info.Col = buffer.String()
 			var unsignedIntHandle bool
 			if ts.Table.PKIsHandle {
 				if pkColInfo := ts.Table.GetPkColInfo(); pkColInfo != nil {
