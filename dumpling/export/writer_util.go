@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+
 	"io"
 	"path"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/xitongsys/parquet-go/writer"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -395,6 +397,128 @@ func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR
 	return counter, wp.Error()
 }
 
+const parquetFileLimit = 64 * 1024 * 1024 // 64MB
+
+var parquetTypeMap = map[string]string{
+	"INT":     "INT64",
+	"VARCHAR": "BYTE_ARRAY",
+}
+
+func WriteInsertInParquet(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.ExternalFileWriter) (u uint64, err error) {
+	fileRowIter := tblIR.Rows()
+	if !fileRowIter.HasNext() {
+		return 0, fileRowIter.Error()
+	}
+
+	// Build metadata that parquet needs.
+	md := make([]string, meta.ColumnCount())
+	for k, v := range meta.ColumnNames() {
+		ot := meta.ColumnTypes()[k]
+		pt, ok := parquetTypeMap[ot]
+		if !ok {
+			panic(fmt.Errorf("type %s is not supported", ot))
+		}
+		md[k] = fmt.Sprintf("name=%s, type=%s", v, pt)
+	}
+
+	bf := pool.Get().(*bytes.Buffer)
+	if bfCap := bf.Cap(); bfCap < lengthLimit {
+		bf.Grow(lengthLimit - bfCap)
+	}
+	parquetWriter, err := writer.NewCSVWriterFromWriter(md, bf, 4)
+	if err != nil {
+		panic(fmt.Errorf("init parquet writer: %v", err))
+	}
+
+	wp := newWriterPipe(w, cfg.FileSize, UnspecifiedSize, cfg.Labels)
+
+	// use context.Background here to make sure writerPipe can deplete all the chunks in pipeline
+	ctx, cancel := tcontext.Background().WithLogger(pCtx.L()).WithCancel()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wp.Run(ctx)
+		wg.Done()
+	}()
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
+
+	var (
+		row            = MakeRowReceiver(meta.ColumnTypes())
+		counter        uint64
+		lastCounter    uint64
+		selectedFields = meta.SelectedField()
+	)
+
+	defer func() {
+		if err != nil {
+			pCtx.L().Warn("fail to dumping table(chunk), will revert some metrics and start a retry if possible",
+				zap.String("database", meta.DatabaseName()),
+				zap.String("table", meta.TableName()),
+				zap.Uint64("finished rows", lastCounter),
+				zap.Uint64("finished size", wp.finishedFileSize),
+				log.ShortError(err))
+			SubGauge(finishedRowsGauge, cfg.Labels, float64(lastCounter))
+			SubGauge(finishedSizeGauge, cfg.Labels, float64(wp.finishedFileSize))
+		} else {
+			pCtx.L().Debug("finish dumping table(chunk)",
+				zap.String("database", meta.DatabaseName()),
+				zap.String("table", meta.TableName()),
+				zap.Uint64("finished rows", counter),
+				zap.Uint64("finished size", wp.finishedFileSize))
+			summary.CollectSuccessUnit(summary.TotalBytes, 1, wp.finishedFileSize)
+			summary.CollectSuccessUnit("total rows", 1, counter)
+		}
+	}()
+
+	for fileRowIter.HasNext() {
+		if selectedFields != "" {
+			if err = fileRowIter.Decode(row); err != nil {
+				return counter, errors.Trace(err)
+			}
+			size := row.WriteToParquet(parquetWriter)
+			wp.currentFileSize += uint64(size)
+		}
+		counter++
+
+		// We treat parquet as a single file instead of multiple buffers.
+		if wp.currentFileSize >= parquetFileLimit {
+			select {
+			case <-pCtx.Done():
+				return counter, pCtx.Err()
+			case err = <-wp.errCh:
+				return counter, err
+			default:
+				AddGauge(finishedRowsGauge, cfg.Labels, float64(counter-lastCounter))
+				lastCounter = counter
+
+				break
+			}
+		}
+
+		fileRowIter.Next()
+	}
+
+	if wp.currentFileSize > 0 {
+		err = parquetWriter.WriteStop()
+		if err != nil {
+			panic(fmt.Errorf("stop parquet writer: %v", err))
+		}
+		wp.input <- bf
+	}
+
+	close(wp.input)
+	<-wp.closed
+	AddGauge(finishedRowsGauge, cfg.Labels, float64(counter-lastCounter))
+	lastCounter = counter
+	if err = fileRowIter.Error(); err != nil {
+		return counter, errors.Trace(err)
+	}
+	return counter, wp.Error()
+}
+
 func write(tctx *tcontext.Context, writer storage.ExternalFileWriter, str string) error {
 	_, err := writer.Write(tctx, []byte(str))
 	if err != nil {
@@ -583,6 +707,8 @@ const (
 	FileFormatSQLText
 	// FileFormatCSV indicates the given file type is csv type
 	FileFormatCSV
+	// FileFormatParquet indicates the given file type is parquet type
+	FileFormatParquet
 )
 
 const (
@@ -590,6 +716,8 @@ const (
 	FileFormatSQLTextString = "sql"
 	// FileFormatCSVString indicates the string/suffix of csv type file
 	FileFormatCSVString = "csv"
+	// FileFormatParquetString indicates the string/suffix of parquet type file
+	FileFormatParquetString = "parquet"
 )
 
 // String implement Stringer.String method.
@@ -599,6 +727,8 @@ func (f FileFormat) String() string {
 		return strings.ToUpper(FileFormatSQLTextString)
 	case FileFormatCSV:
 		return strings.ToUpper(FileFormatCSVString)
+	case FileFormatParquet:
+		return strings.ToUpper(FileFormatParquetString)
 	default:
 		return "unknown"
 	}
@@ -613,6 +743,8 @@ func (f FileFormat) Extension() string {
 		return FileFormatSQLTextString
 	case FileFormatCSV:
 		return FileFormatCSVString
+	case FileFormatParquet:
+		return FileFormatParquetString
 	default:
 		return "unknown_format"
 	}
@@ -625,6 +757,8 @@ func (f FileFormat) WriteInsert(pCtx *tcontext.Context, cfg *Config, meta TableM
 		return WriteInsert(pCtx, cfg, meta, tblIR, w)
 	case FileFormatCSV:
 		return WriteInsertInCsv(pCtx, cfg, meta, tblIR, w)
+	case FileFormatParquet:
+		return WriteInsertInParquet(pCtx, cfg, meta, tblIR, w)
 	default:
 		return 0, errors.Errorf("unknown file format")
 	}

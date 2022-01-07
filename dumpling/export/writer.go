@@ -50,6 +50,8 @@ func NewWriter(tctx *tcontext.Context, id int64, config *Config, conn *sql.Conn,
 		sw.fileFmt = FileFormatSQLText
 	case FileFormatCSVString:
 		sw.fileFmt = FileFormatCSV
+	case FileFormatParquetString:
+		sw.fileFmt = FileFormatParquet
 	}
 	return sw
 }

@@ -637,6 +637,7 @@ func adjustFileFormat(conf *Config) error {
 			return errors.Errorf("unsupported config.FileType '%s' when we specify --sql, please unset --filetype or set it to 'csv'", conf.FileType)
 		}
 	case FileFormatCSVString:
+	case FileFormatParquetString:
 	default:
 		return errors.Errorf("unknown config.FileType '%s'", conf.FileType)
 	}

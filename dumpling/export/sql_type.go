@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"github.com/xitongsys/parquet-go/writer"
 )
 
 var colTypeRowReceiverMap = map[string]func() RowReceiverStringer{}
@@ -229,6 +230,26 @@ func (r RowReceiverArr) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash boo
 	}
 }
 
+// WriteToParquet implements Stringer.WriteToBufferInCsv
+func (r RowReceiverArr) WriteToParquet(bf *writer.CSVWriter) int {
+	s := make([]*string, len(r.receivers))
+
+	size := 0
+
+	for i, receiver := range r.receivers {
+		bs := receiver.Bytes()
+		size += len(bs)
+		v := string(bs)
+		s[i] = &v
+	}
+
+	err := bf.WriteString(s)
+	if err != nil {
+		panic("failed to write to parquet")
+	}
+	return size
+}
+
 // SQLTypeNumber implements RowReceiverStringer which represents numeric type columns in database
 type SQLTypeNumber struct {
 	SQLTypeString
@@ -249,6 +270,14 @@ func (s SQLTypeNumber) WriteToBufferInCsv(bf *bytes.Buffer, _ bool, opt *csvOpti
 		bf.Write(s.RawBytes)
 	} else {
 		bf.WriteString(opt.nullValue)
+	}
+}
+
+func (s SQLTypeNumber) Bytes() []byte {
+	if s.RawBytes != nil {
+		return s.RawBytes
+	} else {
+		return []byte(nullValue)
 	}
 }
 
@@ -284,6 +313,14 @@ func (s *SQLTypeString) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash boo
 	}
 }
 
+func (s SQLTypeString) Bytes() []byte {
+	if s.RawBytes != nil {
+		return s.RawBytes
+	} else {
+		return []byte(nullValue)
+	}
+}
+
 // SQLTypeBytes implements RowReceiverStringer which represents bytes type columns in database
 type SQLTypeBytes struct {
 	sql.RawBytes
@@ -311,5 +348,13 @@ func (s *SQLTypeBytes) WriteToBufferInCsv(bf *bytes.Buffer, escapeBackslash bool
 		bf.Write(opt.delimiter)
 	} else {
 		bf.WriteString(opt.nullValue)
+	}
+}
+
+func (s SQLTypeBytes) Bytes() []byte {
+	if s.RawBytes != nil {
+		return s.RawBytes
+	} else {
+		return []byte(nullValue)
 	}
 }
