@@ -400,8 +400,16 @@ func WriteInsertInCsv(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR
 const parquetFileLimit = 64 * 1024 * 1024 // 64MB
 
 var parquetTypeMap = map[string]string{
-	"INT":     "INT64",
-	"VARCHAR": "BYTE_ARRAY",
+	"TINYINT":   "INT32",
+	"SMALLINT":  "INT32",
+	"MEDIUMINT": "INT32",
+	"INTEGER":   "INT64",
+	"INT":       "INT64",
+	"BIGINT":    "INT64",
+	"YEAR":      "INT64",
+	"VARCHAR":   "BYTE_ARRAY",
+	"FLOAT":     "FLOAT",
+	"DOUBLE":    "DOUBLE",
 }
 
 func WriteInsertInParquet(pCtx *tcontext.Context, cfg *Config, meta TableMeta, tblIR TableDataIR, w storage.ExternalFileWriter) (u uint64, err error) {
@@ -412,11 +420,12 @@ func WriteInsertInParquet(pCtx *tcontext.Context, cfg *Config, meta TableMeta, t
 
 	// Build metadata that parquet needs.
 	md := make([]string, meta.ColumnCount())
+	tps := meta.ColumnTypes()
 	for k, v := range meta.ColumnNames() {
-		ot := meta.ColumnTypes()[k]
+		ot := tps[k]
 		pt, ok := parquetTypeMap[ot]
 		if !ok {
-			panic(fmt.Errorf("type %s is not supported", ot))
+			pt = "BYTE_ARRAY"
 		}
 		md[k] = fmt.Sprintf("name=%s, type=%s", v, pt)
 	}
