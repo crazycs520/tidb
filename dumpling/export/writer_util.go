@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/xitongsys/parquet-go/parquet"
 
 	"io"
 	"path"
@@ -438,6 +439,8 @@ func WriteInsertInParquet(pCtx *tcontext.Context, cfg *Config, meta TableMeta, t
 	if err != nil {
 		panic(fmt.Errorf("init parquet writer: %v", err))
 	}
+	// Use zstd for compression.
+	parquetWriter.CompressionType = parquet.CompressionCodec_ZSTD
 
 	wp := newWriterPipe(w, cfg.FileSize, UnspecifiedSize, cfg.Labels)
 
