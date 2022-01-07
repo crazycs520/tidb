@@ -39,9 +39,8 @@ func dumpData(host, port, s3Path, s3Region, sql string) error {
 		{"output", s3Path},
 		{"s3.region", s3Region},
 		{"rows", "200000"},
-		{"filetype", "csv"},
+		{"filetype", "parquet"},
 		{"sql", sql},
-		{"csv-delimiter", ""},
 		{"no-header", "true"},
 	}
 	for _, flag := range flags {
