@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"sort"
 
-	awsathena "github.com/aws/aws-sdk-go/service/athena"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/expression"
@@ -116,7 +115,7 @@ type TableReaderExecutor struct {
 	extraPIDColumnIndex offsetOptional
 
 	AWSQueryInfo   *plannercore.RestoreData
-	awsQueryResult *awsathena.ResultSet
+	awsQueryResult *athena.QueryResult
 }
 
 // offsetOptional may be a positive integer, or invalid.
@@ -145,10 +144,10 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 	e.memTracker = memory.NewTracker(e.id, -1)
 	e.memTracker.AttachTo(e.ctx.GetSessionVars().StmtCtx.MemTracker)
 
-	pid, storeType := getPhysicalTableEngine(e.table)
+	storeType := getPhysicalTableEngine(e.table)
 	if storeType == kv.AWSS3Engine {
 		e.storeType = kv.AwsS3
-		return e.fetchResultFromAws(pid)
+		return e.fetchResultFromAws()
 	}
 
 	var err error
@@ -237,10 +236,13 @@ func (e *TableReaderExecutor) Next(ctx context.Context, req *chunk.Chunk) error 
 	}
 	req.Reset()
 	if e.storeType == kv.AwsS3 {
-		result := e.awsQueryResult
-		e.awsQueryResult = nil
-		if result == nil {
+		if e.awsQueryResult == nil {
 			return nil
+		}
+		result, err := e.awsQueryResult.GetResultSet()
+		e.awsQueryResult = nil
+		if err != nil || result == nil {
+			return err
 		}
 		stmtCtx := e.ctx.GetSessionVars().StmtCtx
 		for rowIdx, row := range result.Rows {
@@ -385,19 +387,15 @@ func (e *TableReaderExecutor) buildKVReqSeparately(ctx context.Context, ranges [
 	return kvReqs, nil
 }
 
-func (e *TableReaderExecutor) fetchResultFromAws(pid int64) error {
+func (e *TableReaderExecutor) fetchResultFromAws() error {
 	query := e.AWSQueryInfo.String()
 	logutil.BgLogger().Info(fmt.Sprintf("[aws query] %v", query))
 	cli, err := athena.CreateCli("us-west-2")
 	if err != nil {
-		return nil
-	}
-	result, err := athena.QueryTableData(cli, "test", query)
-	if err != nil {
 		return err
 	}
-	e.awsQueryResult = result
-	return nil
+	e.awsQueryResult, err = athena.StartExecSQL(cli, "test", query)
+	return err
 }
 
 func (e *TableReaderExecutor) buildKVReq(ctx context.Context, ranges []*ranger.Range) (*kv.Request, error) {
