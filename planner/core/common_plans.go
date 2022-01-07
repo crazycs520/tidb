@@ -1704,19 +1704,24 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 				info.Where = append(info.Where, c.Restore(tableInfo))
 			}
 		case *PhysicalHashAgg:
-			if len(x.AggFuncs) == 1 {
-				f := x.AggFuncs[0]
-				var buffer bytes.Buffer
-				buffer.WriteString(f.Name)
-				fmt.Fprint(&buffer, "(")
-				for i, arg := range f.Args {
-					if i != 0 {
-						fmt.Fprint(&buffer, ",")
-					}
-					buffer.WriteString(arg.Restore(tableInfo))
+			var buffer1 bytes.Buffer
+			for i, f := range x.AggFuncs {
+				if i != 0 {
+					fmt.Fprint(&buffer1, ", ")
 				}
-				fmt.Fprint(&buffer, ")")
-				info.Agg = buffer.String()
+				buffer1.WriteString(f.Name)
+				fmt.Fprint(&buffer1, "(")
+				for j, arg := range f.Args {
+					if j != 0 {
+						fmt.Fprint(&buffer1, ", ")
+					}
+					buffer1.WriteString(arg.Restore(tableInfo))
+				}
+				fmt.Fprint(&buffer1, ")")
+			}
+			info.Agg = buffer1.String()
+			if len(info.Agg) != 0 {
+				info.Col = info.Agg
 			}
 			if len(x.GroupByItems) != 0 {
 				var buffer bytes.Buffer
@@ -1727,21 +1732,31 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 					buffer.WriteString(item.Restore(tableInfo))
 				}
 				info.GroupBy = buffer.String()
+				if len(info.Col) == 0 {
+					info.Col = info.GroupBy
+				} else {
+					info.Col = fmt.Sprintf("%v, %v", info.Col, info.GroupBy)
+				}
 			}
 		case *PhysicalStreamAgg:
-			if len(x.AggFuncs) == 1 {
-				f := x.AggFuncs[0]
-				var buffer bytes.Buffer
-				buffer.WriteString(f.Name)
-				fmt.Fprint(&buffer, "(")
-				for i, arg := range f.Args {
-					if i != 0 {
-						fmt.Fprint(&buffer, ",")
-					}
-					buffer.WriteString(arg.Restore(tableInfo))
+			var buffer1 bytes.Buffer
+			for i, f := range x.AggFuncs {
+				if i != 0 {
+					fmt.Fprint(&buffer1, ", ")
 				}
-				fmt.Fprint(&buffer, ")")
-				info.Agg = buffer.String()
+				buffer1.WriteString(f.Name)
+				fmt.Fprint(&buffer1, "(")
+				for j, arg := range f.Args {
+					if j != 0 {
+						fmt.Fprint(&buffer1, ", ")
+					}
+					buffer1.WriteString(arg.Restore(tableInfo))
+				}
+				fmt.Fprint(&buffer1, ")")
+			}
+			info.Agg = buffer1.String()
+			if len(info.Agg) != 0 {
+				info.Col = info.Agg
 			}
 			if len(x.GroupByItems) != 0 {
 				var buffer bytes.Buffer
@@ -1752,6 +1767,11 @@ func BuildAWSQueryInfo(v *PhysicalTableReader, id int64) *RestoreData {
 					buffer.WriteString(item.Restore(tableInfo))
 				}
 				info.GroupBy = buffer.String()
+				if len(info.Col) == 0 {
+					info.Col = info.GroupBy
+				} else {
+					info.Col = fmt.Sprintf("%v, %v", info.Col, info.GroupBy)
+				}
 			}
 		case *PhysicalLimit:
 			if x.Offset != 0 {
