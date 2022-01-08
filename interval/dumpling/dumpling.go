@@ -38,7 +38,7 @@ func dumpData(host, port, s3Path, s3Region, sql string) error {
 		{"user", "root"},
 		{"output", s3Path},
 		{"s3.region", s3Region},
-		{"rows", "200000"},
+		{"filesize", "64MiB"},
 		{"filetype", "parquet"},
 		{"sql", sql},
 		{"no-header", "true"},

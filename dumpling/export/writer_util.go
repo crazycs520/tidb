@@ -511,6 +511,9 @@ func WriteInsertInParquet(pCtx *tcontext.Context, cfg *Config, meta TableMeta, t
 		}
 
 		fileRowIter.Next()
+		if wp.ShouldSwitchFile() {
+			break
+		}
 	}
 
 	if wp.currentFileSize > 0 {
