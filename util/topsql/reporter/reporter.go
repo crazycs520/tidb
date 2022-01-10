@@ -196,6 +196,9 @@ func (tsr *RemoteTopSQLReporter) collectWorker() {
 func (tsr *RemoteTopSQLReporter) processCPUTimeData(timestamp uint64, data cpuRecords) {
 	defer util.Recover("top-sql", "processCPUTimeData", nil, false)
 
+	if data.Len() > 0 {
+		logutil.BgLogger().Info("process cpu time data", zap.Uint64("ts", timestamp), zap.Uint32("cpu", data[0].CPUTimeMs))
+	}
 	// Get top N cpuRecords of each round cpuRecords. Collect the top N to tsr.collecting
 	// for each round. SQL meta will not be evicted, since the evicted SQL can be appeared
 	// on other components (TiKV) TopN DataRecords.

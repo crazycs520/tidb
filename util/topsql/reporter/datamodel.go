@@ -508,6 +508,11 @@ func (c *collecting) getReportRecords() records {
 	if others != nil && others.totalCPUTimeMs > 0 {
 		rs = append(rs, *others)
 	}
+	if rs.Len() > 0 {
+		for _, v := range rs[0].tsItems {
+			logutil.BgLogger().Info("report cpu time data", zap.Uint64("ts", v.timestamp), zap.Uint32("cpu", v.cpuTimeMs))
+		}
+	}
 	return rs
 }
 
