@@ -248,6 +248,7 @@ func (tsr *RemoteTopSQLReporter) takeDataFromCollectChanBuffer() {
 			tsr.stmtStatsBuffer[timestamp] = data
 			logutil.BgLogger().Info("reporter take stmt data", zap.Uint64("ts", timestamp))
 		default:
+			logutil.BgLogger().Info("reporter take nothing", zap.Uint64("ts", timestamp))
 			return
 		}
 	}
