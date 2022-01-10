@@ -165,6 +165,7 @@ func (sp *SQLCPUCollector) doUnregister(profileConsumer cpuprofile.ProfileConsum
 // Since `SQLCPUCollector` only care about the cpu time that consume by (sql_digest,plan_digest), the other sample data
 // without those label will be ignore.
 func (sp *SQLCPUCollector) parseCPUProfileBySQLLabels(p *profile.Profile) []SQLCPUTimeRecord {
+	total := int64(0)
 	sqlMap := make(map[string]*sqlStats)
 	idx := len(p.SampleType) - 1
 	for _, s := range p.Sample {
@@ -182,6 +183,7 @@ func (sp *SQLCPUCollector) parseCPUProfileBySQLLabels(p *profile.Profile) []SQLC
 				sqlMap[digest] = stmt
 			}
 			stmt.total += s.Value[idx]
+			total += s.Value[idx]
 
 			plans := s.Label[labelPlanDigest]
 			for _, plan := range plans {
@@ -189,6 +191,7 @@ func (sp *SQLCPUCollector) parseCPUProfileBySQLLabels(p *profile.Profile) []SQLC
 			}
 		}
 	}
+	logutil.BgLogger().Info("sql cpu collector", zap.Int64("total", total))
 	return sp.createSQLStats(sqlMap)
 }
 
