@@ -243,7 +243,7 @@ func (tsr *RemoteTopSQLReporter) takeDataFromCollectChanBuffer() {
 		case data := <-tsr.collectCPUTimeChan:
 			start := time.Now()
 			tsr.processCPUTimeData(timestamp, data)
-			logutil.BgLogger().Info("process cpu data", zap.Duration("cost", time.Since(start)))
+			logutil.BgLogger().Info("process cpu data", zap.Uint64("ts", timestamp), zap.Duration("cost", time.Since(start)))
 		case data := <-tsr.collectStmtStatsChan:
 			tsr.stmtStatsBuffer[timestamp] = data
 		default:
