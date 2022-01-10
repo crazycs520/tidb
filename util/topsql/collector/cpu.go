@@ -123,7 +123,6 @@ func (sp *SQLCPUCollector) collectSQLCPULoop() {
 			return
 		case <-ticker.C:
 		case data := <-profileConsumer:
-			logutil.BgLogger().Info("cpu consumer", zap.Uint64("ts", time.Now().Unix()))
 			sp.handleProfileData(data)
 		}
 	}
