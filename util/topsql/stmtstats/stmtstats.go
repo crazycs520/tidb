@@ -15,6 +15,8 @@
 package stmtstats
 
 import (
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 
@@ -52,6 +54,7 @@ func CreateStatementStats() *StatementStats {
 		data:     StatementStatsMap{},
 		finished: atomic.NewBool(false),
 	}
+	logutil.BgLogger().Info("stmt-stats create stmt stats", zap.Stack("stack"))
 	globalAggregator.register(stats)
 	return stats
 }

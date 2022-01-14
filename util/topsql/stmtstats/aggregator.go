@@ -16,6 +16,8 @@ package stmtstats
 
 import (
 	"context"
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 
@@ -64,7 +66,9 @@ func (m *aggregator) run() {
 // If StatementStats has been closed, collect will remove it from the map.
 func (m *aggregator) aggregate() {
 	total := StatementStatsMap{}
+	cnt := 0
 	m.statsSet.Range(func(statsR, _ interface{}) bool {
+		cnt++
 		stats := statsR.(*StatementStats)
 		if stats.Finished() {
 			m.unregister(stats)
@@ -78,6 +82,7 @@ func (m *aggregator) aggregate() {
 			return true
 		})
 	}
+	logutil.BgLogger().Info("stmt-stats session count", zap.Int("cnt", cnt))
 }
 
 // register binds StatementStats to aggregator.
