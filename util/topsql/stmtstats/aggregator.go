@@ -32,12 +32,14 @@ var globalAggregator = newAggregator()
 // It is responsible for collecting data from all StatementStats, aggregating
 // them together, uploading them and regularly cleaning up the closed StatementStats.
 type aggregator struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
+	ctx     context.Context
+	cancel  context.CancelFunc
+	wg      *sync.WaitGroup
+	running *atomic.Bool
+
 	statsLen   atomic.Uint32
 	statsSet   sync.Map // map[*StatementStats]struct{}
 	collectors sync.Map // map[Collector]struct{}
-	running    *atomic.Bool
 }
 
 // newAggregator creates an empty aggregator.
@@ -45,18 +47,30 @@ func newAggregator() *aggregator {
 	return &aggregator{running: atomic.NewBool(false)}
 }
 
-// run will block the current goroutine and execute the main loop of aggregator.
-func (m *aggregator) run() {
-	tick := time.NewTicker(time.Second)
-	defer tick.Stop()
-	for {
-		select {
-		case <-m.ctx.Done():
-			return
-		case <-tick.C:
-			m.aggregate(state.TopSQLEnabled())
+// start will spawn a new goroutine executing the main loop of aggregator.
+func (m *aggregator) start() {
+	// to prevent the aggregator from being started twice.
+	m.close()
+
+	m.ctx, m.cancel = context.WithCancel(context.Background())
+	m.running.Store(true)
+	m.wg = &sync.WaitGroup{}
+	m.wg.Add(1)
+	go func() {
+		tick := time.NewTicker(time.Second)
+		defer func() {
+			tick.Stop()
+			m.wg.Done()
+		}()
+		for {
+			select {
+			case <-m.ctx.Done():
+				return
+			case <-tick.C:
+				m.aggregate(state.TopSQLEnabled())
+			}
 		}
-	}
+	}()
 }
 
 // aggregate data from all associated StatementStats.
@@ -118,6 +132,10 @@ func (m *aggregator) close() {
 		m.cancel()
 	}
 	m.running.Store(false)
+	if m.wg != nil {
+		m.wg.Wait()
+	}
+	m.ctx, m.cancel, m.wg = nil, nil, nil
 }
 
 // closed returns whether the aggregator has been closed.
@@ -129,9 +147,7 @@ func (m *aggregator) closed() bool {
 // SetupAggregator is **not** thread-safe.
 func SetupAggregator() {
 	if globalAggregator.closed() {
-		globalAggregator.ctx, globalAggregator.cancel = context.WithCancel(context.Background())
-		globalAggregator.running.Store(true)
-		go globalAggregator.run()
+		globalAggregator.start()
 	}
 }
 
