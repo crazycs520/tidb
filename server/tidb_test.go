@@ -26,6 +26,10 @@ import (
 	"database/sql"
 	"encoding/pem"
 	"fmt"
+	"github.com/pingcap/tidb/ddl/testutil"
+	ddlutil "github.com/pingcap/tidb/ddl/util"
+	"github.com/pingcap/tidb/tablecodec"
+	"github.com/tikv/client-go/v2/oracle"
 	"math/big"
 	"net/http"
 	"os"
@@ -1914,7 +1918,7 @@ func (c *resourceTagChecker) checkReqExist(t *testing.T, digest stmtstats.Binary
 	c.Lock()
 	defer c.Unlock()
 	reqMap, ok := c.sqlDigest2Reqs[digest]
-	require.True(t, ok, sqlStr)
+	require.Equal(t, ok, len(reqs) > 0, sqlStr)
 	for _, req := range reqs {
 		_, ok := reqMap[req]
 		require.True(t, ok, sqlStr+"--"+req.String())
@@ -1966,12 +1970,34 @@ func setupForTestTopSQLStatementStats(t *testing.T) (*tidbTestSuite, stmtstats.S
 		conf.TopSQL.ReceiverAddress = "mock-agent"
 	})
 
+	startTimestamp, err := ts.store.GetOracle().GetTimestamp(context.Background(), &oracle.Option{})
+	require.NoError(t, err)
+
 	tagChecker := &resourceTagChecker{
 		sqlDigest2Reqs: make(map[stmtstats.BinaryDigest]map[tikvrpc.CmdType]struct{}),
 	}
 	unistore.UnistoreRPCClientSendHook = func(req *tikvrpc.Request) {
 		tag := req.GetResourceGroupTag()
 		if len(tag) == 0 {
+			startKey, txnTs := testutil.GetReqStartKeyAndTxnTs(req)
+			var tid int64
+			if tablecodec.IsRecordKey(startKey) {
+				tid, _, err = tablecodec.DecodeRecordKey(startKey)
+			}
+			if tablecodec.IsIndexKey(startKey) {
+				tid, _, _, err = tablecodec.DecodeIndexKey(startKey)
+			}
+			require.NoError(t, err)
+			if tid != 0 && txnTs > startTimestamp {
+				tbl, ok := ts.domain.InfoSchema().TableByID(tid)
+				if ok {
+					stack := util.GetStack()
+					require.Fail(t, fmt.Sprintf("rpc request does not set the resource tag, req: %v, table: %v, stack: %v", req.Type.String(), tbl.Meta().Name.O, string(stack)))
+				}
+			}
+
+			return
+		} else if ddlutil.IsInternalResourceGroupTaggerForTopSQL(tag) {
 			return
 		}
 		sqlDigest, err := resourcegrouptag.DecodeResourceGroupTag(tag)
@@ -2262,6 +2288,80 @@ func TestTopSQLStatementStats4(t *testing.T) {
 			foundMap[digest.SQLDigest] = sqlStr
 			tagChecker.checkExist(t, digest.SQLDigest, sqlStr)
 		}
+	}
+}
+
+func TestTopSQLResourceTag(t *testing.T) {
+	ts, _, tagChecker, _, cleanFn := setupForTestTopSQLStatementStats(t)
+	defer func() {
+		topsqlstate.DisableTopSQL()
+		cleanFn()
+	}()
+
+	// Test case for other statements
+	cases1 := []struct {
+		sql     string
+		isQuery bool
+		reqs    []tikvrpc.CmdType
+	}{
+		// Test for curd.
+		{"insert into t values (1,1), (3,3)", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
+		{"insert into t values (1,2) on duplicate key update a = 2", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdBatchGet}},
+		{"update t set b=b+1 where a=3", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdGet}},
+		{"update t set b=b+1 where a>1", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdCop}},
+		{"delete from t where a=3", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdGet}},
+		{"delete from t where a>1", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdCop}},
+		{"insert ignore into t values (2,2), (3,3)", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdBatchGet}},
+		{"select * from t where a in (1,2,3,4)", true, []tikvrpc.CmdType{tikvrpc.CmdBatchGet}},
+		{"select * from t where a = 1", true, []tikvrpc.CmdType{tikvrpc.CmdGet}},
+		{"select * from t where b > 0", true, []tikvrpc.CmdType{tikvrpc.CmdCop}},
+		{"replace into t values (2,2), (4,4)", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdBatchGet}},
+		// Test for DDL
+		{"alter table t add index idx2 (b,a)", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdScan}},
+		{"alter table t modify column b double", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdScan}},
+		{"create table test_t0 (a int, b int, index idx(a))", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
+		{"alter table test_t0 add column c int", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
+
+		// Test for other statements.
+		{"set @@global.tidb_enable_1pc = 1", false, nil},
+	}
+
+	internalCases := []struct {
+		sql  string
+		reqs []tikvrpc.CmdType
+	}{
+		{"replace into mysql.global_variables (variable_name,variable_value) values ('tidb_enable_1pc', '1')", []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdBatchGet}},
+	}
+	executeCaseFn := func(execFn func(db *sql.DB)) {
+		db, err := sql.Open("mysql", ts.getDSN())
+		require.NoError(t, err)
+		dbt := testkit.NewDBTestKit(t, db)
+		dbt.MustExec("use stmtstats;")
+		require.NoError(t, err)
+
+		execFn(db)
+		err = db.Close()
+		require.NoError(t, err)
+	}
+	execFn := func(db *sql.DB) {
+		dbt := testkit.NewDBTestKit(t, db)
+		for _, ca := range cases1 {
+			if ca.isQuery {
+				mustQuery(t, dbt, ca.sql)
+			} else {
+				dbt.MustExec(ca.sql)
+			}
+		}
+	}
+	executeCaseFn(execFn)
+
+	for _, ca := range cases1 {
+		_, digest := parser.NormalizeDigest(ca.sql)
+		tagChecker.checkReqExist(t, stmtstats.BinaryDigest(digest.Bytes()), ca.sql, ca.reqs...)
+	}
+	for _, ca := range internalCases {
+		_, digest := parser.NormalizeDigest(ca.sql)
+		tagChecker.checkReqExist(t, stmtstats.BinaryDigest(digest.Bytes()), ca.sql, ca.reqs...)
 	}
 }
 

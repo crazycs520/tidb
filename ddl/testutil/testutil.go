@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/types"
+	"github.com/tikv/client-go/v2/tikvrpc"
 )
 
 // SessionExecInGoroutine export for testing.
@@ -80,4 +81,36 @@ func ExtractAllTableHandles(se session.Session, dbName, tbName string) ([]int64,
 			return true, nil
 		})
 	return allHandles, err
+}
+
+func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64) {
+	var startKey []byte
+	var ts uint64
+	switch req.Type {
+	case tikvrpc.CmdGet:
+		request := req.Get()
+		startKey = request.Key
+		ts = request.Version
+	case tikvrpc.CmdBatchGet:
+		request := req.BatchGet()
+		startKey = request.Keys[0]
+		ts = request.Version
+	case tikvrpc.CmdPrewrite:
+		request := req.Prewrite()
+		startKey = request.Mutations[0].Key
+		ts = request.StartVersion
+	case tikvrpc.CmdCommit:
+		request := req.Commit()
+		startKey = request.Keys[0]
+		ts = request.StartVersion
+	case tikvrpc.CmdCop:
+		request := req.Cop()
+		startKey = request.Ranges[0].Start
+		ts = request.StartTs
+	case tikvrpc.CmdPessimisticLock:
+		request := req.PessimisticLock()
+		startKey = request.PrimaryLock
+		ts = request.StartVersion
+	}
+	return startKey, ts
 }
