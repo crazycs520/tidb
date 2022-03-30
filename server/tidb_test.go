@@ -29,7 +29,9 @@ import (
 	"github.com/pingcap/tidb/ddl/testutil"
 	ddlutil "github.com/pingcap/tidb/ddl/util"
 	"github.com/pingcap/tidb/tablecodec"
+	"github.com/pingcap/tidb/util/logutil"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/zap"
 	"math/big"
 	"net/http"
 	"os"
@@ -1979,7 +1981,11 @@ func setupForTestTopSQLStatementStats(t *testing.T) (*tidbTestSuite, stmtstats.S
 	unistore.UnistoreRPCClientSendHook = func(req *tikvrpc.Request) {
 		tag := req.GetResourceGroupTag()
 		if len(tag) == 0 {
-			startKey, txnTs := testutil.GetReqStartKeyAndTxnTs(req)
+			startKey, txnTs,err := testutil.GetReqStartKeyAndTxnTs(req)
+			if err != nil {
+				logutil.BgLogger().Error("FAIL-- get request start key meet error", zap.String("err", err.Error()), zap.Stack("stack"))
+			}
+			require.NoError(t,err)
 			var tid int64
 			if tablecodec.IsRecordKey(startKey) {
 				tid, _, err = tablecodec.DecodeRecordKey(startKey)
@@ -1987,15 +1993,14 @@ func setupForTestTopSQLStatementStats(t *testing.T) (*tidbTestSuite, stmtstats.S
 			if tablecodec.IsIndexKey(startKey) {
 				tid, _, _, err = tablecodec.DecodeIndexKey(startKey)
 			}
-			require.NoError(t, err)
-			if tid != 0 && txnTs > startTimestamp {
+			// since the error maybe "invalid record key", should just ignore check resource tag for this request.
+			if err == nil && tid != 0 && txnTs > startTimestamp {
 				tbl, ok := ts.domain.InfoSchema().TableByID(tid)
 				if ok {
-					stack := util.GetStack()
-					require.Fail(t, fmt.Sprintf("rpc request does not set the resource tag, req: %v, table: %v, stack: %v", req.Type.String(), tbl.Meta().Name.O, string(stack)))
+					logutil.BgLogger().Error("FAIL-- rpc request does not set the resource tag", zap.String("req", req.Type.String()),zap.String("table", tbl.Meta().Name.O), zap.Stack("stack"))
+					require.Fail(t,"")
 				}
 			}
-
 			return
 		} else if ddlutil.IsInternalResourceGroupTaggerForTopSQL(tag) {
 			return

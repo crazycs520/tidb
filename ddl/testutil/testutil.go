@@ -16,7 +16,6 @@ package testutil
 
 import (
 	"context"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
@@ -83,7 +82,7 @@ func ExtractAllTableHandles(se session.Session, dbName, tbName string) ([]int64,
 	return allHandles, err
 }
 
-func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64) {
+func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64,error) {
 	var startKey []byte
 	var ts uint64
 	switch req.Type {
@@ -91,9 +90,9 @@ func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64) {
 		request := req.Get()
 		startKey = request.Key
 		ts = request.Version
-	case tikvrpc.CmdBatchGet:
-		request := req.BatchGet()
-		startKey = request.Keys[0]
+	case tikvrpc.CmdScan:
+		request := req.Scan()
+		startKey = request.StartKey
 		ts = request.Version
 	case tikvrpc.CmdPrewrite:
 		request := req.Prewrite()
@@ -103,14 +102,57 @@ func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64) {
 		request := req.Commit()
 		startKey = request.Keys[0]
 		ts = request.StartVersion
-	case tikvrpc.CmdCop:
-		request := req.Cop()
-		startKey = request.Ranges[0].Start
-		ts = request.StartTs
+	case tikvrpc.CmdCleanup:
+		request := req.Cleanup()
+		startKey = request.Key
+		ts = request.StartVersion
+	case tikvrpc.CmdBatchGet:
+		request := req.BatchGet()
+		startKey = request.Keys[0]
+		ts = request.Version
+	case tikvrpc.CmdBatchRollback:
+		request := req.BatchRollback()
+		startKey = request.Keys[0]
+		ts = request.StartVersion
+	case tikvrpc.CmdScanLock:
+		request := req.ScanLock()
+		startKey = request.StartKey
+		ts = request.MaxVersion
+	case tikvrpc.CmdResolveLock:
+		request := req.ResolveLock()
+		startKey = request.Keys[0]
+		ts = request.StartVersion
 	case tikvrpc.CmdPessimisticLock:
 		request := req.PessimisticLock()
 		startKey = request.PrimaryLock
 		ts = request.StartVersion
+	case tikvrpc.CmdPessimisticRollback:
+		request := req.PessimisticRollback()
+		startKey = request.Keys[0]
+		ts = request.StartVersion
+	case tikvrpc.CmdCheckTxnStatus:
+		request := req.CheckTxnStatus()
+		startKey = request.PrimaryKey
+		ts = request.CurrentTs
+	case tikvrpc.CmdCheckSecondaryLocks:
+		request := req.CheckSecondaryLocks()
+		startKey = request.Keys[0]
+		ts = request.StartVersion
+	case tikvrpc.CmdCop,tikvrpc.CmdCopStream:
+		request := req.Cop()
+		startKey = request.Ranges[0].Start
+		ts = request.StartTs
+	case tikvrpc.CmdGC, tikvrpc.CmdDeleteRange, tikvrpc.CmdTxnHeartBeat, tikvrpc.CmdRawGet,
+		tikvrpc.CmdRawBatchGet,tikvrpc.CmdRawPut,tikvrpc.CmdRawBatchPut,tikvrpc.CmdRawDelete,tikvrpc.CmdRawBatchDelete,tikvrpc.CmdRawDeleteRange,
+		tikvrpc.CmdRawScan,tikvrpc.CmdGetKeyTTL, tikvrpc.CmdRawCompareAndSwap, tikvrpc.CmdUnsafeDestroyRange,tikvrpc.CmdRegisterLockObserver,
+		tikvrpc.CmdCheckLockObserver,tikvrpc.CmdRemoveLockObserver,tikvrpc.CmdPhysicalScanLock,tikvrpc.CmdStoreSafeTS,
+		tikvrpc.CmdLockWaitInfo,tikvrpc.CmdMvccGetByKey,tikvrpc.CmdMvccGetByStartTs, tikvrpc.CmdSplitRegion,
+		tikvrpc.CmdDebugGetRegionProperties, tikvrpc.CmdEmpty:
+		// Ignore those requests since now, since it is no business with TopSQL.
+	case tikvrpc.CmdBatchCop, tikvrpc.CmdMPPTask, tikvrpc.CmdMPPConn,tikvrpc.CmdMPPCancel, tikvrpc.CmdMPPAlive:
+		// Ignore mpp requests.
+	default:
+		return nil,0,errors.New("unknown request, check the new type RPC request here")
 	}
-	return startKey, ts
+	return startKey, ts,nil
 }
