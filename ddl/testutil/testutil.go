@@ -118,10 +118,6 @@ func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64,error) {
 		request := req.ScanLock()
 		startKey = request.StartKey
 		ts = request.MaxVersion
-	case tikvrpc.CmdResolveLock:
-		request := req.ResolveLock()
-		startKey = request.Keys[0]
-		ts = request.StartVersion
 	case tikvrpc.CmdPessimisticLock:
 		request := req.PessimisticLock()
 		startKey = request.PrimaryLock
@@ -130,10 +126,6 @@ func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64,error) {
 		request := req.PessimisticRollback()
 		startKey = request.Keys[0]
 		ts = request.StartVersion
-	case tikvrpc.CmdCheckTxnStatus:
-		request := req.CheckTxnStatus()
-		startKey = request.PrimaryKey
-		ts = request.CurrentTs
 	case tikvrpc.CmdCheckSecondaryLocks:
 		request := req.CheckSecondaryLocks()
 		startKey = request.Keys[0]
@@ -151,6 +143,8 @@ func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64,error) {
 		// Ignore those requests since now, since it is no business with TopSQL.
 	case tikvrpc.CmdBatchCop, tikvrpc.CmdMPPTask, tikvrpc.CmdMPPConn,tikvrpc.CmdMPPCancel, tikvrpc.CmdMPPAlive:
 		// Ignore mpp requests.
+	case tikvrpc.CmdResolveLock, tikvrpc.CmdCheckTxnStatus:
+		// TODO: add resource tag for those request.
 	default:
 		return nil,0,errors.New("unknown request, check the new type RPC request here")
 	}

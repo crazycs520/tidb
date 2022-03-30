@@ -1917,10 +1917,13 @@ func (c *resourceTagChecker) checkExist(t *testing.T, digest stmtstats.BinaryDig
 }
 
 func (c *resourceTagChecker) checkReqExist(t *testing.T, digest stmtstats.BinaryDigest, sqlStr string, reqs ...tikvrpc.CmdType) {
+	if len(reqs)==0{
+		return
+	}
 	c.Lock()
 	defer c.Unlock()
 	reqMap, ok := c.sqlDigest2Reqs[digest]
-	require.Equal(t, ok, len(reqs) > 0, sqlStr)
+	require.True(t, ok, sqlStr)
 	for _, req := range reqs {
 		_, ok := reqMap[req]
 		require.True(t, ok, sqlStr+"--"+req.String())
@@ -2321,11 +2324,23 @@ func TestTopSQLResourceTag(t *testing.T) {
 		{"select * from t where a = 1", true, []tikvrpc.CmdType{tikvrpc.CmdGet}},
 		{"select * from t where b > 0", true, []tikvrpc.CmdType{tikvrpc.CmdCop}},
 		{"replace into t values (2,2), (4,4)", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdBatchGet}},
+
 		// Test for DDL
-		{"alter table t add index idx2 (b,a)", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdScan}},
-		{"alter table t modify column b double", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdScan}},
-		{"create table test_t0 (a int, b int, index idx(a))", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
-		{"alter table test_t0 add column c int", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
+		{"create database test_db0", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
+		{"create table test_db0.test_t0 (a int, b int, index idx(a))", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
+		{"create table test_db0.test_t1 (a int, b int, index idx(a))", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
+		{"alter  table test_db0.test_t0 add column c int", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
+		{"drop   table test_db0.test_t0", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
+		{"drop   database test_db0", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
+		{"alter  table t modify column b double", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdScan}},
+		{"alter  table t add index idx2 (b,a)", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit, tikvrpc.CmdScan}},
+		{"alter  table t drop index idx2", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
+
+		// Test for transaction
+		{"begin", false, nil},
+		{"insert into t2 values (10,10), (11,11)", false, nil},
+		{"insert ignore into t2 values (20,20), (21,21)", false, []tikvrpc.CmdType{tikvrpc.CmdBatchGet}},
+		{"commit", false, []tikvrpc.CmdType{tikvrpc.CmdPrewrite, tikvrpc.CmdCommit}},
 
 		// Test for other statements.
 		{"set @@global.tidb_enable_1pc = 1", false, nil},
