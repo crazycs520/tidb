@@ -82,7 +82,7 @@ func ExtractAllTableHandles(se session.Session, dbName, tbName string) ([]int64,
 	return allHandles, err
 }
 
-func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64,error) {
+func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64, error) {
 	var startKey []byte
 	var ts uint64
 	switch req.Type {
@@ -130,23 +130,23 @@ func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64,error) {
 		request := req.CheckSecondaryLocks()
 		startKey = request.Keys[0]
 		ts = request.StartVersion
-	case tikvrpc.CmdCop,tikvrpc.CmdCopStream:
+	case tikvrpc.CmdCop, tikvrpc.CmdCopStream:
 		request := req.Cop()
 		startKey = request.Ranges[0].Start
 		ts = request.StartTs
 	case tikvrpc.CmdGC, tikvrpc.CmdDeleteRange, tikvrpc.CmdTxnHeartBeat, tikvrpc.CmdRawGet,
-		tikvrpc.CmdRawBatchGet,tikvrpc.CmdRawPut,tikvrpc.CmdRawBatchPut,tikvrpc.CmdRawDelete,tikvrpc.CmdRawBatchDelete,tikvrpc.CmdRawDeleteRange,
-		tikvrpc.CmdRawScan,tikvrpc.CmdGetKeyTTL, tikvrpc.CmdRawCompareAndSwap, tikvrpc.CmdUnsafeDestroyRange,tikvrpc.CmdRegisterLockObserver,
-		tikvrpc.CmdCheckLockObserver,tikvrpc.CmdRemoveLockObserver,tikvrpc.CmdPhysicalScanLock,tikvrpc.CmdStoreSafeTS,
-		tikvrpc.CmdLockWaitInfo,tikvrpc.CmdMvccGetByKey,tikvrpc.CmdMvccGetByStartTs, tikvrpc.CmdSplitRegion,
+		tikvrpc.CmdRawBatchGet, tikvrpc.CmdRawPut, tikvrpc.CmdRawBatchPut, tikvrpc.CmdRawDelete, tikvrpc.CmdRawBatchDelete, tikvrpc.CmdRawDeleteRange,
+		tikvrpc.CmdRawScan, tikvrpc.CmdGetKeyTTL, tikvrpc.CmdRawCompareAndSwap, tikvrpc.CmdUnsafeDestroyRange, tikvrpc.CmdRegisterLockObserver,
+		tikvrpc.CmdCheckLockObserver, tikvrpc.CmdRemoveLockObserver, tikvrpc.CmdPhysicalScanLock, tikvrpc.CmdStoreSafeTS,
+		tikvrpc.CmdLockWaitInfo, tikvrpc.CmdMvccGetByKey, tikvrpc.CmdMvccGetByStartTs, tikvrpc.CmdSplitRegion,
 		tikvrpc.CmdDebugGetRegionProperties, tikvrpc.CmdEmpty:
 		// Ignore those requests since now, since it is no business with TopSQL.
-	case tikvrpc.CmdBatchCop, tikvrpc.CmdMPPTask, tikvrpc.CmdMPPConn,tikvrpc.CmdMPPCancel, tikvrpc.CmdMPPAlive:
+	case tikvrpc.CmdBatchCop, tikvrpc.CmdMPPTask, tikvrpc.CmdMPPConn, tikvrpc.CmdMPPCancel, tikvrpc.CmdMPPAlive:
 		// Ignore mpp requests.
 	case tikvrpc.CmdResolveLock, tikvrpc.CmdCheckTxnStatus:
 		// TODO: add resource tag for those request.
 	default:
-		return nil,0,errors.New("unknown request, check the new type RPC request here")
+		return nil, 0, errors.New("unknown request, check the new type RPC request here")
 	}
-	return startKey, ts,nil
+	return startKey, ts, nil
 }

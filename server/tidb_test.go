@@ -1917,7 +1917,7 @@ func (c *resourceTagChecker) checkExist(t *testing.T, digest stmtstats.BinaryDig
 }
 
 func (c *resourceTagChecker) checkReqExist(t *testing.T, digest stmtstats.BinaryDigest, sqlStr string, reqs ...tikvrpc.CmdType) {
-	if len(reqs)==0{
+	if len(reqs) == 0 {
 		return
 	}
 	c.Lock()
@@ -1984,11 +1984,11 @@ func setupForTestTopSQLStatementStats(t *testing.T) (*tidbTestSuite, stmtstats.S
 	unistore.UnistoreRPCClientSendHook = func(req *tikvrpc.Request) {
 		tag := req.GetResourceGroupTag()
 		if len(tag) == 0 {
-			startKey, txnTs,err := testutil.GetReqStartKeyAndTxnTs(req)
+			startKey, txnTs, err := testutil.GetReqStartKeyAndTxnTs(req)
 			if err != nil {
 				logutil.BgLogger().Error("FAIL-- get request start key meet error", zap.String("err", err.Error()), zap.Stack("stack"))
 			}
-			require.NoError(t,err)
+			require.NoError(t, err)
 			var tid int64
 			if tablecodec.IsRecordKey(startKey) {
 				tid, _, err = tablecodec.DecodeRecordKey(startKey)
@@ -2000,8 +2000,8 @@ func setupForTestTopSQLStatementStats(t *testing.T) (*tidbTestSuite, stmtstats.S
 			if err == nil && tid != 0 && txnTs > startTimestamp {
 				tbl, ok := ts.domain.InfoSchema().TableByID(tid)
 				if ok {
-					logutil.BgLogger().Error("FAIL-- rpc request does not set the resource tag", zap.String("req", req.Type.String()),zap.String("table", tbl.Meta().Name.O), zap.Stack("stack"))
-					require.Fail(t,"")
+					logutil.BgLogger().Error("FAIL-- rpc request does not set the resource tag", zap.String("req", req.Type.String()), zap.String("table", tbl.Meta().Name.O), zap.Stack("stack"))
+					require.Fail(t, "")
 				}
 			}
 			return
