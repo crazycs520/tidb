@@ -113,9 +113,6 @@ func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64, error) {
 	case tikvrpc.CmdPessimisticLock:
 		request := req.PessimisticLock()
 		return request.PrimaryLock, request.StartVersion, nil
-	case tikvrpc.CmdPessimisticRollback:
-		request := req.PessimisticRollback()
-		return request.Keys[0], request.StartVersion, nil
 	case tikvrpc.CmdCheckSecondaryLocks:
 		request := req.CheckSecondaryLocks()
 		return request.Keys[0], request.StartVersion, nil
@@ -133,7 +130,7 @@ func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64, error) {
 	case tikvrpc.CmdBatchCop, tikvrpc.CmdMPPTask, tikvrpc.CmdMPPConn, tikvrpc.CmdMPPCancel, tikvrpc.CmdMPPAlive:
 		// Ignore mpp requests.
 		return nil, 0, nil
-	case tikvrpc.CmdResolveLock, tikvrpc.CmdCheckTxnStatus:
+	case tikvrpc.CmdResolveLock, tikvrpc.CmdCheckTxnStatus, tikvrpc.CmdPessimisticRollback:
 		// TODO: add resource tag for those request. https://github.com/pingcap/tidb/issues/33621
 		return nil, 0, nil
 	default:

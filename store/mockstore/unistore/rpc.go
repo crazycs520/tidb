@@ -15,6 +15,12 @@
 package unistore
 
 import (
+	"fmt"
+	"github.com/pingcap/tidb/ddl/testutil"
+	"github.com/pingcap/tidb/tablecodec"
+	"github.com/pingcap/tidb/util"
+	"github.com/pingcap/tidb/util/logutil"
+	topsqlstate "github.com/pingcap/tidb/util/topsql/state"
 	"io"
 	"math"
 	"os"
@@ -52,6 +58,9 @@ type RPCClient struct {
 	persistent bool
 	closed     int32
 }
+
+// RunInGoTest is used to identify whether ddl in running in the test.
+var	RunInGoTest bool
 
 // UnistoreRPCClientSendHook exports for test.
 var UnistoreRPCClientSendHook func(*tikvrpc.Request)
@@ -94,6 +103,29 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 	storeID, err := c.usSvr.GetStoreIDByAddr(addr)
 	if err != nil {
 		return nil, err
+	}
+
+	if RunInGoTest && topsqlstate.TopSQLEnabled(){
+		logutil.BgLogger().Info("---------------------------------cs-----------cs")
+		tag := req.GetResourceGroupTag()
+		if len(tag) == 0 {
+			startKey,_, err := testutil.GetReqStartKeyAndTxnTs(req)
+			if err != nil {
+				return nil,err
+			}
+			var tid int64
+			if tablecodec.IsRecordKey(startKey) {
+				tid, _, _= tablecodec.DecodeRecordKey(startKey)
+			}
+			if tablecodec.IsIndexKey(startKey) {
+				tid, _, _, _= tablecodec.DecodeIndexKey(startKey)
+			}
+				// since the error maybe "invalid record key", should just ignore check resource tag for this request.
+			if tid > 0{
+				stack := util.GetStack()
+				return nil, fmt.Errorf("%v req does not set the resource tag, tid: %v, stack: %v", req.Type.String(), tid,string(stack))
+			}
+		}
 	}
 
 	resp := &tikvrpc.Response{}
