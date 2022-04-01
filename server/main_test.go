@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 	testbridge.SetupForCommonTest()
 
 	RunInGoTest = true // flag for NewServer to known it is running in test environment
-	unistore.RunInGoTest = true
+	unistore.CheckResourceTagForTopSQLInGoTest = true
 	topsqlstate.EnableTopSQL()
 
 	// AsyncCommit will make DDL wait 2.5s before changing to the next state.

@@ -74,7 +74,7 @@ func RunWithRetry(retryCnt int, backoff uint64, f func() (bool, error)) (err err
 
 // GetStack gets the stacktrace.
 func GetStack() []byte {
-	const size = 40960
+	const size = 4096
 	buf := make([]byte, size)
 	stackSize := runtime.Stack(buf, false)
 	buf = buf[:stackSize]

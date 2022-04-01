@@ -16,6 +16,7 @@ package testutil
 
 import (
 	"context"
+	"runtime"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/domain"
@@ -102,9 +103,8 @@ func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64, error) {
 		request := req.Cleanup()
 		return request.Key, request.StartVersion, nil
 	case tikvrpc.CmdBatchGet:
-		//request := req.BatchGet()
-		//return request.Keys[0], request.Version, nil
-		return nil, 0, nil
+		request := req.BatchGet()
+		return request.Keys[0], request.Version, nil
 	case tikvrpc.CmdBatchRollback:
 		request := req.BatchRollback()
 		return request.Keys[0], request.StartVersion, nil
@@ -137,4 +137,13 @@ func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64, error) {
 	default:
 		return nil, 0, errors.New("unknown request, check the new type RPC request here")
 	}
+}
+
+// GetStack gets the stacktrace.
+func GetStack() []byte {
+	const size = 1024 * 64
+	buf := make([]byte, size)
+	stackSize := runtime.Stack(buf, false)
+	buf = buf[:stackSize]
+	return buf
 }
