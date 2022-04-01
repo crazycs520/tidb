@@ -102,8 +102,9 @@ func GetReqStartKeyAndTxnTs(req *tikvrpc.Request) ([]byte, uint64, error) {
 		request := req.Cleanup()
 		return request.Key, request.StartVersion, nil
 	case tikvrpc.CmdBatchGet:
-		request := req.BatchGet()
-		return request.Keys[0], request.Version, nil
+		//request := req.BatchGet()
+		//return request.Keys[0], request.Version, nil
+		return nil, 0, nil
 	case tikvrpc.CmdBatchRollback:
 		request := req.BatchRollback()
 		return request.Keys[0], request.StartVersion, nil
