@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	topsqlstate "github.com/pingcap/tidb/util/topsql/state"
 	"strconv"
 	"testing"
 
@@ -2581,6 +2582,7 @@ func TestUpdateAffectRowCnt(t *testing.T) {
 }
 
 func TestReplaceLog(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
@@ -2616,6 +2618,8 @@ func TestReplaceLog(t *testing.T) {
 // There is no need to do the rebase when updating a record if the auto-increment ID not changed.
 // This could make the auto ID increasing speed slower.
 func TestRebaseIfNeeded(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)

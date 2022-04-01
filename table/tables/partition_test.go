@@ -16,6 +16,7 @@ package tables_test
 
 import (
 	"context"
+	topsqlstate "github.com/pingcap/tidb/util/topsql/state"
 	"testing"
 
 	mysql "github.com/pingcap/tidb/errno"
@@ -63,6 +64,8 @@ PARTITION BY RANGE COLUMNS ( id ) (
 }
 
 func TestPartitionAddRecord(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	createTable1 := `CREATE TABLE test.t1 (id int(11), index(id))
 PARTITION BY RANGE ( id ) (
 		PARTITION p0 VALUES LESS THAN (6),
@@ -165,6 +168,8 @@ PARTITION BY RANGE ( id ) (
 }
 
 func TestHashPartitionAddRecord(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)

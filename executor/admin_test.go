@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	topsqlstate "github.com/pingcap/tidb/util/topsql/state"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/config"
@@ -194,6 +195,7 @@ func TestAdminCheckIndexInCacheTable(t *testing.T) {
 }
 
 func TestAdminRecoverIndex(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 
@@ -311,6 +313,7 @@ func TestAdminRecoverIndex(t *testing.T) {
 }
 
 func TestClusteredIndexAdminRecoverIndex(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 
@@ -357,6 +360,7 @@ func TestClusteredIndexAdminRecoverIndex(t *testing.T) {
 }
 
 func TestAdminRecoverPartitionTableIndex(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 
@@ -430,6 +434,7 @@ func TestAdminRecoverPartitionTableIndex(t *testing.T) {
 }
 
 func TestAdminRecoverIndex1(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 
@@ -497,6 +502,8 @@ func TestAdminRecoverIndexEdge(t *testing.T) {
 }
 
 func TestAdminCleanupIndex(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 
@@ -579,6 +586,8 @@ func TestAdminCleanupIndex(t *testing.T) {
 }
 
 func TestAdminCleanupIndexForPartitionTable(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 
@@ -662,6 +671,7 @@ func TestAdminCleanupIndexForPartitionTable(t *testing.T) {
 }
 
 func TestAdminCleanupIndexPKNotHandle(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 
@@ -714,6 +724,8 @@ func TestAdminCleanupIndexPKNotHandle(t *testing.T) {
 }
 
 func TestAdminCleanupIndexMore(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 
@@ -780,6 +792,8 @@ func TestAdminCleanupIndexMore(t *testing.T) {
 }
 
 func TestClusteredAdminCleanupIndex(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 
@@ -859,6 +873,7 @@ func TestClusteredAdminCleanupIndex(t *testing.T) {
 }
 
 func TestAdminCheckPartitionTableFailed(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 
@@ -1097,6 +1112,8 @@ func withLogHook(ctx context.Context, msgFilter string) (newCtx context.Context,
 }
 
 func TestCheckFailReport(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, clean := testkit.CreateMockStore(t)
 	defer clean()
 	tk := newInconsistencyKit(t, testkit.NewAsyncTestKit(t, store), newDefaultOpt())
@@ -1462,6 +1479,8 @@ func TestAdminCheckPrimaryIndex(t *testing.T) {
 }
 
 func TestAdminCheckWithSnapshot(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 
@@ -1524,6 +1543,7 @@ func TestAdminCheckWithSnapshot(t *testing.T) {
 }
 
 func TestAdminCheckTableFailed(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, domain, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 

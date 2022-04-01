@@ -274,7 +274,7 @@ func (e *RecoverIndexExec) buildTableScan(ctx context.Context, txn kv.Transactio
 		SetStartTS(txn.StartTS()).
 		SetKeepOrder(true).
 		SetFromSessionVars(e.ctx.GetSessionVars()).
-		SetFromInfoSchema(e.ctx.GetInfoSchema()).
+		SetFromInfoSchema(e.ctx.GetInfoSchema()).SetResourceGroupTagger(e.ctx.GetSessionVars().StmtCtx).
 		Build()
 	if err != nil {
 		return nil, err
@@ -318,6 +318,9 @@ func (e *RecoverIndexExec) backfillIndex(ctx context.Context) (int64, int64, err
 	)
 	for {
 		errInTxn := kv.RunInNewTxn(context.Background(), e.ctx.GetStore(), true, func(ctx context.Context, txn kv.Transaction) error {
+			sessVars := e.ctx.GetSessionVars()
+			setResourceGroupTaggerForTxn(sessVars.StmtCtx, txn)
+			setRPCInterceptorOfExecCounterForTxn(sessVars, txn)
 			var err error
 			result, err = e.backfillIndexInTxn(ctx, txn, currentHandle)
 			return err
@@ -695,6 +698,9 @@ func (e *CleanupIndexExec) cleanTableIndex(ctx context.Context) error {
 	for {
 		errInTxn := kv.RunInNewTxn(context.Background(), e.ctx.GetStore(), true, func(ctx context.Context, txn kv.Transaction) error {
 			txn.SetDiskFullOpt(kvrpcpb.DiskFullOpt_AllowedOnAlmostFull)
+			sessVars := e.ctx.GetSessionVars()
+			setResourceGroupTaggerForTxn(sessVars.StmtCtx, txn)
+			setRPCInterceptorOfExecCounterForTxn(sessVars, txn)
 			err := e.fetchIndex(ctx, txn)
 			if err != nil {
 				return err

@@ -16,6 +16,8 @@ package executor_test
 
 import (
 	"fmt"
+	"github.com/pingcap/tidb/store/mockstore/unistore"
+	topsqlstate "github.com/pingcap/tidb/util/topsql/state"
 	"testing"
 
 	"github.com/pingcap/tidb/config"
@@ -54,6 +56,11 @@ func TestMain(m *testing.M) {
 		conf.OOMAction = config.OOMActionLog
 	})
 	tikv.EnableFailpoints()
+
+	// Enable TopSQL for all test, and check the resource tag for each RPC request.
+	// This is used to detect which codes are not tracked by TopSQL.
+	topsqlstate.EnableTopSQL()
+	unistore.CheckResourceTagForTopSQLInGoTest = true
 
 	opts := []goleak.Option{
 		goleak.IgnoreTopFunction("github.com/golang/glog.(*loggingT).flushDaemon"),

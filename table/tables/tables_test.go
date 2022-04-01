@@ -17,6 +17,7 @@ package tables_test
 import (
 	"context"
 	"fmt"
+	topsqlstate "github.com/pingcap/tidb/util/topsql/state"
 	"math"
 	"strconv"
 	"testing"
@@ -84,6 +85,8 @@ func (m mockPumpClient) PullBinlogs(ctx context.Context, in *binlog.PullBinlogRe
 }
 
 func TestBasic(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
@@ -237,6 +240,8 @@ func TestTypes(t *testing.T) {
 }
 
 func TestUniqueIndexMultipleNullEntries(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	ctx := context.Background()
 	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
@@ -319,6 +324,8 @@ func TestRowKeyCodec(t *testing.T) {
 }
 
 func TestUnsignedPK(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
@@ -608,6 +615,8 @@ func TestHiddenColumn(t *testing.T) {
 }
 
 func TestAddRecordWithCtx(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)

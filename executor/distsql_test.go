@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	topsqlstate "github.com/pingcap/tidb/util/topsql/state"
 	"math/rand"
 	"runtime/pprof"
 	"strings"
@@ -221,6 +222,8 @@ func TestIssue10178(t *testing.T) {
 }
 
 func TestInconsistentIndex(t *testing.T) {
+	topsqlstate.DisableTopSQL()
+
 	store, dom, clean := testkit.CreateMockStoreAndDomain(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)

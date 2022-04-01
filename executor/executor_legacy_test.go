@@ -205,6 +205,8 @@ func (s *testSuite) TearDownTest(c *C) {
 }
 
 func (s *testSuite3) TestAdmin(c *C) {
+	topsqlstate.DisableTopSQL()
+
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test")
 	tk.MustExec("drop table if exists admin_test")
@@ -2437,6 +2439,7 @@ func (s *testSuite) TestContainDotColumn(c *C) {
 }
 
 func (s *testSuite) TestCheckIndex(c *C) {
+	topsqlstate.DisableTopSQL()
 	s.ctx = mock.NewContext()
 	s.ctx.Store = s.store
 	se, err := session.CreateSession4Test(s.store)

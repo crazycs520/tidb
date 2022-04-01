@@ -17,6 +17,7 @@ package executor_test
 import (
 	"context"
 	"fmt"
+	topsqlstate "github.com/pingcap/tidb/util/topsql/state"
 	"math"
 	"strconv"
 	"strings"
@@ -844,6 +845,7 @@ func TestTooLargeIdentifierLength(t *testing.T) {
 }
 
 func TestShardRowIDBits(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, clean := testkit.CreateMockStore(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
@@ -967,6 +969,7 @@ func TestShardRowIDBits(t *testing.T) {
 }
 
 func TestAutoRandomBitsData(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, clean := testkit.CreateMockStore(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
@@ -1099,6 +1102,7 @@ func TestAutoRandomBitsData(t *testing.T) {
 }
 
 func TestAutoRandomTableOption(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, clean := testkit.CreateMockStore(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
@@ -1168,6 +1172,7 @@ func TestAutoRandomTableOption(t *testing.T) {
 // 3: ActionModifyTableAutoIdCache  : it will drop row-id-type allocator.
 // 3: ActionRebaseAutoRandomBase    : it will drop auto-rand-type allocator.
 func TestFilterDifferentAllocators(t *testing.T) {
+	topsqlstate.DisableTopSQL()
 	store, clean := testkit.CreateMockStore(t)
 	defer clean()
 	tk := testkit.NewTestKit(t, store)
