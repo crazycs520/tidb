@@ -99,9 +99,15 @@ func getReqStartKey(req *tikvrpc.Request) ([]byte, error) {
 	case tikvrpc.CmdBatchCop, tikvrpc.CmdMPPTask, tikvrpc.CmdMPPConn, tikvrpc.CmdMPPCancel, tikvrpc.CmdMPPAlive:
 		// Ignore mpp requests.
 		return nil, nil
-	case tikvrpc.CmdResolveLock, tikvrpc.CmdCheckTxnStatus, tikvrpc.CmdPessimisticRollback:
-		// TODO: add resource tag for those request. https://github.com/pingcap/tidb/issues/33621
-		return nil, nil
+	case tikvrpc.CmdResolveLock:
+		request := req.ResolveLock()
+		return request.Keys[0],nil
+	case tikvrpc.CmdCheckTxnStatus:
+		request := req.CheckTxnStatus()
+		return request.PrimaryKey,nil
+	case tikvrpc.CmdPessimisticRollback:
+		request := req.PessimisticRollback()
+		return request.Keys[0],nil
 	default:
 		return nil, errors.New("unknown request, check the new type RPC request here")
 	}

@@ -17,6 +17,7 @@ package backoff
 import (
 	"context"
 
+	"github.com/tikv/client-go/v2/tikvrpc"
 	"github.com/pingcap/tidb/kv"
 	derr "github.com/pingcap/tidb/store/driver/error"
 	"github.com/tikv/client-go/v2/tikv"
@@ -42,6 +43,10 @@ func NewBackoffer(ctx context.Context, maxSleep int) *Backoffer {
 // TiKVBackoffer returns tikv.Backoffer.
 func (b *Backoffer) TiKVBackoffer() *tikv.Backoffer {
 	return b.b
+}
+
+func (b *Backoffer) SetResourceGroupTagger(tagger tikvrpc.ResourceGroupTagger) {
+	b.b.SetResourceGroupTagger(tagger)
 }
 
 // Backoff sleeps a while base on the BackoffConfig and records the error message.

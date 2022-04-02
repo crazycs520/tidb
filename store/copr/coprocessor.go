@@ -87,6 +87,7 @@ func (c *CopClient) Send(ctx context.Context, req *kv.Request, variables interfa
 	}
 	ctx = context.WithValue(ctx, tikv.TxnStartKey(), req.StartTs)
 	bo := backoff.NewBackofferWithVars(ctx, copBuildTaskMaxBackoff, vars)
+	bo.SetResourceGroupTagger(req.ResourceGroupTagger)
 	ranges := NewKeyRanges(req.KeyRanges)
 	tasks, err := buildCopTasks(bo, c.store.GetRegionCache(), ranges, req, eventCb)
 	if err != nil {
@@ -651,6 +652,7 @@ func chooseBackoffer(ctx context.Context, backoffermap map[uint64]*Backoffer, ta
 		return bo
 	}
 	newbo := backoff.NewBackofferWithVars(ctx, copNextMaxBackoff, worker.vars)
+	newbo.SetResourceGroupTagger(worker.req.ResourceGroupTagger)
 	backoffermap[task.region.GetID()] = newbo
 	return newbo
 }
