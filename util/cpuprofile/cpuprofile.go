@@ -173,7 +173,7 @@ func (p *parallelCPUProfiler) profilingLoop() {
 			}
 		case <-checkTicker.C:
 		}
-		p.doProfiling()
+		//p.doProfiling()
 	}
 }
 
