@@ -50,7 +50,7 @@ type KvExecCounter struct {
 func (c *KvExecCounter) RPCInterceptor() interceptor.RPCInterceptor {
 	return func(next interceptor.RPCInterceptorFunc) interceptor.RPCInterceptorFunc {
 		return func(target string, req *tikvrpc.Request) (*tikvrpc.Response, error) {
-			c.mark(target)
+			//c.mark(target)
 			return next(target, req)
 		}
 	}
