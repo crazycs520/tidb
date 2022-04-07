@@ -58,6 +58,7 @@ func CreateStatementStats() *StatementStats {
 
 // OnExecutionBegin implements StatementObserver.OnExecutionBegin.
 func (s *StatementStats) OnExecutionBegin(sqlDigest, planDigest []byte) {
+	return
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	item := s.GetOrCreateStatementStatsItem(sqlDigest, planDigest)
@@ -68,6 +69,7 @@ func (s *StatementStats) OnExecutionBegin(sqlDigest, planDigest []byte) {
 
 // OnExecutionFinished implements StatementObserver.OnExecutionFinished.
 func (s *StatementStats) OnExecutionFinished(sqlDigest, planDigest []byte, execDuration time.Duration) {
+	return
 	ns := execDuration.Nanoseconds()
 	if ns < 0 {
 		return
