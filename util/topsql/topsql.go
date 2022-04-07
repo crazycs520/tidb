@@ -94,9 +94,9 @@ func AttachSQLInfo(ctx context.Context, normalizedSQL string, sqlDigest *parser.
 
 	if len(normalizedPlan) == 0 || len(planDigestBytes) == 0 {
 		// If plan digest is '', indicate it is the first time to attach the SQL info, since it only know the sql digest.
-		linkSQLTextWithDigest(sqlDigestBytes, normalizedSQL, isInternal)
+		//linkSQLTextWithDigest(sqlDigestBytes, normalizedSQL, isInternal)
 	} else {
-		linkPlanTextWithDigest(planDigestBytes, normalizedPlan)
+		//linkPlanTextWithDigest(planDigestBytes, normalizedPlan)
 	}
 	failpoint.Inject("mockHighLoadForEachSQL", func(val failpoint.Value) {
 		// In integration test, some SQL run very fast that Top SQL pprof profile unable to sample data of those SQL,
