@@ -109,18 +109,23 @@ type JobContext struct {
 	cacheDigest        *parser.Digest
 }
 
+// NewJobContext returns a new ddl job context.
+func NewJobContext() *JobContext {
+	return &JobContext{
+		ddlJobCtx:          context.Background(),
+		cacheSQL:           "",
+		cacheNormalizedSQL: "",
+		cacheDigest:        nil,
+	}
+}
+
 func newWorker(ctx context.Context, tp workerType, sessPool *sessionPool, delRangeMgr delRangeManager, dCtx *ddlCtx) *worker {
 	worker := &worker{
-		id:       atomic.AddInt32(&ddlWorkerID, 1),
-		tp:       tp,
-		ddlJobCh: make(chan struct{}, 1),
-		ctx:      ctx,
-		JobContext: &JobContext{
-			ddlJobCtx:          context.Background(),
-			cacheSQL:           "",
-			cacheNormalizedSQL: "",
-			cacheDigest:        nil,
-		},
+		id:              atomic.AddInt32(&ddlWorkerID, 1),
+		tp:              tp,
+		ddlJobCh:        make(chan struct{}, 1),
+		ctx:             ctx,
+		JobContext:      NewJobContext(),
 		ddlCtx:          dCtx,
 		reorgCtx:        &reorgCtx{notifyCancelReorgJob: 0},
 		sessPool:        sessPool,
@@ -415,6 +420,23 @@ func (w *worker) deleteRange(ctx context.Context, job *model.Job) error {
 	return errors.Trace(err)
 }
 
+func jobNeedGC(job *model.Job) bool {
+	if !job.IsCancelled() {
+		switch job.Type {
+		case model.ActionAddIndex, model.ActionAddPrimaryKey:
+			if job.State != model.JobStateRollbackDone {
+				break
+			}
+			// After rolling back an AddIndex operation, we need to use delete-range to delete the half-done index data.
+			return true
+		case model.ActionDropSchema, model.ActionDropTable, model.ActionTruncateTable, model.ActionDropIndex, model.ActionDropPrimaryKey,
+			model.ActionDropTablePartition, model.ActionTruncateTablePartition, model.ActionDropColumn, model.ActionDropColumns, model.ActionModifyColumn, model.ActionDropIndexes:
+			return true
+		}
+	}
+	return false
+}
+
 // finishDDLJob deletes the finished DDL job in the ddl queue and puts it to history queue.
 // If the DDL job need to handle in background, it will prepare a background job.
 func (w *worker) finishDDLJob(t *meta.Meta, job *model.Job) (err error) {
@@ -423,18 +445,10 @@ func (w *worker) finishDDLJob(t *meta.Meta, job *model.Job) (err error) {
 		metrics.DDLWorkerHistogram.WithLabelValues(metrics.WorkerFinishDDLJob, job.Type.String(), metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
 	}()
 
-	if !job.IsCancelled() {
-		switch job.Type {
-		case model.ActionAddIndex, model.ActionAddPrimaryKey:
-			if job.State != model.JobStateRollbackDone {
-				break
-			}
-
-			// After rolling back an AddIndex operation, we need to use delete-range to delete the half-done index data.
-			err = w.deleteRange(w.ddlJobCtx, job)
-		case model.ActionDropSchema, model.ActionDropTable, model.ActionTruncateTable, model.ActionDropIndex, model.ActionDropPrimaryKey,
-			model.ActionDropTablePartition, model.ActionTruncateTablePartition, model.ActionDropColumn, model.ActionDropColumns, model.ActionModifyColumn, model.ActionDropIndexes:
-			err = w.deleteRange(w.ddlJobCtx, job)
+	if jobNeedGC(job) {
+		err = w.deleteRange(w.ddlJobCtx, job)
+		if err != nil {
+			return err
 		}
 	}
 
