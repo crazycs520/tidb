@@ -1377,11 +1377,9 @@ func (a *ExecStmt) observeStmtBeginForTopSQL() {
 	if vars == nil {
 		return
 	}
-	sqlDigest, planDigest := a.getSQLPlanDigest()
-	if stats := a.Ctx.GetStmtStats(); stats != nil {
-		if topsqlstate.TopSQLEnabled() {
-			stats.OnExecutionBegin(sqlDigest, planDigest)
-		}
+	if stats := a.Ctx.GetStmtStats(); stats != nil && topsqlstate.TopSQLEnabled() {
+		sqlDigest, planDigest := a.getSQLPlanDigest()
+		stats.OnExecutionBegin(sqlDigest, planDigest)
 		// This is a special logic prepared for TiKV's SQLExecCount.
 		vars.StmtCtx.KvExecCounter = stats.CreateKvExecCounter(sqlDigest, planDigest)
 	}
