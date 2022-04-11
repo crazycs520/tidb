@@ -1351,9 +1351,6 @@ func (a *ExecStmt) observeStmtBeginForTopSQL(ctx context.Context) context.Contex
 	}
 	stats := a.Ctx.GetStmtStats()
 	if !topsqlstate.TopSQLEnabled() {
-		if isFastPlan(a.Plan) {
-			return ctx
-		}
 		if stats != nil {
 			sc.KvExecCounter = stats.CreateKvExecCounter(sqlDigestByte, planDigestByte)
 		}
