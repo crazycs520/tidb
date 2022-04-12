@@ -1371,7 +1371,7 @@ func (a *ExecStmt) observeStmtBeginForTopSQL(ctx context.Context) context.Contex
 	if stats != nil {
 		stats.OnExecutionBegin(sqlDigestByte, planDigestByte)
 	}
-	if len(normalizedPlan) == 0 {
+	if len(normalizedPlan) == 0 && isSQLRegistered{
 		return ctx
 	}
 	return topsql.AttachSQLAndPlanInfo(ctx, sqlDigest, planDigest)
