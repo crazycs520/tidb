@@ -1350,34 +1350,30 @@ func (a *ExecStmt) observeStmtBeginForTopSQL(ctx context.Context) context.Contex
 		planDigestByte = planDigest.Bytes()
 	}
 	stats := a.Ctx.GetStmtStats()
+	if stats != nil {
+		// This is a special logic prepared for TiKV's SQLExecCount.
+		sc.KvExecCounter = stats.CreateKvExecCounter(sqlDigestByte, planDigestByte)
+	}
+	isSQLRegistered := sc.IsSQLRegistered.Load()
+	if !isSQLRegistered {
+		topsql.RegisterSQL(normalizedSQL, sqlDigest, vars.InRestrictedSQL)
+	}
+	if len(normalizedPlan) > 0 {
+		topsql.RegisterPlan(normalizedPlan, planDigest)
+	}
 	if !topsqlstate.TopSQLEnabled() {
 		if isFastPlan(a.Plan) {
 			return ctx
-		}
-		if stats != nil {
-			sc.KvExecCounter = stats.CreateKvExecCounter(sqlDigestByte, planDigestByte)
-		}
-		topsql.RegisterSQL(normalizedSQL, sqlDigest, vars.InRestrictedSQL)
-		if len(normalizedPlan) > 0 {
-			topsql.RegisterPlan(normalizedPlan, planDigest)
 		}
 		return topsql.AttachSQLAndPlanInfo(ctx, sqlDigest, planDigest)
 	}
 
 	if stats != nil {
 		stats.OnExecutionBegin(sqlDigestByte, planDigestByte)
-		// This is a special logic prepared for TiKV's SQLExecCount.
-		sc.KvExecCounter = stats.CreateKvExecCounter(sqlDigestByte, planDigestByte)
-	}
-
-	isSQLRegistered := sc.IsSQLRegistered.Load()
-	if !isSQLRegistered {
-		topsql.RegisterSQL(normalizedSQL, sqlDigest, vars.InRestrictedSQL)
 	}
 	if len(normalizedPlan) == 0 {
 		return ctx
 	}
-	topsql.RegisterPlan(normalizedPlan, planDigest)
 	return topsql.AttachSQLAndPlanInfo(ctx, sqlDigest, planDigest)
 }
 
