@@ -301,9 +301,6 @@ func Next(ctx context.Context, e Executor, req *chunk.Chunk) error {
 	if trace.IsEnabled() {
 		defer trace.StartRegion(ctx, fmt.Sprintf("%T.Next", e)).End()
 	}
-	if topsqlstate.TopSQLEnabled() && sessVars.StmtCtx.IsSQLAndPlanRegistered.CAS(false, true) {
-		registerSQLAndPlanInExecForTopSQL(sessVars)
-	}
 	err := e.Next(ctx, req)
 
 	if err != nil {
@@ -1963,18 +1960,6 @@ func AttachSQLInfoForTopSQL(ctx context.Context, sc *stmtctx.StatementContext, n
 	}
 	sc.IsSQLRegistered.Store(true)
 	return topsql.AttachSQLInfo(ctx, normalizedSQL, sqlDigest, isInternal)
-}
-
-// registerSQLAndPlanInExecForTopSQL register the sql and plan information if it doesn't register before execution.
-// This uses to catch the running SQL when Top SQL is enabled in execution.
-func registerSQLAndPlanInExecForTopSQL(sessVars *variable.SessionVars) {
-	stmtCtx := sessVars.StmtCtx
-	normalizedSQL, sqlDigest := stmtCtx.SQLDigest()
-	topsql.RegisterSQL(normalizedSQL, sqlDigest, sessVars.InRestrictedSQL)
-	normalizedPlan, planDigest := stmtCtx.GetPlanDigest()
-	if len(normalizedPlan) > 0 {
-		topsql.RegisterPlan(normalizedPlan, planDigest)
-	}
 }
 
 // ResetUpdateStmtCtx resets statement context for UpdateStmt.

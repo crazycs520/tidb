@@ -1357,6 +1357,10 @@ func (a *ExecStmt) observeStmtBeginForTopSQL(ctx context.Context) context.Contex
 		if stats != nil {
 			sc.KvExecCounter = stats.CreateKvExecCounter(sqlDigestByte, planDigestByte)
 		}
+		topsql.RegisterSQL(normalizedSQL, sqlDigest, vars.InRestrictedSQL)
+		if len(normalizedPlan) > 0 {
+			topsql.RegisterPlan(normalizedPlan, planDigest)
+		}
 		return topsql.AttachSQLAndPlanInfo(ctx, sqlDigest, planDigest)
 	}
 
@@ -1370,7 +1374,6 @@ func (a *ExecStmt) observeStmtBeginForTopSQL(ctx context.Context) context.Contex
 	if !isSQLRegistered {
 		topsql.RegisterSQL(normalizedSQL, sqlDigest, vars.InRestrictedSQL)
 	}
-	sc.IsSQLAndPlanRegistered.Store(true)
 	if len(normalizedPlan) == 0 {
 		return ctx
 	}
