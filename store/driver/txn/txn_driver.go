@@ -83,7 +83,7 @@ func (txn *tikvTxn) RollbackToCheckpoint(ctx context.Context, cp *kv.MemCheckpoi
 	lockedKeys := txn.KVTxn.CollectLockedKeys()
 
 	buf := txn.KVTxn.GetMemBuffer()
-	buf.RevertToCheckpoint(cp)
+	buf.RollbackToCheckpoint(cp)
 
 	nowLockedKeys := txn.KVTxn.CollectLockedKeys()
 
