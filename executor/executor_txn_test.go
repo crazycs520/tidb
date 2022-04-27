@@ -463,6 +463,18 @@ func TestRollbackToSavepoint0(t *testing.T) {
 	tk.MustExec("rollback to s1")
 	tk.MustQuery("select * from t").Check(testkit.Rows("1 1"))
 	tk.MustExec("commit")
+	tk.MustQuery("select * from t").Check(testkit.Rows("1 1"))
+
+	tk.MustExec("delete from t")
+	tk.MustExec("insert into t values (1,1)")
+	tk.MustExec("begin pessimistic")
+	tk.MustExec("delete from t where id = 1")
+	tk.MustExec("savepoint s1")
+	tk.MustExec("insert into t values (1,2)")
+	tk.MustExec("rollback to s1")
+	tk.MustQuery("select * from t").Check(testkit.Rows())
+	tk.MustExec("commit")
+	tk.MustQuery("select * from t").Check(testkit.Rows())
 }
 
 func TestRollbackToSavepointReleasePessimisticLock(t *testing.T) {
