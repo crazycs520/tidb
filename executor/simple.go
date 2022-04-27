@@ -138,7 +138,7 @@ func (e *SimpleExec) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 	case *ast.ReleaseSavepointStmt:
 		err = e.executeReleaseSavepoint(x)
 	case *ast.RollbackStmt:
-		err = e.executeRollback(x)
+		err = e.executeRollback(ctx, x)
 	case *ast.CreateUserStmt:
 		err = e.executeCreateUser(ctx, x)
 	case *ast.AlterUserStmt:
@@ -784,7 +784,7 @@ func (e *SimpleExec) executeCommit(s *ast.CommitStmt) {
 	e.ctx.GetSessionVars().SetInTxn(false)
 }
 
-func (e *SimpleExec) executeRollback(s *ast.RollbackStmt) error {
+func (e *SimpleExec) executeRollback(ctx context.Context, s *ast.RollbackStmt) error {
 	sessVars := e.ctx.GetSessionVars()
 	logutil.BgLogger().Debug("execute rollback statement", zap.Uint64("conn", sessVars.ConnectionID))
 
@@ -799,7 +799,7 @@ func (e *SimpleExec) executeRollback(s *ast.RollbackStmt) error {
 		savepointName := strings.ToLower(s.SavepointName)
 		for idx, sp := range sessVars.TxnCtx.Savepoints {
 			if savepointName == sp.Name {
-				txn.RollbackToCheckpoint(sp.Cp)
+				txn.RollbackToCheckpoint(ctx, sp.Cp)
 				sessVars.TxnCtx.Savepoints = sessVars.TxnCtx.Savepoints[:idx+1]
 				return nil
 			}

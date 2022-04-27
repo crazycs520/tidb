@@ -16,6 +16,7 @@ package txn
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/opentracing/opentracing-go"
@@ -78,8 +79,23 @@ func (txn *tikvTxn) Commit(ctx context.Context) error {
 	return txn.extractKeyErr(err)
 }
 
-func (txn *tikvTxn) RollbackToCheckpoint(cp *kv.MemCheckpoint) {
-	txn.GetMemBuffer().RevertToCheckpoint(cp)
+func (txn *tikvTxn) RollbackToCheckpoint(ctx context.Context, cp *kv.MemCheckpoint) {
+	lockedKeys := txn.KVTxn.CollectLockedKeys()
+
+	buf := txn.KVTxn.GetMemBuffer()
+	buf.RevertToCheckpoint(cp)
+
+	nowLockedKeys := txn.KVTxn.CollectLockedKeys()
+
+	needUnlockKeys := [][]byte{}
+	for _, key := range lockedKeys {
+		flags, err := buf.GetFlags(key)
+		if err == tikverr.ErrNotExist || (err == nil && !flags.HasLocked()) {
+			needUnlockKeys = append(needUnlockKeys, key)
+		}
+	}
+	fmt.Printf("unlock keys, -------- %v    %v -------- %v\n", len(lockedKeys), len(nowLockedKeys), len(needUnlockKeys))
+	txn.KVTxn.UnlockKeys(ctx, needUnlockKeys...)
 }
 
 // GetSnapshot returns the Snapshot binding to this transaction.

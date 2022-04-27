@@ -376,9 +376,10 @@ func (txn *LazyTxn) Rollback() error {
 	return txn.Transaction.Rollback()
 }
 
-func (txn *LazyTxn) RollbackToCheckpoint(cp *kv.MemCheckpoint) {
+func (txn *LazyTxn) RollbackToCheckpoint(ctx context.Context, cp *kv.MemCheckpoint) {
+	//lockedKeys := txn.Transaction.co
 	txn.flushStmtBuf()
-	txn.Transaction.RollbackToCheckpoint(cp)
+	txn.Transaction.RollbackToCheckpoint(ctx, cp)
 	txn.cleanup()
 }
 

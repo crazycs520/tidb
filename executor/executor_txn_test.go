@@ -470,7 +470,7 @@ func TestRollbackToSavepointReleasePessimisticLock(t *testing.T) {
 	defer clean()
 	tk1 := testkit.NewTestKit(t, store)
 	tk1.MustExec("use test")
-	tk1.MustExec("create table t(id int, a int, unique index idx(id))")
+	tk1.MustExec("create table t(id int key, a int)")
 
 	tk2 := testkit.NewTestKit(t, store)
 	tk2.MustExec("use test")
@@ -481,6 +481,8 @@ func TestRollbackToSavepointReleasePessimisticLock(t *testing.T) {
 	tk1.MustExec("insert into t values (2,2)")
 	tk1.MustExec("rollback to s1")
 
-	//tk2.MustExec("begin pessimistic")
-	//tk2.MustExec("insert into t values (2,2)")
+	tk2.MustExec("begin pessimistic")
+	start := time.Now()
+	tk2.MustExec("insert into t values (2,2)")
+	require.Less(t, time.Since(start).Seconds(), float64(2))
 }

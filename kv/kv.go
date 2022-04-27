@@ -242,7 +242,7 @@ type Transaction interface {
 	// clear allowed flag
 	ClearDiskFullOpt()
 
-	RollbackToCheckpoint(*MemCheckpoint)
+	RollbackToCheckpoint(context.Context, *MemCheckpoint)
 }
 
 // AssertionProto is an interface defined for the assertion protocol.
