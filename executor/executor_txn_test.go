@@ -495,6 +495,25 @@ func TestRollbackToSavepointReleasePessimisticLock(t *testing.T) {
 
 	tk2.MustExec("begin pessimistic")
 	start := time.Now()
+	// test for release lock after rollback to savepoint.
 	tk2.MustExec("insert into t values (2,2)")
 	require.Less(t, time.Since(start).Seconds(), float64(2))
+
+	tk1.MustExec("commit")
+	tk2.MustExec("commit")
+	tk1.MustExec("delete from t")
+	tk1.MustExec("insert into t values (1, 1)")
+
+	tk1.MustExec("begin pessimistic")
+	tk1.MustExec("select * from t where a= 1 for update")
+	tk1.MustExec("savepoint s1")
+	tk1.MustExec("delete from t where a = 1")
+	// After rollback to s1, should not release lock in the row which a = 1
+	tk1.MustExec("rollback to s1")
+
+	tk2.MustExec("begin pessimistic")
+	// should wait until tk1 release the lock.
+	start = time.Now()
+	tk2.MustExec("select * from t where a= 1 for update")
+	require.Less(t, float64(2), time.Since(start).Seconds())
 }
