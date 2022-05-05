@@ -471,47 +471,6 @@ func getBinlogMutation(ctx sessionctx.Context, tableID int64) *binlog.TableMutat
 	return &bin.Mutations[idx]
 }
 
-func getBinlogMutationCheckpoint(ctx sessionctx.Context) BinlogCheckpoint {
-	bin := binloginfo.GetPrewriteValue(ctx, false)
-	if bin == nil {
-		return BinlogCheckpoint{}
-	}
-	checkpoints := make([]TableMutationCheckpoint, 0, len(bin.Mutations))
-	for i := range bin.Mutations {
-		cp := getBinlogTableMutationCheckpoint(&bin.Mutations[i])
-		checkpoints = append(checkpoints, cp)
-	}
-	return BinlogCheckpoint{
-		MutationCheckpoints: checkpoints,
-	}
-}
-
-func getBinlogTableMutationCheckpoint(tm *binlog.TableMutation) TableMutationCheckpoint {
-	return TableMutationCheckpoint{
-		TableId:      tm.TableId,
-		InsertedRows: len(tm.InsertedRows),
-		UpdatedRows:  len(tm.UpdatedRows),
-		DeletedIds:   len(tm.DeletedIds),
-		DeletedPks:   len(tm.DeletedPks),
-		DeletedRows:  len(tm.DeletedRows),
-		Sequence:     len(tm.Sequence),
-	}
-}
-
-type BinlogCheckpoint struct {
-	MutationCheckpoints []TableMutationCheckpoint
-}
-
-type TableMutationCheckpoint struct {
-	TableId      int64
-	InsertedRows int
-	UpdatedRows  int
-	DeletedIds   int
-	DeletedPks   int
-	DeletedRows  int
-	Sequence     int
-}
-
 func mergeToMutation(m1, m2 *binlog.TableMutation) {
 	m1.InsertedRows = append(m1.InsertedRows, m2.InsertedRows...)
 	m1.UpdatedRows = append(m1.UpdatedRows, m2.UpdatedRows...)

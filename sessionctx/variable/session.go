@@ -136,6 +136,9 @@ type SavepointRecord struct {
 	Name string
 	// cp is the checkpoint of memory buffer that related to the savepoint
 	Cp *kv.MemCheckpoint
+
+	//Binlog *binloginfo.BinlogSavepoint
+	Binlog interface{}
 }
 
 // TransactionContext is used to store variables that has transaction scope.

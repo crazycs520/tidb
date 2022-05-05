@@ -351,3 +351,44 @@ func FormatAndAddTiDBSpecificComment(ddlQuery string) (string, error) {
 	}
 	return sb.String(), nil
 }
+
+type BinlogSavepoint struct {
+	Tables []TableMutationSavepoint
+}
+
+type TableMutationSavepoint struct {
+	TableId      int64
+	InsertedRows int
+	UpdatedRows  int
+	DeletedIds   int
+	DeletedPks   int
+	DeletedRows  int
+	Sequence     int
+}
+
+func GetBinlogMutationSavepoint(ctx sessionctx.Context) BinlogSavepoint {
+	bin := GetPrewriteValue(ctx, false)
+	if bin == nil {
+		return BinlogSavepoint{}
+	}
+	tables := make([]TableMutationSavepoint, 0, len(bin.Mutations))
+	for i := range bin.Mutations {
+		cp := getBinlogTableMutationSavepoint(&bin.Mutations[i])
+		tables = append(tables, cp)
+	}
+	return BinlogSavepoint{
+		Tables: tables,
+	}
+}
+
+func getBinlogTableMutationSavepoint(tm *binlog.TableMutation) TableMutationSavepoint {
+	return TableMutationSavepoint{
+		TableId:      tm.TableId,
+		InsertedRows: len(tm.InsertedRows),
+		UpdatedRows:  len(tm.UpdatedRows),
+		DeletedIds:   len(tm.DeletedIds),
+		DeletedPks:   len(tm.DeletedPks),
+		DeletedRows:  len(tm.DeletedRows),
+		Sequence:     len(tm.Sequence),
+	}
+}
