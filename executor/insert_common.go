@@ -1095,6 +1095,30 @@ func (e *InsertValues) batchCheckAndInsert(ctx context.Context, rows [][]types.D
 			defer snapshot.SetOption(kv.CollectRuntimeStats, nil)
 		}
 	}
+
+	sc := e.ctx.GetSessionVars().StmtCtx
+	for _, fkt := range e.fkTriggerExecs {
+		if fkt.fkChecker == nil {
+			continue
+		}
+		fkt.fkChecker.resetToBeCheckedKeys()
+		for i, r := range toBeCheckedRows {
+			if r.ignored {
+				continue
+			}
+			err = fkt.fkChecker.addRowNeedToCheck(sc, r.row)
+			if err != nil {
+				return err
+			}
+			err = fkt.fkChecker.check(ctx, txn)
+			if err != nil {
+				toBeCheckedRows[i].ignored = true
+				e.ctx.GetSessionVars().StmtCtx.AppendWarning(err)
+			}
+		}
+		fkt.fkChecker.resetToBeCheckedKeys()
+	}
+
 	prefetchStart := time.Now()
 	// Fill cache using BatchGet, the following Get requests don't need to visit TiKV.
 	// Temporary table need not to do prefetch because its all data are stored in the memory.

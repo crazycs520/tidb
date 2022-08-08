@@ -502,6 +502,12 @@ func (a *ExecStmt) handleForeignKeyTrigger(ctx context.Context, e Executor, isPe
 	fkTriggerExecs := exec.GetForeignKeyTriggerExecs()
 	for i := 0; i < len(fkTriggerExecs); {
 		fkt := fkTriggerExecs[i]
+		if fkt.fkChecker != nil {
+			err := fkt.fkChecker.checkAndLock(ctx)
+			if err != nil {
+				return err
+			}
+		}
 		if !fkt.isNeedTrigger() {
 			i = i + 1
 			continue

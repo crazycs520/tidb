@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/hint"
@@ -22,6 +23,7 @@ type ExecutorWithForeignKeyTrigger interface {
 }
 
 type ForeignKeyChecker struct {
+	ctx             sessionctx.Context
 	tbl             table.Table
 	idx             table.Index
 	idxIsExclusive  bool
@@ -36,6 +38,7 @@ type ForeignKeyChecker struct {
 	toBeCheckedIndexKeys  []kv.Key
 
 	toBeLockedKeys []kv.Key
+	locked         bool
 }
 
 func (fkc *ForeignKeyChecker) resetToBeCheckedKeys() {
@@ -127,6 +130,51 @@ func (fkc *ForeignKeyChecker) buildHandleFromFKValues(sc *stmtctx.StatementConte
 //	}
 //	return doLockKeys(ctx, fkc.ctx, lockCtx, fkc.toBeLockedKeys...)
 //}
+
+func (fkc *ForeignKeyChecker) checkAndLock(ctx context.Context) error {
+	if fkc.locked {
+		return nil
+	}
+	fkc.locked = true
+
+	txn, err := fkc.ctx.Txn(false)
+	if err != nil {
+		return err
+	}
+	err = fkc.checkHandleKeys(ctx, txn)
+	if err != nil {
+		return err
+	}
+	err = fkc.checkUniqueKeys(ctx, txn)
+	if err != nil {
+		return err
+	}
+	err = fkc.checkIndexKeys(ctx, txn)
+	if err != nil {
+		return err
+	}
+	if len(fkc.toBeLockedKeys) == 0 {
+		return nil
+	}
+	lockWaitTime := fkc.ctx.GetSessionVars().LockWaitTimeout
+	lockCtx, err := newLockCtx(fkc.ctx, lockWaitTime, len(fkc.toBeLockedKeys))
+	if err != nil {
+		return err
+	}
+	return doLockKeys(ctx, fkc.ctx, lockCtx, fkc.toBeLockedKeys...)
+}
+
+func (fkc *ForeignKeyChecker) check(ctx context.Context, txn kv.Transaction) error {
+	err := fkc.checkHandleKeys(ctx, txn)
+	if err != nil {
+		return err
+	}
+	err = fkc.checkUniqueKeys(ctx, txn)
+	if err != nil {
+		return err
+	}
+	return fkc.checkIndexKeys(ctx, txn)
+}
 
 func (fkc *ForeignKeyChecker) checkHandleKeys(ctx context.Context, txn kv.Transaction) error {
 	if len(fkc.toBeCheckedHandleKeys) == 0 {
@@ -533,7 +581,7 @@ func (fkt *ForeignKeyTriggerExec) buildOnUpdateFKChecker() (*ForeignKeyChecker, 
 	switch model.ReferOptionType(fk.OnUpdate) {
 	case model.ReferOptionRestrict, model.ReferOptionNoOption, model.ReferOptionNoAction, model.ReferOptionSetDefault:
 		failedErr := plannercore.ErrRowIsReferenced2.GenWithStackByArgs(fk.String(referredFK.ChildSchema.L, referredFK.ChildTable.L))
-		return buildForeignKeyChecker(childTable, fk.Cols, false, failedErr)
+		return buildForeignKeyChecker(fkt.b.ctx, childTable, fk.Cols, false, failedErr)
 	}
 	return nil, nil
 }
@@ -544,7 +592,7 @@ func (fkt *ForeignKeyTriggerExec) buildOnDeleteFKChecker() (*ForeignKeyChecker, 
 	switch model.ReferOptionType(fk.OnDelete) {
 	case model.ReferOptionRestrict, model.ReferOptionNoOption, model.ReferOptionNoAction, model.ReferOptionSetDefault:
 		failedErr := plannercore.ErrRowIsReferenced2.GenWithStackByArgs(fk.String(referredFK.ChildSchema.L, referredFK.ChildTable.L))
-		return buildForeignKeyChecker(childTable, fk.Cols, false, failedErr)
+		return buildForeignKeyChecker(fkt.b.ctx, childTable, fk.Cols, false, failedErr)
 	}
 	return nil, nil
 }
@@ -552,16 +600,17 @@ func (fkt *ForeignKeyTriggerExec) buildOnDeleteFKChecker() (*ForeignKeyChecker, 
 func (fkt *ForeignKeyTriggerExec) BuildOnInsertFKChecker() (*ForeignKeyChecker, error) {
 	info := fkt.fkTrigger.OnModifyChildTable
 	failedErr := plannercore.ErrNoReferencedRow2.FastGenByArgs(info.FK.String(info.DBName, info.TblName))
-	return buildForeignKeyChecker(info.ReferTable, info.FK.RefCols, true, failedErr)
+	return buildForeignKeyChecker(fkt.b.ctx, info.ReferTable, info.FK.RefCols, true, failedErr)
 }
 
-func buildForeignKeyChecker(tbl table.Table, cols []model.CIStr, checkExist bool, failedErr error) (*ForeignKeyChecker, error) {
+func buildForeignKeyChecker(ctx sessionctx.Context, tbl table.Table, cols []model.CIStr, checkExist bool, failedErr error) (*ForeignKeyChecker, error) {
 	tblInfo := tbl.Meta()
 	if tblInfo.PKIsHandle && len(cols) == 1 {
 		refColInfo := model.FindColumnInfo(tblInfo.Columns, cols[0].L)
 		if refColInfo != nil && mysql.HasPriKeyFlag(refColInfo.GetFlag()) {
 			refCol := table.FindCol(tbl.Cols(), refColInfo.Name.O)
 			return &ForeignKeyChecker{
+				ctx:             ctx,
 				tbl:             tbl,
 				idxIsPrimaryKey: true,
 				idxIsExclusive:  true,
@@ -595,6 +644,7 @@ func buildForeignKeyChecker(tbl table.Table, cols []model.CIStr, checkExist bool
 	}
 
 	return &ForeignKeyChecker{
+		ctx:             ctx,
 		tbl:             tbl,
 		idx:             tblIdx,
 		idxIsExclusive:  len(cols) == len(referTbIdxInfo.Columns),
