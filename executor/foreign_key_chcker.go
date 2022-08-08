@@ -2,7 +2,7 @@ package executor
 
 import (
 	"context"
-	"fmt"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/hint"
@@ -14,7 +14,6 @@ import (
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/chunk"
 )
 
 type ExecutorWithForeignKeyTrigger interface {
@@ -22,9 +21,7 @@ type ExecutorWithForeignKeyTrigger interface {
 	GetForeignKeyTriggerExecs() []*ForeignKeyTriggerExec
 }
 
-type ForeignKeyCheckExec struct {
-	baseExecutor
-
+type ForeignKeyChecker struct {
 	tbl             table.Table
 	idx             table.Index
 	idxIsExclusive  bool
@@ -39,43 +36,99 @@ type ForeignKeyCheckExec struct {
 	toBeCheckedIndexKeys  []kv.Key
 
 	toBeLockedKeys []kv.Key
-	checked        bool
 }
 
-func (fkc ForeignKeyCheckExec) Next(ctx context.Context, req *chunk.Chunk) error {
-	if fkc.checked {
-		return nil
-	}
-	fkc.checked = true
-
-	txn, err := fkc.ctx.Txn(false)
-	if err != nil {
-		return err
-	}
-	err = fkc.checkHandleKeys(ctx, txn)
-	if err != nil {
-		return err
-	}
-	err = fkc.checkUniqueKeys(ctx, txn)
-	if err != nil {
-		return err
-	}
-	err = fkc.checkIndexKeys(ctx, txn)
-	if err != nil {
-		return err
-	}
-	if len(fkc.toBeLockedKeys) == 0 {
-		return nil
-	}
-	lockWaitTime := fkc.ctx.GetSessionVars().LockWaitTimeout
-	lockCtx, err := newLockCtx(fkc.ctx, lockWaitTime, len(fkc.toBeLockedKeys))
-	if err != nil {
-		return err
-	}
-	return doLockKeys(ctx, fkc.ctx, lockCtx, fkc.toBeLockedKeys...)
+func (fkc *ForeignKeyChecker) resetToBeCheckedKeys() {
+	fkc.toBeCheckedHandleKeys = fkc.toBeCheckedHandleKeys[:0]
+	fkc.toBeCheckedUniqueKeys = fkc.toBeCheckedUniqueKeys[:0]
+	fkc.toBeCheckedIndexKeys = fkc.toBeCheckedIndexKeys[:0]
 }
 
-func (fkc *ForeignKeyCheckExec) checkHandleKeys(ctx context.Context, txn kv.Transaction) error {
+func (fkc *ForeignKeyChecker) addRowNeedToCheck(sc *stmtctx.StatementContext, vals []types.Datum) error {
+	if fkc.idxIsPrimaryKey {
+		handleKey, err := fkc.buildHandleFromFKValues(sc, vals)
+		if err != nil {
+			return err
+		}
+		if fkc.idxIsExclusive {
+			fkc.toBeCheckedHandleKeys = append(fkc.toBeCheckedHandleKeys, handleKey)
+		} else {
+			key := tablecodec.EncodeRecordKey(fkc.tbl.RecordPrefix(), handleKey)
+			fkc.toBeCheckedIndexKeys = append(fkc.toBeCheckedIndexKeys, key)
+		}
+		return nil
+	}
+	key, distinct, err := fkc.idx.GenIndexKey(sc, vals, nil, nil)
+	if err != nil {
+		return err
+	}
+	if distinct && fkc.idxIsExclusive {
+		fkc.toBeCheckedUniqueKeys = append(fkc.toBeCheckedUniqueKeys, key)
+	} else {
+		fkc.toBeCheckedIndexKeys = append(fkc.toBeCheckedIndexKeys, key)
+	}
+	return nil
+}
+
+func (fkc *ForeignKeyChecker) updateRowNeedToCheck(sc *stmtctx.StatementContext, oldVals, newVals []types.Datum) error {
+	if fkc.checkExist {
+		return fkc.addRowNeedToCheck(sc, newVals)
+	}
+	return fkc.addRowNeedToCheck(sc, oldVals)
+}
+
+func (fkc *ForeignKeyChecker) buildHandleFromFKValues(sc *stmtctx.StatementContext, vals []types.Datum) (kv.Handle, error) {
+	if len(vals) == 1 && fkc.idx == nil {
+		return kv.IntHandle(vals[0].GetInt64()), nil
+	}
+	pkDts := make([]types.Datum, 0, len(vals))
+	for i, val := range vals {
+		if fkc.idx != nil && len(fkc.handleCols) > 0 {
+			tablecodec.TruncateIndexValue(&val, fkc.idx.Meta().Columns[i], fkc.handleCols[i].ColumnInfo)
+		}
+		pkDts = append(pkDts, val)
+	}
+	handleBytes, err := codec.EncodeKey(sc, nil, pkDts...)
+	if err != nil {
+		return nil, err
+	}
+	return kv.NewCommonHandle(handleBytes)
+}
+
+//func (fkc ForeignKeyCheckExec) Next(ctx context.Context, req *chunk.Chunk) error {
+//	if fkc.checked {
+//		return nil
+//	}
+//	fkc.checked = true
+//
+//	txn, err := fkc.ctx.Txn(false)
+//	if err != nil {
+//		return err
+//	}
+//	err = fkc.checkHandleKeys(ctx, txn)
+//	if err != nil {
+//		return err
+//	}
+//	err = fkc.checkUniqueKeys(ctx, txn)
+//	if err != nil {
+//		return err
+//	}
+//	err = fkc.checkIndexKeys(ctx, txn)
+//	if err != nil {
+//		return err
+//	}
+//	if len(fkc.toBeLockedKeys) == 0 {
+//		return nil
+//	}
+//	lockWaitTime := fkc.ctx.GetSessionVars().LockWaitTimeout
+//	lockCtx, err := newLockCtx(fkc.ctx, lockWaitTime, len(fkc.toBeLockedKeys))
+//	if err != nil {
+//		return err
+//	}
+//	return doLockKeys(ctx, fkc.ctx, lockCtx, fkc.toBeLockedKeys...)
+//}
+
+func (fkc *ForeignKeyChecker) checkHandleKeys(ctx context.Context, txn kv.Transaction) error {
 	if len(fkc.toBeCheckedHandleKeys) == 0 {
 		return nil
 	}
@@ -109,7 +162,7 @@ func (fkc *ForeignKeyCheckExec) checkHandleKeys(ctx context.Context, txn kv.Tran
 	return nil
 }
 
-func (fkc *ForeignKeyCheckExec) checkUniqueKeys(ctx context.Context, txn kv.Transaction) error {
+func (fkc *ForeignKeyChecker) checkUniqueKeys(ctx context.Context, txn kv.Transaction) error {
 	if len(fkc.toBeCheckedUniqueKeys) == 0 {
 		return nil
 	}
@@ -138,7 +191,7 @@ func (fkc *ForeignKeyCheckExec) checkUniqueKeys(ctx context.Context, txn kv.Tran
 	return nil
 }
 
-func (fkc *ForeignKeyCheckExec) checkIndexKeys(ctx context.Context, txn kv.Transaction) error {
+func (fkc *ForeignKeyChecker) checkIndexKeys(ctx context.Context, txn kv.Transaction) error {
 	if len(fkc.toBeCheckedIndexKeys) == 0 {
 		return nil
 	}
@@ -182,7 +235,7 @@ func (fkc *ForeignKeyCheckExec) checkIndexKeys(ctx context.Context, txn kv.Trans
 	return nil
 }
 
-func (fkc *ForeignKeyCheckExec) getIndexKeyExistInReferTable(memBuffer kv.MemBuffer, snap kv.Snapshot, key kv.Key) (k []byte, v []byte, _ error) {
+func (fkc *ForeignKeyChecker) getIndexKeyExistInReferTable(memBuffer kv.MemBuffer, snap kv.Snapshot, key kv.Key) (k []byte, v []byte, _ error) {
 	memIter, err := memBuffer.Iter(key, key.PrefixNext())
 	if err != nil {
 		return nil, nil, err
@@ -229,6 +282,7 @@ func (fkc *ForeignKeyCheckExec) getIndexKeyExistInReferTable(memBuffer kv.MemBuf
 type ForeignKeyTriggerExec struct {
 	b *executorBuilder
 
+	fkChecker     *ForeignKeyChecker
 	fkTriggerPlan plannercore.FKTriggerPlan
 	fkTrigger     *plannercore.ForeignKeyTrigger
 	colsOffsets   []int
@@ -258,8 +312,11 @@ func (fkt *ForeignKeyTriggerExec) addRowNeedToTrigger(sc *stmtctx.StatementConte
 	if fkt.fkValuesSet.Exist(key) {
 		return nil
 	}
-	fkt.fkValues = append(fkt.fkValues, vals)
 	fkt.fkValuesSet.Insert(key)
+	if fkt.fkChecker != nil {
+		return fkt.fkChecker.addRowNeedToCheck(sc, vals)
+	}
+	fkt.fkValues = append(fkt.fkValues, vals)
 	return nil
 }
 
@@ -277,6 +334,9 @@ func (fkt *ForeignKeyTriggerExec) updateRowNeedToTrigger(sc *stmtctx.StatementCo
 	}
 	if fkt.fkTrigger.Tp == plannercore.FKTriggerOnInsertOrUpdateChildTable && hasNullValue(newVals) {
 		return nil
+	}
+	if fkt.fkChecker != nil {
+		return fkt.fkChecker.updateRowNeedToCheck(sc, oldVals, newVals)
 	}
 	keyBuf, err := codec.EncodeKey(sc, nil, newVals...)
 	if err != nil {
@@ -373,11 +433,8 @@ func (fkt *ForeignKeyTriggerExec) buildFKTriggerPlan(ctx context.Context) (plann
 		return planBuilder.BuildOnDeleteFKTriggerPlan(ctx, fkt.fkTrigger.OnModifyReferredTable)
 	case plannercore.FKTriggerOnUpdate:
 		return planBuilder.BuildOnUpdateFKTriggerPlan(ctx, fkt.fkTrigger.OnModifyReferredTable)
-	case plannercore.FKTriggerOnInsertOrUpdateChildTable:
-		return planBuilder.BuildOnInsertFKTriggerPlan(fkt.fkTrigger.OnModifyChildTable)
-	default:
-		return nil, fmt.Errorf("unknown foreign key trigger type %v", fkt.fkTrigger.Tp)
 	}
+	return nil, nil
 }
 
 func (fkt *ForeignKeyTriggerExec) buildExecutor(ctx context.Context) (Executor, bool, error) {
@@ -405,10 +462,6 @@ func (fkt *ForeignKeyTriggerExec) buildExecutor(ctx context.Context) (Executor, 
 		e = fkt.b.build(x.Update)
 	case *plannercore.FKUpdateSetNullPlan:
 		e = fkt.b.build(x.Update)
-	case *plannercore.FKCheckPlan:
-		e = fkt.b.buildFKCheck(x)
-	default:
-		return nil, false, fmt.Errorf("unknown foreign key trigger plan: %#v", x)
 	}
 	return e, done, fkt.b.err
 }
@@ -449,13 +502,105 @@ func (b *executorBuilder) buildForeignKeyTriggerExec(tbInfo *model.TableInfo, fk
 	if err != nil {
 		return nil, err
 	}
-	return &ForeignKeyTriggerExec{
+
+	fkt := &ForeignKeyTriggerExec{
 		b:                  b,
 		fkTrigger:          fkTrigger,
 		colsOffsets:        colsOffsets,
 		fkValuesSet:        set.NewStringSet(),
 		buildFKValues:      set.NewStringSet(),
 		fkUpdatedValuesMap: make(map[string]*updatedValuesCouple),
+	}
+	fkt.fkChecker, err = fkt.buildFKChecker()
+	return fkt, err
+}
+
+func (fkt *ForeignKeyTriggerExec) buildFKChecker() (*ForeignKeyChecker, error) {
+	switch fkt.fkTrigger.Tp {
+	case plannercore.FKTriggerOnDelete:
+		return fkt.buildOnDeleteFKChecker()
+	case plannercore.FKTriggerOnUpdate:
+		return fkt.buildOnUpdateFKChecker()
+	case plannercore.FKTriggerOnInsertOrUpdateChildTable:
+		return fkt.BuildOnInsertFKChecker()
+	}
+	return nil, nil
+}
+
+func (fkt *ForeignKeyTriggerExec) buildOnUpdateFKChecker() (*ForeignKeyChecker, error) {
+	onModifyReferredTable := fkt.fkTrigger.OnModifyReferredTable
+	fk, referredFK, childTable := onModifyReferredTable.FK, onModifyReferredTable.ReferredFK, onModifyReferredTable.ChildTable
+	switch model.ReferOptionType(fk.OnUpdate) {
+	case model.ReferOptionRestrict, model.ReferOptionNoOption, model.ReferOptionNoAction, model.ReferOptionSetDefault:
+		failedErr := plannercore.ErrRowIsReferenced2.GenWithStackByArgs(fk.String(referredFK.ChildSchema.L, referredFK.ChildTable.L))
+		return buildForeignKeyChecker(childTable, fk.Cols, false, failedErr)
+	}
+	return nil, nil
+}
+
+func (fkt *ForeignKeyTriggerExec) buildOnDeleteFKChecker() (*ForeignKeyChecker, error) {
+	onModifyReferredTable := fkt.fkTrigger.OnModifyReferredTable
+	fk, referredFK, childTable := onModifyReferredTable.FK, onModifyReferredTable.ReferredFK, onModifyReferredTable.ChildTable
+	switch model.ReferOptionType(fk.OnDelete) {
+	case model.ReferOptionRestrict, model.ReferOptionNoOption, model.ReferOptionNoAction, model.ReferOptionSetDefault:
+		failedErr := plannercore.ErrRowIsReferenced2.GenWithStackByArgs(fk.String(referredFK.ChildSchema.L, referredFK.ChildTable.L))
+		return buildForeignKeyChecker(childTable, fk.Cols, false, failedErr)
+	}
+	return nil, nil
+}
+
+func (fkt *ForeignKeyTriggerExec) BuildOnInsertFKChecker() (*ForeignKeyChecker, error) {
+	info := fkt.fkTrigger.OnModifyChildTable
+	failedErr := plannercore.ErrNoReferencedRow2.FastGenByArgs(info.FK.String(info.DBName, info.TblName))
+	return buildForeignKeyChecker(info.ReferTable, info.FK.RefCols, true, failedErr)
+}
+
+func buildForeignKeyChecker(tbl table.Table, cols []model.CIStr, checkExist bool, failedErr error) (*ForeignKeyChecker, error) {
+	tblInfo := tbl.Meta()
+	if tblInfo.PKIsHandle && len(cols) == 1 {
+		refColInfo := model.FindColumnInfo(tblInfo.Columns, cols[0].L)
+		if refColInfo != nil && mysql.HasPriKeyFlag(refColInfo.GetFlag()) {
+			refCol := table.FindCol(tbl.Cols(), refColInfo.Name.O)
+			return &ForeignKeyChecker{
+				tbl:             tbl,
+				idxIsPrimaryKey: true,
+				idxIsExclusive:  true,
+				handleCols:      []*table.Column{refCol},
+				checkExist:      checkExist,
+				failedErr:       failedErr,
+			}, nil
+		}
+	}
+
+	referTbIdxInfo := model.FindIndexByColumns(tblInfo, cols...)
+	if referTbIdxInfo == nil {
+		return nil, failedErr
+	}
+	var tblIdx table.Index
+	for _, idx := range tbl.Indices() {
+		if idx.Meta().ID == referTbIdxInfo.ID {
+			tblIdx = idx
+		}
+	}
+	if tblIdx == nil {
+		return nil, failedErr
+	}
+
+	var handleCols []*table.Column
+	if referTbIdxInfo.Primary && tblInfo.IsCommonHandle {
+		cols := tbl.Cols()
+		for _, idxCol := range referTbIdxInfo.Columns {
+			handleCols = append(handleCols, cols[idxCol.Offset])
+		}
+	}
+
+	return &ForeignKeyChecker{
+		tbl:             tbl,
+		idx:             tblIdx,
+		idxIsExclusive:  len(cols) == len(referTbIdxInfo.Columns),
+		idxIsPrimaryKey: referTbIdxInfo.Primary && tblInfo.IsCommonHandle,
+		checkExist:      checkExist,
+		failedErr:       failedErr,
 	}, nil
 }
 

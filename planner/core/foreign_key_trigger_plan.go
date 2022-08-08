@@ -19,13 +19,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/ranger"
 )
@@ -154,9 +152,6 @@ func (b *PlanBuilder) BuildOnUpdateFKTriggerPlan(ctx context.Context, onModifyRe
 		return b.buildUpdateForeignKeyCascade(ctx, referredFK.ChildSchema, childTable, fk)
 	case model.ReferOptionSetNull:
 		return b.buildUpdateForeignKeySetNull(ctx, referredFK.ChildSchema, childTable, fk)
-	case model.ReferOptionRestrict, model.ReferOptionNoOption, model.ReferOptionNoAction, model.ReferOptionSetDefault:
-		failedErr := ErrRowIsReferenced2.GenWithStackByArgs(fk.String(referredFK.ChildSchema.L, referredFK.ChildTable.L))
-		return buildFKCheckPlan(b.ctx, childTable, fk, fk.Cols, fk.RefCols, false, failedErr)
 	}
 	return nil, nil
 }
@@ -168,17 +163,8 @@ func (b *PlanBuilder) BuildOnDeleteFKTriggerPlan(ctx context.Context, onModifyRe
 		return b.buildForeignKeyCascadeDelete(ctx, referredFK.ChildSchema, childTable, fk)
 	case model.ReferOptionSetNull:
 		return b.buildUpdateForeignKeySetNull(ctx, referredFK.ChildSchema, childTable, fk)
-	case model.ReferOptionRestrict, model.ReferOptionNoOption, model.ReferOptionNoAction, model.ReferOptionSetDefault:
-		failedErr := ErrRowIsReferenced2.GenWithStackByArgs(fk.String(referredFK.ChildSchema.L, referredFK.ChildTable.L))
-		return buildFKCheckPlan(b.ctx, childTable, fk, fk.Cols, fk.RefCols, false, failedErr)
 	}
 	return nil, nil
-}
-
-func (b *PlanBuilder) BuildOnInsertFKTriggerPlan(info *OnModifyChildTableFKInfo) (FKTriggerPlan, error) {
-	fk := info.FK
-	failedErr := ErrNoReferencedRow2.FastGenByArgs(fk.String(info.DBName, info.TblName))
-	return buildFKCheckPlan(b.ctx, info.ReferTable, fk, fk.RefCols, fk.Cols, true, failedErr)
 }
 
 func (b *PlanBuilder) buildForeignKeyCascadeDelete(ctx context.Context, dbName model.CIStr, tbl table.Table, fk *model.FKInfo) (FKTriggerPlan, error) {
@@ -305,57 +291,6 @@ func (b *PlanBuilder) buildUpdateForeignKeySetNull(ctx context.Context, dbName m
 	}, nil
 }
 
-func buildFKCheckPlan(ctx sessionctx.Context, tbl table.Table, fk *model.FKInfo, cols, rowCols []model.CIStr, checkExist bool, failedErr error) (*FKCheckPlan, error) {
-	tblInfo := tbl.Meta()
-	if tblInfo.PKIsHandle && len(cols) == 1 {
-		refColInfo := model.FindColumnInfo(tblInfo.Columns, cols[0].L)
-		if refColInfo != nil && mysql.HasPriKeyFlag(refColInfo.GetFlag()) {
-			refCol := table.FindCol(tbl.Cols(), refColInfo.Name.O)
-			return FKCheckPlan{
-				baseFKTriggerPlan: baseFKTriggerPlan{fk, rowCols},
-				Tbl:               tbl,
-				IdxIsPrimaryKey:   true,
-				IdxIsExclusive:    true,
-				HandleCols:        []*table.Column{refCol},
-				CheckExist:        checkExist,
-				FailedErr:         failedErr,
-			}.Init(ctx), nil
-		}
-	}
-
-	referTbIdxInfo := model.FindIndexByColumns(tblInfo, cols...)
-	if referTbIdxInfo == nil {
-		return nil, failedErr
-	}
-	var tblIdx table.Index
-	for _, idx := range tbl.Indices() {
-		if idx.Meta().ID == referTbIdxInfo.ID {
-			tblIdx = idx
-		}
-	}
-	if tblIdx == nil {
-		return nil, failedErr
-	}
-
-	var handleCols []*table.Column
-	if referTbIdxInfo.Primary && tblInfo.IsCommonHandle {
-		cols := tbl.Cols()
-		for _, idxCol := range referTbIdxInfo.Columns {
-			handleCols = append(handleCols, cols[idxCol.Offset])
-		}
-	}
-
-	return FKCheckPlan{
-		baseFKTriggerPlan: baseFKTriggerPlan{fk, rowCols},
-		Tbl:               tbl,
-		Idx:               tblIdx,
-		IdxIsExclusive:    len(cols) == len(referTbIdxInfo.Columns),
-		IdxIsPrimaryKey:   referTbIdxInfo.Primary && tblInfo.IsCommonHandle,
-		CheckExist:        checkExist,
-		FailedErr:         failedErr,
-	}.Init(ctx), nil
-}
-
 func (b *PlanBuilder) buildTableReaderForFK(ctx context.Context, dbName, tblName model.CIStr, cols []model.CIStr) (*DataSource, PhysicalPlan, error) {
 	tn := &ast.TableName{
 		Schema: dbName,
@@ -438,27 +373,6 @@ type FKOnUpdateCascadePlan struct {
 	*Update
 }
 
-type FKCheckPlan struct {
-	baseSchemaProducer
-	baseFKTriggerPlan
-
-	DBName     model.CIStr
-	Tbl        table.Table
-	Idx        table.Index
-	Cols       []model.CIStr
-	HandleCols []*table.Column
-
-	IdxIsPrimaryKey bool
-	IdxIsExclusive  bool
-
-	CheckExist bool
-	FailedErr  error
-
-	ToBeCheckedHandleKeys []kv.Handle
-	ToBeCheckedUniqueKeys []kv.Key
-	ToBeCheckedIndexKeys  []kv.Key
-}
-
 type baseFKTriggerPlan struct {
 	fk   *model.FKInfo
 	cols []model.CIStr
@@ -510,43 +424,6 @@ func (p *FKOnUpdateCascadePlan) SetRangeForSelectPlan(fkValues [][]types.Datum) 
 func (p *FKOnUpdateCascadePlan) SetUpdatedValues(fkValues []types.Datum) error {
 	for i, assgisn := range p.Update.OrderedList {
 		assgisn.Expr = &expression.Constant{Value: fkValues[i], RetType: assgisn.Col.RetType}
-	}
-	return nil
-}
-
-func (p *FKCheckPlan) SetRangeForSelectPlan(fkValues [][]types.Datum) error {
-	for _, vals := range fkValues {
-		err := p.addRowNeedToCheck(vals)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (p *FKCheckPlan) addRowNeedToCheck(vals []types.Datum) error {
-	sc := p.ctx.GetSessionVars().StmtCtx
-	if p.IdxIsPrimaryKey {
-		handleKey, err := p.buildHandleFromFKValues(sc, vals)
-		if err != nil {
-			return err
-		}
-		if p.IdxIsExclusive {
-			p.ToBeCheckedHandleKeys = append(p.ToBeCheckedHandleKeys, handleKey)
-		} else {
-			key := tablecodec.EncodeRecordKey(p.Tbl.RecordPrefix(), handleKey)
-			p.ToBeCheckedIndexKeys = append(p.ToBeCheckedIndexKeys, key)
-		}
-		return nil
-	}
-	key, distinct, err := p.Idx.GenIndexKey(sc, vals, nil, nil)
-	if err != nil {
-		return err
-	}
-	if distinct && p.IdxIsExclusive {
-		p.ToBeCheckedUniqueKeys = append(p.ToBeCheckedUniqueKeys, key)
-	} else {
-		p.ToBeCheckedIndexKeys = append(p.ToBeCheckedIndexKeys, key)
 	}
 	return nil
 }

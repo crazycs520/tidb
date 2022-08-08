@@ -5015,21 +5015,3 @@ func (b *executorBuilder) buildCompactTable(v *plannercore.CompactTable) Executo
 		tikvStore:    tikvStore,
 	}
 }
-
-func (b *executorBuilder) buildFKCheck(v *plannercore.FKCheckPlan) Executor {
-	base := newBaseExecutor(b.ctx, v.Schema(), v.ID())
-	base.initCap = chunk.ZeroCapacity
-	return &ForeignKeyCheckExec{
-		baseExecutor:          base,
-		tbl:                   v.Tbl,
-		idx:                   v.Idx,
-		idxIsExclusive:        v.IdxIsExclusive,
-		idxIsPrimaryKey:       v.IdxIsPrimaryKey,
-		handleCols:            v.HandleCols,
-		checkExist:            v.CheckExist,
-		failedErr:             v.FailedErr,
-		toBeCheckedHandleKeys: v.ToBeCheckedHandleKeys,
-		toBeCheckedUniqueKeys: v.ToBeCheckedUniqueKeys,
-		toBeCheckedIndexKeys:  v.ToBeCheckedIndexKeys,
-	}
-}

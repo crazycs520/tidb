@@ -17,9 +17,6 @@ package core
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/util/codec"
 	"math"
 	"math/bits"
 	"sort"
@@ -5673,24 +5670,6 @@ func (b *PlanBuilder) buildDelete(ctx context.Context, ds *ast.DeleteStmt) (Plan
 	}
 	del.FKTriggers = buildOnDeleteForeignKeyTrigger(b.ctx, b.is, tblID2table)
 	return del, err
-}
-
-func (p *FKCheckPlan) buildHandleFromFKValues(sc *stmtctx.StatementContext, vals []types.Datum) (kv.Handle, error) {
-	if len(vals) == 1 && p.Idx == nil {
-		return kv.IntHandle(vals[0].GetInt64()), nil
-	}
-	pkDts := make([]types.Datum, 0, len(vals))
-	for i, val := range vals {
-		if p.Idx != nil && len(p.HandleCols) > 0 {
-			tablecodec.TruncateIndexValue(&val, p.Idx.Meta().Columns[i], p.HandleCols[i].ColumnInfo)
-		}
-		pkDts = append(pkDts, val)
-	}
-	handleBytes, err := codec.EncodeKey(sc, nil, pkDts...)
-	if err != nil {
-		return nil, err
-	}
-	return kv.NewCommonHandle(handleBytes)
 }
 
 func resolveIndicesForTblID2Handle(tblID2Handle map[int64][]HandleCols, schema *expression.Schema) (map[int64][]HandleCols, error) {

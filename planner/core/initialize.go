@@ -582,12 +582,6 @@ func (p PhysicalCTETable) Init(ctx sessionctx.Context, stats *property.StatsInfo
 	return &p
 }
 
-// Init initializes FKCheckPlan.
-func (p FKCheckPlan) Init(ctx sessionctx.Context) *FKCheckPlan {
-	p.basePlan = newBasePlan(ctx, plancodec.TypeFKCheck, 0)
-	return &p
-}
-
 // Init initializes FKOnDeleteCascadePlan.
 func (p FKOnDeleteCascadePlan) Init(ctx sessionctx.Context) *FKOnDeleteCascadePlan {
 	p.basePlan = newBasePlan(ctx, plancodec.TypeFKCascadePlan, 0)
