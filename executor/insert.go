@@ -448,3 +448,7 @@ func (e *InsertExec) setMessage() {
 		stmtCtx.SetMessage(msg)
 	}
 }
+
+func (e *InsertExec) GetFKChecks() []*FKCheckExec {
+	return e.fkChecks
+}
