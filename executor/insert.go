@@ -449,6 +449,7 @@ func (e *InsertExec) setMessage() {
 	}
 }
 
+// GetFKChecks implements WithForeignKeyTrigger interface.
 func (e *InsertExec) GetFKChecks() []*FKCheckExec {
 	return e.fkChecks
 }
