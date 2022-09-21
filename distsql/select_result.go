@@ -243,7 +243,7 @@ func (r *selectResult) fetchResp(ctx context.Context) error {
 				sc.MergeExecDetails(&copStats.ExecDetails, nil)
 			}
 		}
-		if len(r.selectResp.Chunks) != 0 {
+		if len(r.selectResp.Chunks) != 0 || len(r.selectResp.ExtraChunks) != 0 {
 			break
 		}
 	}
