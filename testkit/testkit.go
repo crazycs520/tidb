@@ -122,6 +122,14 @@ func (tk *TestKit) InitOutputTest(fileName string, comment string) {
 	}
 }
 
+func (tk *TestKit) AddOutputComment(comments ...string) {
+	tk.output.WriteString("\n")
+	for _, comment := range comments {
+		tk.output.WriteString("# " + comment + "\n")
+	}
+	tk.output.WriteString("#\n")
+}
+
 func (tk *TestKit) Close() {
 	err := tk.output.Sync()
 	tk.require.NoError(err)
