@@ -25,87 +25,108 @@ import (
 )
 
 var foreignKeyTestCase1 = []struct {
+	comment     string
 	prepareSQLs []string
 	notNull     bool
 }{
 	// Case-1: test unique index only contain foreign key columns.
 	{
+		comment: "Case-1: test unique index only contain foreign key columns",
 		prepareSQLs: []string{
 			"create table t1 (id int, a int, b int,  unique index(id), unique index(a, b));",
-			"create table t2 (b int, name varchar(10), a int, id int, unique index(id), unique index (a,b), foreign key fk(a, b) references t1(a, b));",
+			"create table t2 (b int, name varchar(10), a int, id int, unique index(id), unique index (a,b), constraint fk foreign key(a, b) references t1(a, b));",
 		},
 	},
 	// Case-2: test unique index contain foreign key columns and other columns.
 	{
+		comment: "Case-2: test unique index contain foreign key columns and other columns.",
 		prepareSQLs: []string{
 			"create table t1 (id int key, a int, b int, unique index(id), unique index(a, b, id));",
-			"create table t2 (b int, a int, id int key, name varchar(10), unique index (a,b, id), foreign key fk(a, b) references t1(a, b));",
+			"create table t2 (b int, a int, id int key, name varchar(10), unique index (a,b, id), constraint fk foreign key(a, b) references t1(a, b));",
 		},
 	},
 	// Case-3: test non-unique index only contain foreign key columns.
 	{
+		comment: "Case-3: test non-unique index only contain foreign key columns.",
 		prepareSQLs: []string{
 			"create table t1 (id int key,a int, b int, unique index(id), index(a, b));",
-			"create table t2 (b int, a int, name varchar(10), id int key, index (a, b), foreign key fk(a, b) references t1(a, b));",
+			"create table t2 (b int, a int, name varchar(10), id int key, index (a, b), constraint fk foreign key(a, b) references t1(a, b));",
 		},
 	},
 	// Case-4: test non-unique index contain foreign key columns and other columns.
 	{
+		comment: "Case-4: test non-unique index contain foreign key columns and other columns.",
 		prepareSQLs: []string{
 			"create table t1 (id int key,a int, b int,  unique index(id), index(a, b, id));",
-			"create table t2 (name varchar(10), b int, a int, id int key, index (a, b, id), foreign key fk(a, b) references t1(a, b));",
+			"create table t2 (name varchar(10), b int, a int, id int key, index (a, b, id), constraint fk foreign key(a, b) references t1(a, b));",
 		},
 	},
 	//Case-5: test primary key only contain foreign key columns, and disable tidb_enable_clustered_index.
 	{
+		comment: "Case-5: test primary key only contain foreign key columns, and disable tidb_enable_clustered_index.",
 		prepareSQLs: []string{
 			"set @@tidb_enable_clustered_index=0;",
 			"create table t1 (id int, a int, b int,  unique index(id), primary key (a, b));",
-			"create table t2 (b int, name varchar(10), a int, id int, unique index(id), primary key (a, b), foreign key fk(a, b) references t1(a, b));",
+			"create table t2 (b int, name varchar(10), a int, id int, unique index(id), primary key (a, b), constraint fk foreign key(a, b) references t1(a, b));",
 		},
 		notNull: true,
 	},
 	// Case-6: test primary key only contain foreign key columns, and enable tidb_enable_clustered_index.
 	{
+		comment: "Case-6: test primary key only contain foreign key columns, and enable tidb_enable_clustered_index.",
 		prepareSQLs: []string{
 			"set @@tidb_enable_clustered_index=1;",
 			"create table t1 (id int, a int, b int,  unique index(id), primary key (a, b));",
-			"create table t2 (b int,  a int, name varchar(10), id int, unique index(id), primary key (a, b), foreign key fk(a, b) references t1(a, b));",
+			"create table t2 (b int,  a int, name varchar(10), id int, unique index(id), primary key (a, b), constraint fk foreign key(a, b) references t1(a, b));",
 		},
 		notNull: true,
 	},
 	// Case-7: test primary key contain foreign key columns and other column, and disable tidb_enable_clustered_index.
 	{
+		comment: "Case-7: test primary key contain foreign key columns and other column, and disable tidb_enable_clustered_index.",
 		prepareSQLs: []string{
 			"set @@tidb_enable_clustered_index=0;",
 			"create table t1 (id int, a int, b int,  unique index(id), primary key (a, b, id));",
-			"create table t2 (b int,  a int, id int, name varchar(10), unique index(id), primary key (a, b, id), foreign key fk(a, b) references t1(a, b));",
+			"create table t2 (b int,  a int, id int, name varchar(10), unique index(id), primary key (a, b, id), constraint fk foreign key(a, b) references t1(a, b));",
 		},
 		notNull: true,
 	},
 	// Case-8: test primary key contain foreign key columns and other column, and enable tidb_enable_clustered_index.
 	{
+		comment: "Case-8: test primary key contain foreign key columns and other column, and enable tidb_enable_clustered_index.",
 		prepareSQLs: []string{
 			"set @@tidb_enable_clustered_index=1;",
 			"create table t1 (id int, a int, b int,  unique index(id), primary key (a, b, id));",
-			"create table t2 (name varchar(10), b int,  a int, id int, unique index(id), primary key (a, b, id), foreign key fk(a, b) references t1(a, b));",
+			"create table t2 (name varchar(10), b int,  a int, id int, unique index(id), primary key (a, b, id), constraint fk foreign key(a, b) references t1(a, b));",
 		},
 		notNull: true,
 	},
 }
 
+var splitTestComment = "--------------------------------------------------------------------------"
+
 func TestForeignKeyOnInsertChildTable(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
+	defer func() {
+		tk.AddOutputComment(splitTestComment)
+		tk.Close()
+	}()
+	testComment := "Test foreign key check when insert into child table"
+	tk.InitOutputTest("fk.test", "")
+	tk.AddOutputComment(testComment)
 	tk.MustExec("set @@global.tidb_enable_foreign_key=1")
 	tk.MustExec("set @@foreign_key_checks=1")
 	tk.MustExec("use test")
 
 	tk.MustExec("create table t_data (id int, a int, b int)")
 	tk.MustExec("insert into t_data (id, a, b) values (1, 1, 1), (2, 2, 2);")
-	for _, ca := range foreignKeyTestCase1 {
-		tk.MustExec("drop table if exists t2;")
-		tk.MustExec("drop table if exists t1;")
+	for i, ca := range foreignKeyTestCase1 {
+		tk.AddOutputComment(testComment, ca.comment)
+		if i > 0 {
+			tk.MustExec("drop table if exists t2;")
+			tk.MustExec("drop table if exists t1;")
+		}
 		for _, sql := range ca.prepareSQLs {
 			tk.MustExec(sql)
 		}
@@ -137,21 +158,23 @@ func TestForeignKeyOnInsertChildTable(t *testing.T) {
 	}
 
 	// Case-10: test primary key is handle and contain foreign key column, and foreign key column has default value.
+	tk.AddOutputComment(testComment, "Case-10: test primary key is handle and contain foreign key column, and foreign key column has default value.")
 	tk.MustExec("drop table if exists t2;")
 	tk.MustExec("drop table if exists t1;")
 	tk.MustExec("set @@tidb_enable_clustered_index=0;")
 	tk.MustExec("drop table if exists t2;")
 	tk.MustExec("drop table if exists t1;")
 	tk.MustExec("create table t1 (id int,a int, primary key(id));")
-	tk.MustExec("create table t2 (id int key,a int not null default 0, index (a), foreign key fk(a) references t1(id));")
+	tk.MustExec("create table t2 (id int key,a int not null default 0, index (a), constraint fk foreign key(a) references t1(id));")
 	tk.MustExec("insert into t1 values (1, 1);")
 	tk.MustExec("insert into t2 values (1, 1);")
 	tk.MustGetDBError("insert into t2 (id) values (10);", plannercore.ErrNoReferencedRow2)
 	tk.MustGetDBError("insert into t2 values (3, 2);", plannercore.ErrNoReferencedRow2)
 
 	// Case-11: test primary key is handle and contain foreign key column, and foreign key column doesn't have default value.
+	tk.AddOutputComment(testComment, "Case-11: test primary key is handle and contain foreign key column, and foreign key column doesn't have default value.")
 	tk.MustExec("drop table if exists t2;")
-	tk.MustExec("create table t2 (id int key,a int, index (a), foreign key fk(a) references t1(id));")
+	tk.MustExec("create table t2 (id int key,a int, index (a), constraint fk foreign key(a) references t1(id));")
 	tk.MustExec("insert into t2 values (1, 1);")
 	tk.MustExec("insert into t2 (id) values (10);")
 	tk.MustGetDBError("insert into t2 values (3, 2);", plannercore.ErrNoReferencedRow2)
@@ -160,13 +183,23 @@ func TestForeignKeyOnInsertChildTable(t *testing.T) {
 func TestForeignKeyOnInsertDuplicateUpdateChildTable(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
+	defer func() {
+		tk.AddOutputComment(splitTestComment)
+		tk.Close()
+	}()
+	testComment := "Test foreign key check when insert on duplicate update child table"
+	tk.InitOutputTest("fk.test", "")
+	tk.AddOutputComment(testComment)
 	tk.MustExec("set @@global.tidb_enable_foreign_key=1")
 	tk.MustExec("set @@foreign_key_checks=1")
 	tk.MustExec("use test")
 
-	for _, ca := range foreignKeyTestCase1 {
-		tk.MustExec("drop table if exists t2;")
-		tk.MustExec("drop table if exists t1;")
+	for i, ca := range foreignKeyTestCase1 {
+		tk.AddOutputComment(testComment, ca.comment)
+		if i > 0 {
+			tk.MustExec("drop table if exists t2;")
+			tk.MustExec("drop table if exists t1;")
+		}
 		for _, sql := range ca.prepareSQLs {
 			tk.MustExec(sql)
 		}
@@ -217,11 +250,12 @@ func TestForeignKeyOnInsertDuplicateUpdateChildTable(t *testing.T) {
 	}
 
 	// Case-9: test primary key is handle and contain foreign key column.
+	tk.AddOutputComment(testComment, "Case-9: test primary key is handle and contain foreign key column.")
 	tk.MustExec("drop table if exists t2;")
 	tk.MustExec("drop table if exists t1;")
 	tk.MustExec("set @@tidb_enable_clustered_index=0;")
 	tk.MustExec("create table t1 (id int, a int, b int,  primary key (id));")
-	tk.MustExec("create table t2 (b int,  a int, id int, name varchar(10), primary key (a), foreign key fk(a) references t1(id));")
+	tk.MustExec("create table t2 (b int,  a int, id int, name varchar(10), primary key (a), constraint fk foreign key(a) references t1(id));")
 	tk.MustExec("insert into t1 (id, a, b) values       (1, 11, 21),(2, 12, 22), (3, 13, 23), (4, 14, 24)")
 	tk.MustExec("insert into t2 (id, a, b, name) values (11, 1, 21, 'a')")
 
@@ -236,6 +270,7 @@ func TestForeignKeyOnInsertDuplicateUpdateChildTable(t *testing.T) {
 	tk.MustQuery("select id, a, b, name from t2 order by id").Check(testkit.Rows("1 3 31 f"))
 
 	// Test In txn.
+	tk.AddOutputComment(testComment, "Test in transaction")
 	tk.MustExec("delete from t2")
 	tk.MustExec("delete from t1")
 	tk.MustExec("insert into t1 (id, a, b) values       (1, 11, 21),(2, 12, 22), (3, 13, 23), (4, 14, 24)")
@@ -276,28 +311,28 @@ func TestForeignKeyCheckAndLock(t *testing.T) {
 		{
 			prepareSQLs: []string{
 				"create table t1 (id int, name varchar(10), unique index (id))",
-				"create table t2 (a int,  name varchar(10), unique index (a), foreign key fk(a) references t1(id))",
+				"create table t2 (a int,  name varchar(10), unique index (a), constraint fk foreign key(a) references t1(id))",
 			},
 		},
 		//Case-2: test unique index contain foreign key columns and other columns.
 		{
 			prepareSQLs: []string{
 				"create table t1 (id int, name varchar(10), unique index (id, name))",
-				"create table t2 (name varchar(10), a int,  unique index (a,  name), foreign key fk(a) references t1(id))",
+				"create table t2 (name varchar(10), a int,  unique index (a,  name), constraint fk foreign key(a) references t1(id))",
 			},
 		},
 		//Case-3: test non-unique index only contain foreign key columns.
 		{
 			prepareSQLs: []string{
 				"create table t1 (id int, name varchar(10), index (id))",
-				"create table t2 (a int,  name varchar(10), index (a), foreign key fk(a) references t1(id))",
+				"create table t2 (a int,  name varchar(10), index (a), constraint fk foreign key(a) references t1(id))",
 			},
 		},
 		//Case-4: test non-unique index contain foreign key columns and other columns.
 		{
 			prepareSQLs: []string{
 				"create table t1 (id int, name varchar(10), index (id, name))",
-				"create table t2 (name varchar(10), a int,  index (a,  name), foreign key fk(a) references t1(id))",
+				"create table t2 (name varchar(10), a int,  index (a,  name), constraint fk foreign key(a) references t1(id))",
 			},
 		},
 		//Case-5: test primary key only contain foreign key columns, and disable tidb_enable_clustered_index.
@@ -305,7 +340,7 @@ func TestForeignKeyCheckAndLock(t *testing.T) {
 			prepareSQLs: []string{
 				"set @@tidb_enable_clustered_index=0;",
 				"create table t1 (id int, name varchar(10), primary key (id))",
-				"create table t2 (a int,  name varchar(10), primary key (a), foreign key fk(a) references t1(id))",
+				"create table t2 (a int,  name varchar(10), primary key (a), constraint fk foreign key(a) references t1(id))",
 			},
 		},
 		//Case-6: test primary key only contain foreign key columns, and enable tidb_enable_clustered_index.
@@ -313,7 +348,7 @@ func TestForeignKeyCheckAndLock(t *testing.T) {
 			prepareSQLs: []string{
 				"set @@tidb_enable_clustered_index=1;",
 				"create table t1 (id int, name varchar(10), primary key (id))",
-				"create table t2 (a int,  name varchar(10), primary key (a), foreign key fk(a) references t1(id))",
+				"create table t2 (a int,  name varchar(10), primary key (a), constraint fk foreign key(a) references t1(id))",
 			},
 		},
 		//Case-7: test primary key contain foreign key columns and other column, and disable tidb_enable_clustered_index.
@@ -321,7 +356,7 @@ func TestForeignKeyCheckAndLock(t *testing.T) {
 			prepareSQLs: []string{
 				"set @@tidb_enable_clustered_index=0;",
 				"create table t1 (id int, name varchar(10), primary key (id, name))",
-				"create table t2 (a int,  name varchar(10), primary key (a , name), foreign key fk(a) references t1(id))",
+				"create table t2 (a int,  name varchar(10), primary key (a , name), constraint fk foreign key(a) references t1(id))",
 			},
 		},
 		// Case-8: test primary key contain foreign key columns and other column, and enable tidb_enable_clustered_index.
@@ -329,7 +364,7 @@ func TestForeignKeyCheckAndLock(t *testing.T) {
 			prepareSQLs: []string{
 				"set @@tidb_enable_clustered_index=1;",
 				"create table t1 (id int, name varchar(10), primary key (id, name))",
-				"create table t2 (a int,  name varchar(10), primary key (a , name), foreign key fk(a) references t1(id))",
+				"create table t2 (a int,  name varchar(10), primary key (a , name), constraint fk foreign key(a) references t1(id))",
 			},
 		},
 	}
@@ -405,6 +440,16 @@ func TestForeignKeyOnInsertIgnore(t *testing.T) {
 	tk.MustExec("set @@foreign_key_checks=1")
 	tk.MustExec("use test")
 
+	defer func() {
+		tk.AddOutputComment(splitTestComment)
+		tk.Close()
+	}()
+	testComment := "Test foreign key check when insert ignore"
+	tk.InitOutputTest("fk.test", "")
+	tk.AddOutputComment(testComment)
+
+	tk.MustExec("drop table if exists t2;")
+	tk.MustExec("drop table if exists t1;")
 	tk.MustExec("CREATE TABLE t1 (i INT PRIMARY KEY);")
 	tk.MustExec("CREATE TABLE t2 (i INT, FOREIGN KEY (i) REFERENCES t1 (i));")
 	tk.MustExec("INSERT INTO t1 VALUES (1),(3);")
@@ -421,7 +466,16 @@ func TestForeignKeyOnInsertOnDuplicateParentTableCheck(t *testing.T) {
 	tk.MustExec("set @@foreign_key_checks=1")
 	tk.MustExec("use test")
 
+	defer func() {
+		tk.AddOutputComment(splitTestComment)
+		tk.Close()
+	}()
+	testComment := "Test foreign key check when insert on duplicate update parent table"
+	tk.InitOutputTest("fk.test", "")
+	tk.AddOutputComment(testComment)
+
 	for _, ca := range foreignKeyTestCase1 {
+		tk.AddOutputComment(testComment, ca.comment)
 		tk.MustExec("drop table if exists t2;")
 		tk.MustExec("drop table if exists t1;")
 		for _, sql := range ca.prepareSQLs {
@@ -457,11 +511,12 @@ func TestForeignKeyOnInsertOnDuplicateParentTableCheck(t *testing.T) {
 	}
 
 	// Case-9: test primary key is handle and contain foreign key column.
+	tk.AddOutputComment(testComment, "Case-9: test primary key is handle and contain foreign key column.")
 	tk.MustExec("drop table if exists t2;")
 	tk.MustExec("drop table if exists t1;")
 	tk.MustExec("set @@tidb_enable_clustered_index=0;")
 	tk.MustExec("create table t1 (id int, a int, b int,  primary key (id));")
-	tk.MustExec("create table t2 (b int,  a int, id int, name varchar(10), primary key (a), foreign key fk(a) references t1(id));")
+	tk.MustExec("create table t2 (b int,  a int, id int, name varchar(10), primary key (a), constraint fk foreign key(a) references t1(id));")
 	tk.MustExec("insert into t1 (id, a, b) values       (1, 11, 21),(2, 12, 22), (3, 13, 23), (4, 14, 24)")
 	tk.MustExec("insert into t2 (id, a, b, name) values (11, 1, 21, 'a')")
 
@@ -481,6 +536,15 @@ func TestForeignKey(t *testing.T) {
 	tk.MustExec("set @@foreign_key_checks=1")
 	tk.MustExec("use test")
 
+	defer func() {
+		tk.AddOutputComment(splitTestComment)
+		tk.Close()
+	}()
+	testComment := "Test table has more than 1 foreign keys."
+	tk.InitOutputTest("fk.test", "")
+	tk.AddOutputComment(testComment)
+
+	tk.MustExec("drop table if exists t1, t2;")
 	// Test table has more than 1 foreign keys.
 	tk.MustExec("create table t1 (id int, a int, b int,  primary key (id));")
 	tk.MustExec("create table t2 (id int, a int, b int,  primary key (id));")
@@ -514,7 +578,7 @@ func TestForeignKeyConcurrentInsertChildTable(t *testing.T) {
 	tk.MustExec("set @@foreign_key_checks=1")
 	tk.MustExec("use test")
 	tk.MustExec("create table t1 (id int, a int, primary key (id));")
-	tk.MustExec("create table t2 (id int, a int, index(a),  foreign key fk(a) references t1(id));")
+	tk.MustExec("create table t2 (id int, a int, index(a),  constraint fk foreign key(a) references t1(id));")
 	tk.MustExec("insert into  t1 (id, a) values (1, 11),(2, 12), (3, 13), (4, 14)")
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
