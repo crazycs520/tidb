@@ -602,11 +602,20 @@ func TestForeignKeyConcurrentInsertChildTable(t *testing.T) {
 func TestForeignKeyOnUpdateChildTable(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
+	defer func() {
+		tk.AddOutputComment(splitTestComment)
+		tk.Close()
+	}()
+	testComment := "Test foreign key check when update child table"
+	tk.InitOutputTest("fk.test", "")
+	tk.AddOutputComment(testComment)
+
 	tk.MustExec("set @@global.tidb_enable_foreign_key=1")
 	tk.MustExec("set @@foreign_key_checks=1")
 	tk.MustExec("use test")
 
 	for _, ca := range foreignKeyTestCase1 {
+		tk.AddOutputComment(testComment, ca.comment)
 		tk.MustExec("drop table if exists t2;")
 		tk.MustExec("drop table if exists t1;")
 		for _, sql := range ca.prepareSQLs {
@@ -656,6 +665,7 @@ func TestForeignKeyOnUpdateChildTable(t *testing.T) {
 	}
 
 	// Case-9: test primary key is handle and contain foreign key column.
+	tk.AddOutputComment(testComment, "Case-9: test primary key is handle and contain foreign key column.")
 	tk.MustExec("drop table if exists t2;")
 	tk.MustExec("drop table if exists t1;")
 	tk.MustExec("set @@tidb_enable_clustered_index=0;")
@@ -675,6 +685,7 @@ func TestForeignKeyOnUpdateChildTable(t *testing.T) {
 	tk.MustQuery("select id, a, b, name from t2 order by id").Check(testkit.Rows("1 3 22 a"))
 
 	// Test In txn.
+	tk.AddOutputComment(testComment, "Test In txn.")
 	tk.MustExec("delete from t2")
 	tk.MustExec("delete from t1")
 	tk.MustExec("insert into t1 (id, a, b) values       (1, 11, 21),(2, 12, 22), (3, 13, 23), (4, 14, 24)")
@@ -701,7 +712,16 @@ func TestForeignKeyOnUpdateParentTableCheck(t *testing.T) {
 	tk.MustExec("set @@global.tidb_enable_foreign_key=1")
 	tk.MustExec("set @@foreign_key_checks=1")
 	tk.MustExec("use test")
+	defer func() {
+		tk.AddOutputComment(splitTestComment)
+		tk.Close()
+	}()
+	testComment := "Test foreign key check when update parent table"
+	tk.InitOutputTest("fk.test", "")
+	tk.AddOutputComment(testComment)
+
 	for _, ca := range foreignKeyTestCase1 {
+		tk.AddOutputComment(testComment, ca.comment)
 		tk.MustExec("drop table if exists t2;")
 		tk.MustExec("drop table if exists t1;")
 		for _, sql := range ca.prepareSQLs {
@@ -732,6 +752,7 @@ func TestForeignKeyOnUpdateParentTableCheck(t *testing.T) {
 		}
 	}
 	// Case-9: test primary key is handle and contain foreign key column.
+	tk.AddOutputComment(testComment, "Case-9: test primary key is handle and contain foreign key column.")
 	tk.MustExec("drop table if exists t2;")
 	tk.MustExec("drop table if exists t1;")
 	tk.MustExec("set @@tidb_enable_clustered_index=0;")
