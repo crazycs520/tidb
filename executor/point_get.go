@@ -361,7 +361,7 @@ func (e *PointGetExecutor) getAndLock(ctx context.Context, key kv.Key) (val []by
 		if e.lock {
 			val, err = e.lockKeyIfExists(ctx, key)
 			if err != nil {
-				return nil, err
+				return nil, errors.Trace(err)
 			}
 		} else {
 			val, err = e.get(ctx, key)
@@ -377,7 +377,7 @@ func (e *PointGetExecutor) getAndLock(ctx context.Context, key kv.Key) (val []by
 	// Lock the key before get in RR isolation, then get will get the value from the cache.
 	err = e.lockKeyIfNeeded(ctx, key)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	val, err = e.get(ctx, key)
 	if err != nil {

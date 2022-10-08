@@ -16,6 +16,8 @@ package executor
 
 import (
 	"context"
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 	"strings"
 
 	"github.com/opentracing/opentracing-go"
@@ -219,6 +221,9 @@ func updateRecord(ctx context.Context, sctx sessionctx.Context, h kv.Handle, old
 		if err != nil {
 			return false, err
 		}
+		logutil.BgLogger().Info("-----update row --------",
+			zap.Int("unique_keys", len(fkt.toBeCheckedKeys)),
+			zap.Int("prefix_keys", len(fkt.toBeCheckedPrefixKeys)), zap.Int("fkcs", len(fkChecks)))
 	}
 	if onDup {
 		sc.AddAffectedRows(2)

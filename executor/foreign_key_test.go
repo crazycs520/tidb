@@ -16,12 +16,12 @@ package executor_test
 
 import (
 	"fmt"
-	"sync"
-	"testing"
-
 	plannercore "github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/stretchr/testify/require"
+	"sync"
+	"testing"
+	"time"
 )
 
 var foreignKeyTestCase1 = []struct {
@@ -266,6 +266,7 @@ func TestForeignKeyCheckAndLock(t *testing.T) {
 	tk.MustExec("use test")
 
 	tk2 := testkit.NewTestKit(t, store)
+	tk2.MustExec("set @@global.tidb_enable_foreign_key=1")
 	tk2.MustExec("set @@foreign_key_checks=1")
 	tk2.MustExec("use test")
 
@@ -367,14 +368,38 @@ func TestForeignKeyCheckAndLock(t *testing.T) {
 		// Test insert child table
 		tk.MustExec("begin pessimistic")
 		tk.MustExec("insert into t2 (a, name) values (1, 'a');")
+
+		//var wg sync.WaitGroup
+		//wg.Add(1)
+		//go func() {
+		//	defer wg.Done()
+		//	fmt.Printf("-------before tk2 update-----\n")
+		//	tk2.MustExec("begin pessimistic")
+		//	err = tk2.ExecToErr("update t1 set id = 2 where id = 1")
+		//	fmt.Printf("-------update err0: %v-------%v----------\n\n", err, idx)
+		//	require.NotNil(t, err)
+		//	require.Equal(t, "[planner:1451]Cannot delete or update a parent row: a foreign key constraint fails (`test`.`t2`, CONSTRAINT `fk` FOREIGN KEY (`a`) REFERENCES `t1` (`id`))", err.Error())
+		//	fmt.Printf("-------update err1: %v-------%v----------\n\n", err, idx)
+		//	tk2.MustExec("commit")
+		//}()
+		//time.Sleep(time.Millisecond * 100)
+		//fmt.Printf("-------before commit-----\n")
+		//tk.MustExec("commit")
+		//fmt.Printf("-------after commit-----\n")
+		//wg.Wait()
+
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			tk2.MustExec("begin pessimistic")
 			err := tk2.ExecToErr("update t1 set id = 2 where id = 1")
+			require.NotNil(t, err)
 			require.Error(t, err)
 			require.Equal(t, "[planner:1451]Cannot delete or update a parent row: a foreign key constraint fails (`test`.`t2`, CONSTRAINT `fk` FOREIGN KEY (`a`) REFERENCES `t1` (`id`))", err.Error())
+			tk2.MustExec("commit")
 		}()
+		time.Sleep(time.Millisecond * 100)
 		tk.MustExec("commit")
 		wg.Wait()
 		tk.MustQuery("select id, name from t1 order by name").Check(testkit.Rows("1 a"))
@@ -387,10 +412,13 @@ func TestForeignKeyCheckAndLock(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			tk2.MustExec("begin pessimistic")
 			err := tk2.ExecToErr("update t1 set id = 3 where id = 2")
 			require.Error(t, err)
 			require.Equal(t, "[planner:1451]Cannot delete or update a parent row: a foreign key constraint fails (`test`.`t2`, CONSTRAINT `fk` FOREIGN KEY (`a`) REFERENCES `t1` (`id`))", err.Error())
+			tk2.MustExec("commit")
 		}()
+		time.Sleep(time.Millisecond * 100)
 		tk.MustExec("commit")
 		wg.Wait()
 		tk.MustQuery("select id, name from t1 order by name").Check(testkit.Rows("1 a", "2 b"))

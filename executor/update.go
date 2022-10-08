@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 	"runtime/trace"
 
 	"github.com/pingcap/tidb/expression"
@@ -193,8 +195,17 @@ func (e *UpdateExec) exec(ctx context.Context, schema *expression.Schema, row, n
 		flags := bAssignFlag[content.Start:content.End]
 
 		// Update row
+		txn, err := e.ctx.Txn(false)
+		if err != nil {
+			return err
+		}
 		fkChecks := e.fkChecks[content.TblID]
 		changed, err1 := updateRecord(ctx, e.ctx, handle, oldData, newTableData, flags, tbl, false, e.memTracker, fkChecks)
+		if len(fkChecks) > 0 {
+			logutil.BgLogger().Info("-----after update record --------",
+				zap.Int("unique_keys", len(fkChecks[0].toBeCheckedKeys)),
+				zap.Int("prefix_keys", len(fkChecks[0].toBeCheckedPrefixKeys)), zap.Int("fkcs", len(fkChecks)), zap.Uint64("start-ts", txn.StartTS()))
+		}
 		if err1 == nil {
 			_, exist := e.updatedRowKeys[content.Start].Get(handle)
 			memDelta := e.updatedRowKeys[content.Start].Set(handle, changed)

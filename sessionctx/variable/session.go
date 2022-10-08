@@ -20,6 +20,8 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 	"math"
 	"math/rand"
 	"net"
@@ -346,6 +348,7 @@ func (tc *TransactionContext) GetForUpdateTS() uint64 {
 // SetForUpdateTS sets the ts for update.
 func (tc *TransactionContext) SetForUpdateTS(forUpdateTS uint64) {
 	if forUpdateTS > tc.forUpdateTS {
+		logutil.BgLogger().Warn("set for update ts", zap.Stack("stack"))
 		tc.forUpdateTS = forUpdateTS
 	}
 }

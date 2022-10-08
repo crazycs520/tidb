@@ -16,6 +16,8 @@ package executor
 
 import (
 	"context"
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 	"sync/atomic"
 
 	"github.com/pingcap/tidb/kv"
@@ -92,6 +94,8 @@ func buildFKCheckExec(sctx sessionctx.Context, tbl table.Table, fkCheck *planner
 		colsOffsets: colsOffsets,
 		fkValuesSet: set.NewStringSet(),
 	}
+
+	logutil.BgLogger().Info("------- new fk check exec --------")
 	return &FKCheckExec{
 		ctx:           sctx,
 		FKCheck:       fkCheck,
@@ -126,6 +130,9 @@ func (fkc *FKCheckExec) addRowNeedToCheck(sc *stmtctx.StatementContext, row []ty
 	} else {
 		fkc.toBeCheckedKeys = append(fkc.toBeCheckedKeys, key)
 	}
+	logutil.BgLogger().Info("-----add row need to check--------",
+		zap.Int("unique_keys", len(fkc.toBeCheckedKeys)),
+		zap.Int("prefix_keys", len(fkc.toBeCheckedPrefixKeys)))
 	return nil
 }
 
@@ -134,6 +141,11 @@ func (fkc *FKCheckExec) doCheck(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	txnCtx := fkc.ctx.GetSessionVars().TxnCtx
+	//txn.GetSnapshot().SetOption(kv.IsolationLevel, kv.RC)
+	logutil.BgLogger().Info("------fk do check---------", zap.Uint64("start_ts", txnCtx.StartTS), zap.Uint64("update_ts", txnCtx.GetForUpdateTS()),
+		zap.Int("unique_keys", len(fkc.toBeCheckedKeys)),
+		zap.Int("prefix_keys", len(fkc.toBeCheckedPrefixKeys)))
 	err = fkc.checkKeys(ctx, txn)
 	if err != nil {
 		return err
@@ -227,10 +239,9 @@ func (fkc *FKCheckExec) checkKey(ctx context.Context, txn kv.Transaction, k kv.K
 }
 
 func (fkc *FKCheckExec) checkKeyExist(ctx context.Context, txn kv.Transaction, k kv.Key) error {
-	_, err := txn.Get(ctx, k)
+	value, err := txn.Get(ctx, k)
 	if err == nil {
-		fkc.toBeLockedKeys = append(fkc.toBeLockedKeys, k)
-		return nil
+		return fkc.addToBeLockedKey(k, value)
 	}
 	if kv.IsErrNotFound(err) {
 		return fkc.FailedErr
@@ -255,6 +266,7 @@ func (fkc *FKCheckExec) checkIndexKeys(ctx context.Context, txn kv.Transaction) 
 	}
 	memBuffer := txn.GetMemBuffer()
 	snap := txn.GetSnapshot()
+	//snap.SetOption(kv.IsolationLevel, kv.RC)
 	snap.SetOption(kv.ScanBatchSize, 2)
 	defer func() {
 		snap.SetOption(kv.ScanBatchSize, txnsnapshot.DefaultScanBatchSize)
@@ -288,7 +300,11 @@ func (fkc *FKCheckExec) checkPrefixKeyExist(key kv.Key, value []byte) error {
 	if !exist {
 		return fkc.FailedErr
 	}
-	if fkc.Idx != nil && fkc.Idx.Meta().Primary && fkc.Tbl.Meta().IsCommonHandle {
+	return fkc.addToBeLockedKey(key, value)
+}
+
+func (fkc *FKCheckExec) addToBeLockedKey(key kv.Key, value []byte) error {
+	if fkc.Idx == nil || (fkc.Idx.Meta().Primary && fkc.Tbl.Meta().IsCommonHandle) {
 		fkc.toBeLockedKeys = append(fkc.toBeLockedKeys, key)
 	} else {
 		handle, err := tablecodec.DecodeIndexHandle(key, value, len(fkc.Idx.Meta().Columns))
