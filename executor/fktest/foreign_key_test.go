@@ -1043,38 +1043,41 @@ func TestForeignKeyOnDeleteCascade2(t *testing.T) {
 	tk.MustExec("set @@foreign_key_checks=1")
 	tk.MustExec("use test")
 
-	// Test cascade delete in self table.
-	tk.MustExec("create table t1 (id int key, name varchar(10), leader int,  index(leader), foreign key (leader) references t1(id) ON DELETE CASCADE);")
-	tk.MustExec("insert into t1 values (1, 'boss', null)")
-	tk.MustExec("insert into t1 values (10, 'l1_a', 1), (11, 'l1_b', 1), (12, 'l1_c', 1)")
-	tk.MustExec("insert into t1 values (100, 'l2_a1', 10), (101, 'l2_a2', 10), (102, 'l2_a3', 10)")
-	tk.MustExec("insert into t1 values (110, 'l2_b1', 11), (111, 'l2_b2', 11), (112, 'l2_b3', 11)")
-	tk.MustExec("insert into t1 values (120, 'l2_c1', 12), (121, 'l2_c2', 12), (122, 'l2_c3', 12)")
-	tk.MustExec("insert into t1 values (1000,'l3_a1', 100)")
-	tk.MustExec("delete from t1 where id=11")
-	tk.MustQuery("select id from t1 order by id").Check(testkit.Rows("1", "10", "12", "100", "101", "102", "120", "121", "122", "1000"))
-	tk.MustExec("delete from t1 where id=1")
-	// The affect rows doesn't contain the cascade deleted rows, the behavior is compatible with MySQL.
-	require.Equal(t, uint64(1), tk.Session().GetSessionVars().StmtCtx.AffectedRows())
-	tk.MustQuery("select id from t1 order by id").Check(testkit.Rows())
+	/*
+		// Test cascade delete in self table.
+		tk.MustExec("create table t1 (id int key, name varchar(10), leader int,  index(leader), foreign key (leader) references t1(id) ON DELETE CASCADE);")
+		tk.MustExec("insert into t1 values (1, 'boss', null)")
+		tk.MustExec("insert into t1 values (10, 'l1_a', 1), (11, 'l1_b', 1), (12, 'l1_c', 1)")
+		tk.MustExec("insert into t1 values (100, 'l2_a1', 10), (101, 'l2_a2', 10), (102, 'l2_a3', 10)")
+		tk.MustExec("insert into t1 values (110, 'l2_b1', 11), (111, 'l2_b2', 11), (112, 'l2_b3', 11)")
+		tk.MustExec("insert into t1 values (120, 'l2_c1', 12), (121, 'l2_c2', 12), (122, 'l2_c3', 12)")
+		tk.MustExec("insert into t1 values (1000,'l3_a1', 100)")
+		tk.MustExec("delete from t1 where id=11")
+		tk.MustQuery("select id from t1 order by id").Check(testkit.Rows("1", "10", "12", "100", "101", "102", "120", "121", "122", "1000"))
+		tk.MustExec("delete from t1 where id=1")
+		// The affect rows doesn't contain the cascade deleted rows, the behavior is compatible with MySQL.
+		require.Equal(t, uint64(1), tk.Session().GetSessionVars().StmtCtx.AffectedRows())
+		tk.MustQuery("select id from t1 order by id").Check(testkit.Rows())
 
-	// Test string type foreign key.
-	tk.MustExec("drop table t1")
-	tk.MustExec("create table t1 (id varchar(10) key, name varchar(10), leader varchar(10),  index(leader), foreign key (leader) references t1(id) ON DELETE CASCADE);")
-	tk.MustExec("insert into t1 values (1, 'boss', null)")
-	tk.MustExec("insert into t1 values (10, 'l1_a', 1), (11, 'l1_b', 1), (12, 'l1_c', 1)")
-	tk.MustExec("insert into t1 values (100, 'l2_a1', 10), (101, 'l2_a2', 10), (102, 'l2_a3', 10)")
-	tk.MustExec("insert into t1 values (110, 'l2_b1', 11), (111, 'l2_b2', 11), (112, 'l2_b3', 11)")
-	tk.MustExec("insert into t1 values (120, 'l2_c1', 12), (121, 'l2_c2', 12), (122, 'l2_c3', 12)")
-	tk.MustExec("insert into t1 values (1000,'l3_a1', 100)")
-	tk.MustExec("delete from t1 where id=11")
-	tk.MustQuery("select id from t1 order by id").Check(testkit.Rows("1", "10", "100", "1000", "101", "102", "12", "120", "121", "122"))
-	tk.MustExec("delete from t1 where id=1")
-	require.Equal(t, uint64(1), tk.Session().GetSessionVars().StmtCtx.AffectedRows())
-	tk.MustQuery("select id from t1 order by id").Check(testkit.Rows())
+		// Test string type foreign key.
+		tk.MustExec("drop table t1")
+		tk.MustExec("create table t1 (id varchar(10) key, name varchar(10), leader varchar(10),  index(leader), foreign key (leader) references t1(id) ON DELETE CASCADE);")
+		tk.MustExec("insert into t1 values (1, 'boss', null)")
+		tk.MustExec("insert into t1 values (10, 'l1_a', 1), (11, 'l1_b', 1), (12, 'l1_c', 1)")
+		tk.MustExec("insert into t1 values (100, 'l2_a1', 10), (101, 'l2_a2', 10), (102, 'l2_a3', 10)")
+		tk.MustExec("insert into t1 values (110, 'l2_b1', 11), (111, 'l2_b2', 11), (112, 'l2_b3', 11)")
+		tk.MustExec("insert into t1 values (120, 'l2_c1', 12), (121, 'l2_c2', 12), (122, 'l2_c3', 12)")
+		tk.MustExec("insert into t1 values (1000,'l3_a1', 100)")
+		tk.MustExec("delete from t1 where id=11")
+		tk.MustQuery("select id from t1 order by id").Check(testkit.Rows("1", "10", "100", "1000", "101", "102", "12", "120", "121", "122"))
+		tk.MustExec("delete from t1 where id=1")
+		require.Equal(t, uint64(1), tk.Session().GetSessionVars().StmtCtx.AffectedRows())
+		tk.MustQuery("select id from t1 order by id").Check(testkit.Rows())
 
-	// Test cascade delete depth.
-	tk.MustExec("drop table t1")
+		// Test cascade delete depth.
+		tk.MustExec("drop table t1")
+	*/
+
 	tk.MustExec("create table t1(id int primary key, pid int, index(pid), foreign key(pid) references t1(id) on delete cascade);")
 	tk.MustExec("insert into t1 values(0,0),(1,0),(2,1),(3,2),(4,3),(5,4),(6,5),(7,6),(8,7),(9,8),(10,9),(11,10),(12,11),(13,12),(14,13),(15,14);")
 	tk.MustGetDBError("delete from t1 where id=0;", executor.ErrForeignKeyCascadeDepthExceeded)

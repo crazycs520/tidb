@@ -593,6 +593,7 @@ func (fkc *FKCascadeExec) buildFKCascadePlan(ctx context.Context) (plannercore.P
 	case plannercore.FKCascadeOnDelete:
 		sqlStr, err = fkc.genCascadeDeleteSQL()
 	}
+	fmt.Printf("%v ------------------\n\n", sqlStr)
 	if err != nil || sqlStr == "" {
 		return nil, err
 	}

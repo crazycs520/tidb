@@ -544,7 +544,7 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		if err != nil {
 			return result, err
 		}
-		err = a.handleForeignKeyTrigger(ctx, e, isPessimistic, 1)
+		err = a.handleForeignKeyTrigger0(ctx, e, isPessimistic, 1)
 		return result, err
 	}
 
@@ -565,6 +565,34 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 }
 
 var maxForeignKeyCascadeDepth = 15
+
+func (a *ExecStmt) handleForeignKeyTrigger0(ctx context.Context, e Executor, isPessimistic bool, depth int) error {
+	_, ok := e.(WithForeignKeyTrigger)
+	if !ok {
+		return nil
+	}
+	txn, err := a.Ctx.Txn(false)
+	if err != nil || !txn.Valid() {
+		return err
+	}
+	savepointName := fmt.Sprintf("sp_%v", txn.StartTS())
+	memDBCheckpoint := txn.GetMemDBCheckpoint()
+	a.Ctx.GetSessionVars().TxnCtx.AddSavepoint(savepointName, memDBCheckpoint)
+
+	a.Ctx.StmtCommit()
+
+	err = a.handleForeignKeyTrigger(ctx, e, isPessimistic, depth)
+	if err != nil {
+		savepointRecord := a.Ctx.GetSessionVars().TxnCtx.RollbackToSavepoint(savepointName)
+		if savepointRecord == nil {
+			return errSavepointNotExists.GenWithStackByArgs("SAVEPOINT", savepointName)
+		}
+		txn.RollbackMemDBToCheckpoint(savepointRecord.MemDBCheckpoint)
+		return err
+	}
+	a.Ctx.GetSessionVars().TxnCtx.ReleaseSavepoint(savepointName)
+	return nil
+}
 
 func (a *ExecStmt) handleForeignKeyTrigger(ctx context.Context, e Executor, isPessimistic bool, depth int) error {
 	exec, ok := e.(WithForeignKeyTrigger)
@@ -594,15 +622,19 @@ func (a *ExecStmt) handleForeignKeyTrigger(ctx context.Context, e Executor, isPe
 }
 
 func (a *ExecStmt) handleForeignKeyCascade(ctx context.Context, fkc *FKCascadeExec, isPessimistic bool, depth int) error {
-	if a.fkCascaded.handled == nil {
-		a.fkCascaded.handled = make(map[tableIDAndFKID]map[string]struct{})
+	//if a.fkCascaded.handled == nil {
+	//	a.fkCascaded.handled = make(map[tableIDAndFKID]map[string]struct{})
+	//}
+	//var err error
+	//stmtCtx := a.Ctx.GetSessionVars().StmtCtx
+	//fkc.fkValues, err = a.fkCascaded.removeHandledFKValue(stmtCtx, fkc.childTable.ID, fkc.fk.ID, fkc.fkValues)
+	//if err != nil || len(fkc.fkValues) == 0 {
+	//	return err
+	//}
+	if len(fkc.fkValues) == 0 {
+		return nil
 	}
-	var err error
-	stmtCtx := a.Ctx.GetSessionVars().StmtCtx
-	fkc.fkValues, err = a.fkCascaded.removeHandledFKValue(stmtCtx, fkc.childTable.ID, fkc.fk.ID, fkc.fkValues)
-	if err != nil || len(fkc.fkValues) == 0 {
-		return err
-	}
+	fmt.Printf("%v ---------------\n\n", depth)
 	if depth > maxForeignKeyCascadeDepth {
 		return ErrForeignKeyCascadeDepthExceeded
 	}
@@ -618,10 +650,10 @@ func (a *ExecStmt) handleForeignKeyCascade(ctx context.Context, fkc *FKCascadeEx
 	if err != nil {
 		return err
 	}
-	err = a.fkCascaded.addHandledFKValue(stmtCtx, fkc.childTable.ID, fkc.fk.ID, fkc.fkValues)
-	if err != nil {
-		return err
-	}
+	//err = a.fkCascaded.addHandledFKValue(stmtCtx, fkc.childTable.ID, fkc.fk.ID, fkc.fkValues)
+	//if err != nil {
+	//	return err
+	//}
 	return a.handleForeignKeyTrigger(ctx, e, isPessimistic, depth+1)
 }
 
