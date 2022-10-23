@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/kv"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/coprocessor"
@@ -87,6 +88,11 @@ func BuildTableSinkerExecutor(src *TableReaderExecutor) (*IncrementTableReaderEx
 func BuildTableSinkerExecutorForMpp(src *MPPGather) (*IncrementTableReaderExecutor, error) {
 	is := sessiontxn.GetTxnManager(src.ctx).GetTxnInfoSchema()
 	b := newExecutorBuilder(src.ctx, is, nil)
+	src.tableReader.StoreType = kv.TiKV
+	src.ctx.GetSessionVars().DisableMPP()
+	defer func() {
+		src.ctx.GetSessionVars().EnableMPP()
+	}()
 	e := b.build(src.tableReader)
 	if b.err != nil {
 		return nil, errors.Errorf("build table reader failed, err: %v", b.err)

@@ -54,6 +54,9 @@ func (b *PBPlanBuilder) Build(executors []*tipb.Executor) (p PhysicalPlan, err e
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		if curr == nil {
+			continue
+		}
 		if src != nil {
 			curr.SetChildren(src)
 		}
@@ -79,6 +82,8 @@ func (b *PBPlanBuilder) pbToPhysicalPlan(e *tipb.Executor) (p PhysicalPlan, err 
 		p, err = b.pbToAgg(e, true)
 	case tipb.ExecType_TypeKill:
 		p, err = b.pbToKill(e)
+	case tipb.ExecType_TypeExchangeSender:
+		return nil, nil
 	default:
 		// TODO: Support other types.
 		err = errors.Errorf("this exec type %v doesn't support yet", e.GetTp())
