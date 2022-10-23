@@ -46,6 +46,8 @@ type MPPGather struct {
 	originalPlan plannercore.PhysicalPlan
 	startTS      uint64
 
+	tableReader *plannercore.PhysicalTableReader
+
 	mppReqs []*kv.MPPDispatchRequest
 
 	respIter distsql.SelectResult

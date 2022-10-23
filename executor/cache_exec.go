@@ -29,6 +29,12 @@ func replaceTableReader(e Executor) (Executor, error) {
 			return nil, err
 		}
 		return BuildTableSinkerExecutor(v)
+	case *MPPGather:
+		err := v.Close()
+		if err != nil {
+			return nil, err
+		}
+		return BuildTableSinkerExecutorForMpp(v)
 	}
 	for i, child := range e.base().children {
 		exec, err := replaceTableReader(child)
@@ -76,6 +82,22 @@ func BuildTableSinkerExecutor(src *TableReaderExecutor) (*IncrementTableReaderEx
 	}
 	ts.children = append(ts.children, copExec)
 	return ts, err
+}
+
+func BuildTableSinkerExecutorForMpp(src *MPPGather) (*IncrementTableReaderExecutor, error) {
+	is := sessiontxn.GetTxnManager(src.ctx).GetTxnInfoSchema()
+	b := newExecutorBuilder(src.ctx, is, nil)
+	e := b.build(src.tableReader)
+	if b.err != nil {
+		return nil, errors.Errorf("build table reader failed, err: %v", b.err)
+	}
+	tableReader, ok := e.(*TableReaderExecutor)
+	if !ok {
+		return nil, errors.Errorf("unknow executor %#v", e)
+	}
+	e.Open(context.Background())
+	defer e.Close()
+	return BuildTableSinkerExecutor(tableReader)
 }
 
 func buildCopExecutor(ctx sessionctx.Context, ranges []*coprocessor.KeyRange, dag *tipb.DAGRequest) (Executor, error) {
