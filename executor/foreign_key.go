@@ -17,8 +17,7 @@ package executor
 import (
 	"bytes"
 	"context"
-	"sync/atomic"
-
+	"fmt"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/model"
@@ -33,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/util/set"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
+	"sync/atomic"
 )
 
 // WithForeignKeyTrigger indicates the executor has foreign key check or cascade.
@@ -53,8 +53,16 @@ type FKCheckExec struct {
 	toBeCheckedKeys       []kv.Key
 	toBeCheckedPrefixKeys []kv.Key
 	toBeLockedKeys        []kv.Key
+	isPessimistic         bool
+
+	toBeSetKeyAndValues []keyAndValue
 
 	checkRowsCache map[string]bool
+}
+
+type keyAndValue struct {
+	k kv.Key
+	v []byte
 }
 
 // FKCascadeExec uses to execute foreign key cascade behaviour.
@@ -153,6 +161,7 @@ func (fkc *FKCheckExec) addRowNeedToCheck(sc *stmtctx.StatementContext, row []ty
 }
 
 func (fkc *FKCheckExec) doCheck(ctx context.Context) error {
+	//fkc.isPessimistic = fkc.ctx.GetSessionVars().TxnCtx.IsPessimistic
 	txn, err := fkc.ctx.Txn(false)
 	if err != nil {
 		return err
@@ -165,6 +174,16 @@ func (fkc *FKCheckExec) doCheck(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	memBuffer := txn.GetMemBuffer()
+	sh := memBuffer.Staging()
+	defer memBuffer.Cleanup(sh)
+	for _, item := range fkc.toBeSetKeyAndValues {
+		err = memBuffer.Set(item.k, item.v)
+		if err != nil {
+			return err
+		}
+	}
+	memBuffer.Release(sh)
 	if len(fkc.toBeLockedKeys) == 0 {
 		return nil
 	}
@@ -250,9 +269,10 @@ func (fkc *FKCheckExec) checkKey(ctx context.Context, txn kv.Transaction, k kv.K
 }
 
 func (fkc *FKCheckExec) checkKeyExist(ctx context.Context, txn kv.Transaction, k kv.Key) error {
-	_, err := txn.Get(ctx, k)
+	v, err := txn.Get(ctx, k)
 	if err == nil {
-		fkc.toBeLockedKeys = append(fkc.toBeLockedKeys, k)
+		//fkc.toBeLockedKeys = append(fkc.toBeLockedKeys, k)
+		fkc.toBeSetKeyAndValues = append(fkc.toBeSetKeyAndValues, keyAndValue{k: k, v: v})
 		return nil
 	}
 	if kv.IsErrNotFound(err) {
@@ -311,8 +331,9 @@ func (fkc *FKCheckExec) checkPrefixKeyExist(key kv.Key, value []byte) error {
 	if !exist {
 		return fkc.FailedErr
 	}
+	fkc.toBeSetKeyAndValues = append(fkc.toBeSetKeyAndValues, keyAndValue{k: key, v: value})
 	if fkc.Idx != nil && fkc.Idx.Meta().Primary && fkc.Tbl.Meta().IsCommonHandle {
-		fkc.toBeLockedKeys = append(fkc.toBeLockedKeys, key)
+		//fkc.toBeLockedKeys = append(fkc.toBeLockedKeys, key)
 	} else {
 		handle, err := tablecodec.DecodeIndexHandle(key, value, len(fkc.Idx.Meta().Columns))
 		if err != nil {
@@ -598,6 +619,7 @@ func (fkc *FKCascadeExec) buildFKCascadePlan(ctx context.Context) (plannercore.P
 	case plannercore.FKCascadeOnDelete:
 		sqlStr, err = GenCascadeDeleteSQL(fkc.referredFK.ChildSchema, fkc.childTable.Name, fkc.fk, fkc.fkValues)
 	}
+	fmt.Printf(" %v ------\n\n", sqlStr)
 	if err != nil {
 		return nil, err
 	}
