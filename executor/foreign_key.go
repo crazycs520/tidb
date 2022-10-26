@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
 	driver "github.com/pingcap/tidb/types/parser_driver"
@@ -610,43 +611,30 @@ func (fkc *FKCascadeExec) buildFKCascadePlan(ctx context.Context) (plannercore.P
 	if indexForFK != nil {
 		indexName = indexForFK.Name
 	}
-	//var sqlStr string
-	var stmtNode, stmtNode2 ast.StmtNode
-	var err error
+	cols := make([]*model.ColumnInfo, len(fkc.fk.Cols))
+	for i, c := range fkc.fk.Cols {
+		col := model.FindColumnInfo(fkc.childTable.Columns, c.L)
+		if col == nil {
+			return nil, errors.Errorf("should never hapen")
+		}
+		cols[i] = col
+	}
+	var stmtNode ast.StmtNode
 	switch fkc.tp {
 	case plannercore.FKCascadeOnDelete:
 		switch model.ReferOptionType(fkc.fk.OnDelete) {
 		case model.ReferOptionCascade:
-			stmtNode2 = GenCascadeDeleteAST(fkc.referredFK.ChildSchema, fkc.childTable.Name, indexName, fkc.fk, fkValues)
-			_ = stmtNode2
-			//sqlStr, err = GenCascadeDeleteSQL(fkc.referredFK.ChildSchema, fkc.childTable.Name, indexName, fkc.fk, fkValues)
-			//case model.ReferOptionSetNull:
-			//	sqlStr, err = GenCascadeSetNullSQL(fkc.referredFK.ChildSchema, fkc.childTable.Name, indexName, fkc.fk, fkValues)
+			stmtNode = GenCascadeDeleteAST(fkc.referredFK.ChildSchema, fkc.childTable.Name, indexName, cols, fkValues)
 		}
 	}
-	//if err != nil {
-	//	return nil, err
-	//}
-	//if sqlStr == "" {
-	//	return nil, errors.Errorf("generate foreign key cascade sql failed, %v", fkc.tp)
-	//}
-	//if stmtNode == nil {
-	//	return nil, errors.Errorf("generate foreign key cascade sql failed, %v", fkc.tp)
-	//}
+	if stmtNode == nil {
+		return nil, errors.Errorf("generate foreign key cascade sql failed, %v", fkc.tp)
+	}
 
 	sctx := fkc.b.ctx
-	//exec, ok := sctx.(sqlexec.RestrictedSQLExecutor)
-	//if !ok {
-	//	return nil, nil
-	//}
-	//stmtNode, err = exec.ParseWithParams(ctx, sqlStr)
-	//if err != nil {
-	//	return nil, err
-	//}
-	stmtNode = stmtNode2
 	var sb strings.Builder
 	fctx := format.NewRestoreCtx(format.DefaultRestoreFlags, &sb)
-	err = stmtNode.Restore(fctx)
+	err := stmtNode.Restore(fctx)
 	if err != nil {
 		return nil, err
 	}
@@ -686,52 +674,60 @@ func GenCascadeDeleteSQL(schema, table, idx model.CIStr, fk *model.FKInfo, fkVal
 	return buf.String(), nil
 }
 
-func GenCascadeDeleteAST(schema, table, idx model.CIStr, fk *model.FKInfo, fkValues [][]types.Datum) *ast.DeleteStmt {
-	tn := &ast.TableName{Schema: schema, Name: table}
-	tn.IndexHints = []*ast.IndexHint{{
-		IndexNames: []model.CIStr{idx},
-		HintType:   ast.HintUse,
-		HintScope:  ast.HintForScan,
-	}}
-	join := &ast.Join{Left: &ast.TableSource{Source: tn}}
+func GenCascadeDeleteAST(schema, table, idx model.CIStr, cols []*model.ColumnInfo, fkValues [][]types.Datum) *ast.DeleteStmt {
 	deleteStmt := &ast.DeleteStmt{
-		TableRefs: &ast.TableRefsClause{TableRefs: join},
-		Where:     genWhereConditionAst(fk, fkValues),
+		TableRefs: genTableRefsAST(schema, table, idx),
+		Where:     genWhereConditionAst(cols, fkValues),
 	}
 	return deleteStmt
 }
 
-func genWhereConditionAst(fk *model.FKInfo, fkValues [][]types.Datum) ast.ExprNode {
-	if len(fk.Cols) > 1 {
-		return genWhereConditionAstForMultiColumn(fk, fkValues)
+func genTableRefsAST(schema, table, idx model.CIStr) *ast.TableRefsClause {
+	tn := &ast.TableName{Schema: schema, Name: table}
+	if idx.L != "" {
+		tn.IndexHints = []*ast.IndexHint{{
+			IndexNames: []model.CIStr{idx},
+			HintType:   ast.HintUse,
+			HintScope:  ast.HintForScan,
+		}}
 	}
-	var colValues []ast.ExprNode
-	for i := range fk.Cols {
-		col := &ast.ColumnNameExpr{Name: &ast.ColumnName{Name: fk.Cols[i]}}
-		colValues = append(colValues, col)
+	join := &ast.Join{Left: &ast.TableSource{Source: tn}}
+	return &ast.TableRefsClause{TableRefs: join}
+}
+
+func genWhereConditionAst(cols []*model.ColumnInfo, fkValues [][]types.Datum) ast.ExprNode {
+	if len(cols) > 1 {
+		return genWhereConditionAstForMultiColumn(cols, fkValues)
 	}
 	valueList := make([]ast.ExprNode, 0, len(fkValues))
 	for _, fkVals := range fkValues {
-		row := &ast.ParenthesesExpr{Expr: &driver.ValueExpr{Datum: fkVals[0]}}
+		v := &driver.ValueExpr{Datum: fkVals[0]}
+		v.Type = cols[0].FieldType
+		row := &ast.ParenthesesExpr{Expr: v}
 		valueList = append(valueList, row)
 	}
 	return &ast.PatternInExpr{
-		Expr: &ast.ParenthesesExpr{Expr: &ast.ColumnNameExpr{Name: &ast.ColumnName{Name: fk.Cols[0]}}},
+		Expr: &ast.ParenthesesExpr{Expr: &ast.ColumnNameExpr{Name: &ast.ColumnName{Name: cols[0].Name}}},
 		List: valueList,
 	}
 }
 
-func genWhereConditionAstForMultiColumn(fk *model.FKInfo, fkValues [][]types.Datum) ast.ExprNode {
+func genWhereConditionAstForMultiColumn(cols []*model.ColumnInfo, fkValues [][]types.Datum) ast.ExprNode {
 	var colValues []ast.ExprNode
-	for i := range fk.Cols {
-		col := &ast.ColumnNameExpr{Name: &ast.ColumnName{Name: fk.Cols[i]}}
+	for i := range cols {
+		col := &ast.ColumnNameExpr{Name: &ast.ColumnName{Name: cols[i].Name}}
 		colValues = append(colValues, col)
 	}
 	valueList := make([]ast.ExprNode, 0, len(fkValues))
 	for _, fkVals := range fkValues {
 		values := make([]ast.ExprNode, len(fkVals))
 		for i, v := range fkVals {
-			values[i] = &driver.ValueExpr{Datum: v}
+			values[i] = &driver.ValueExpr{
+				TexprNode: ast.TexprNode{
+					Type: cols[i].FieldType,
+				},
+				Datum: v,
+			}
 		}
 		row := &ast.RowExpr{Values: values}
 		valueList = append(valueList, row)
