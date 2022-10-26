@@ -17,9 +17,13 @@ package executor
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/format"
+	driver "github.com/pingcap/tidb/types/parser_driver"
+	"strings"
 	"sync/atomic"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/planner"
@@ -31,7 +35,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/set"
-	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
 )
 
@@ -607,33 +610,49 @@ func (fkc *FKCascadeExec) buildFKCascadePlan(ctx context.Context) (plannercore.P
 	if indexForFK != nil {
 		indexName = indexForFK.Name
 	}
-	var sqlStr string
+	//var sqlStr string
+	var stmtNode, stmtNode2 ast.StmtNode
 	var err error
 	switch fkc.tp {
 	case plannercore.FKCascadeOnDelete:
 		switch model.ReferOptionType(fkc.fk.OnDelete) {
 		case model.ReferOptionCascade:
-			sqlStr, err = GenCascadeDeleteSQL(fkc.referredFK.ChildSchema, fkc.childTable.Name, indexName, fkc.fk, fkValues)
-		case model.ReferOptionSetNull:
-			sqlStr, err = GenCascadeSetNullSQL(fkc.referredFK.ChildSchema, fkc.childTable.Name, indexName, fkc.fk, fkValues)
+			stmtNode2 = GenCascadeDeleteAST(fkc.referredFK.ChildSchema, fkc.childTable.Name, indexName, fkc.fk, fkValues)
+			_ = stmtNode2
+			//sqlStr, err = GenCascadeDeleteSQL(fkc.referredFK.ChildSchema, fkc.childTable.Name, indexName, fkc.fk, fkValues)
+			//case model.ReferOptionSetNull:
+			//	sqlStr, err = GenCascadeSetNullSQL(fkc.referredFK.ChildSchema, fkc.childTable.Name, indexName, fkc.fk, fkValues)
 		}
 	}
-	if err != nil {
-		return nil, err
-	}
-	if sqlStr == "" {
-		return nil, errors.Errorf("generate foreign key cascade sql failed, %v", fkc.tp)
-	}
+	//if err != nil {
+	//	return nil, err
+	//}
+	//if sqlStr == "" {
+	//	return nil, errors.Errorf("generate foreign key cascade sql failed, %v", fkc.tp)
+	//}
+	//if stmtNode == nil {
+	//	return nil, errors.Errorf("generate foreign key cascade sql failed, %v", fkc.tp)
+	//}
 
 	sctx := fkc.b.ctx
-	exec, ok := sctx.(sqlexec.RestrictedSQLExecutor)
-	if !ok {
-		return nil, nil
-	}
-	stmtNode, err := exec.ParseWithParams(ctx, sqlStr)
+	//exec, ok := sctx.(sqlexec.RestrictedSQLExecutor)
+	//if !ok {
+	//	return nil, nil
+	//}
+	//stmtNode, err = exec.ParseWithParams(ctx, sqlStr)
+	//if err != nil {
+	//	return nil, err
+	//}
+	stmtNode = stmtNode2
+	var sb strings.Builder
+	fctx := format.NewRestoreCtx(format.DefaultRestoreFlags, &sb)
+	err = stmtNode.Restore(fctx)
 	if err != nil {
 		return nil, err
 	}
+	sql2 := sb.String()
+	fmt.Printf("%v -------\n\n", sql2)
+
 	ret := &plannercore.PreprocessorReturn{}
 	err = plannercore.Preprocess(ctx, sctx, stmtNode, plannercore.WithPreprocessorReturn(ret), plannercore.InitTxnContextProvider)
 	if err != nil {
@@ -665,6 +684,62 @@ func GenCascadeDeleteSQL(schema, table, idx model.CIStr, fk *model.FKInfo, fkVal
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+func GenCascadeDeleteAST(schema, table, idx model.CIStr, fk *model.FKInfo, fkValues [][]types.Datum) *ast.DeleteStmt {
+	tn := &ast.TableName{Schema: schema, Name: table}
+	tn.IndexHints = []*ast.IndexHint{{
+		IndexNames: []model.CIStr{idx},
+		HintType:   ast.HintUse,
+		HintScope:  ast.HintForScan,
+	}}
+	join := &ast.Join{Left: &ast.TableSource{Source: tn}}
+	deleteStmt := &ast.DeleteStmt{
+		TableRefs: &ast.TableRefsClause{TableRefs: join},
+		Where:     genWhereConditionAst(fk, fkValues),
+	}
+	return deleteStmt
+}
+
+func genWhereConditionAst(fk *model.FKInfo, fkValues [][]types.Datum) ast.ExprNode {
+	if len(fk.Cols) > 1 {
+		return genWhereConditionAstForMultiColumn(fk, fkValues)
+	}
+	var colValues []ast.ExprNode
+	for i := range fk.Cols {
+		col := &ast.ColumnNameExpr{Name: &ast.ColumnName{Name: fk.Cols[i]}}
+		colValues = append(colValues, col)
+	}
+	valueList := make([]ast.ExprNode, 0, len(fkValues))
+	for _, fkVals := range fkValues {
+		row := &ast.ParenthesesExpr{Expr: &driver.ValueExpr{Datum: fkVals[0]}}
+		valueList = append(valueList, row)
+	}
+	return &ast.PatternInExpr{
+		Expr: &ast.ParenthesesExpr{Expr: &ast.ColumnNameExpr{Name: &ast.ColumnName{Name: fk.Cols[0]}}},
+		List: valueList,
+	}
+}
+
+func genWhereConditionAstForMultiColumn(fk *model.FKInfo, fkValues [][]types.Datum) ast.ExprNode {
+	var colValues []ast.ExprNode
+	for i := range fk.Cols {
+		col := &ast.ColumnNameExpr{Name: &ast.ColumnName{Name: fk.Cols[i]}}
+		colValues = append(colValues, col)
+	}
+	valueList := make([]ast.ExprNode, 0, len(fkValues))
+	for _, fkVals := range fkValues {
+		values := make([]ast.ExprNode, len(fkVals))
+		for i, v := range fkVals {
+			values[i] = &driver.ValueExpr{Datum: v}
+		}
+		row := &ast.RowExpr{Values: values}
+		valueList = append(valueList, row)
+	}
+	return &ast.PatternInExpr{
+		Expr: &ast.RowExpr{Values: colValues},
+		List: valueList,
+	}
 }
 
 // GenCascadeSetNullSQL uses to generate foreign key `SET NULL` SQL, export for test.

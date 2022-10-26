@@ -16,6 +16,7 @@ package fk_test
 
 import (
 	"fmt"
+	"github.com/pingcap/tidb/parser/format"
 	"strconv"
 	"strings"
 	"sync"
@@ -1269,6 +1270,13 @@ func TestForeignKeyGenerateCascadeSQL(t *testing.T) {
 	sql, err = executor.GenCascadeSetNullSQL(model.NewCIStr("test"), model.NewCIStr("t"), model.NewCIStr("idx"), fk, fkValues)
 	require.NoError(t, err)
 	require.Equal(t, "UPDATE `test`.`t` USE INDEX(`idx`) SET `c0`=NULL, `c1`=NULL WHERE (`c0`, `c1`) IN ((1,'a'), (2,'b'))", sql)
+
+	deleteStmt := executor.GenCascadeDeleteAST(model.NewCIStr("test"), model.NewCIStr("t"), model.NewCIStr("idx"), fk, fkValues)
+	var sb strings.Builder
+	ctx := format.NewRestoreCtx(format.DefaultRestoreFlags, &sb)
+	err = deleteStmt.Restore(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "DELETE FROM `test`.`t` USE INDEX(`idx`) WHERE (`c0`, `c1`) IN ((1,'a'), (2,'b'))", sb.String())
 }
 
 func TestForeignKeyOnDeleteSetNull(t *testing.T) {
