@@ -19,12 +19,14 @@ package testkit
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/pingcap/badger/y"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
@@ -52,6 +54,7 @@ type TestKit struct {
 	store   kv.Storage
 	session session.Session
 	alloc   chunk.Allocator
+	output  *os.File
 }
 
 // NewTestKit returns a new *TestKit.
@@ -115,6 +118,46 @@ func (tk *TestKit) Session() session.Session {
 	return tk.session
 }
 
+func (tk *TestKit) InitOutputTest(fileName string, comment string) {
+	file, err := y.OpenTruncFile(fileName, false)
+	tk.require.NoError(err)
+	tk.output = file
+	if comment != "" {
+		tk.output.WriteString("# " + comment + "\n")
+	}
+}
+
+func (tk *TestKit) AddOutputComment(comments ...string) {
+	tk.output.WriteString("\n")
+	for _, comment := range comments {
+		tk.output.WriteString("# " + comment + "\n")
+	}
+	tk.output.WriteString("#\n")
+}
+
+func (tk *TestKit) Close() {
+	err := tk.output.Sync()
+	tk.require.NoError(err)
+	err = tk.output.Close()
+	tk.require.NoError(err)
+}
+
+func (tk *TestKit) AddSQLToOutput(sql string, err error) {
+	if tk.output == nil {
+		return
+	}
+	if !strings.HasSuffix(sql, ";") {
+		sql += ";"
+	}
+	if !strings.HasSuffix(sql, "\n") {
+		sql += "\n"
+	}
+	if err != nil {
+		tk.output.WriteString("--error ER_" + err.Error() + "\n")
+	}
+	tk.output.WriteString(sql)
+}
+
 // MustExec executes a sql statement and asserts nil error.
 func (tk *TestKit) MustExec(sql string, args ...interface{}) {
 	defer func() {
@@ -130,6 +173,7 @@ func (tk *TestKit) MustExecWithContext(ctx context.Context, sql string, args ...
 	res, err := tk.ExecWithContext(ctx, sql, args...)
 	comment := fmt.Sprintf("sql:%s, %v, error stack %v", sql, args, errors.ErrorStack(err))
 	tk.require.NoError(err, comment)
+	tk.AddSQLToOutput(sql, nil)
 
 	if res != nil {
 		tk.require.NoError(res.Close())
@@ -153,6 +197,7 @@ func (tk *TestKit) MustQueryWithContext(ctx context.Context, sql string, args ..
 	rs, err := tk.ExecWithContext(ctx, sql, args...)
 	tk.require.NoError(err, comment)
 	tk.require.NotNil(rs, comment)
+	tk.AddSQLToOutput(sql, nil)
 	return tk.ResultSetToResultWithCtx(ctx, rs, comment)
 }
 
@@ -207,6 +252,7 @@ func (tk *TestKit) QueryToErr(sql string, args ...interface{}) error {
 	tk.require.NotNil(res, comment)
 	_, resErr := session.GetRows4Test(context.Background(), tk.session, res)
 	tk.require.NoError(res.Close())
+	tk.AddSQLToOutput(sql, resErr)
 	return resErr
 }
 
@@ -315,11 +361,7 @@ func (tk *TestKit) ExecWithContext(ctx context.Context, sql string, args ...inte
 		for i, stmt := range stmts {
 			var rs sqlexec.RecordSet
 			var err error
-			if s, ok := stmt.(*ast.NonTransactionalDMLStmt); ok {
-				rs, err = session.HandleNonTransactionalDML(ctx, s, tk.Session())
-			} else {
-				rs, err = tk.Session().ExecuteStmt(ctx, stmt)
-			}
+			rs, err = tk.Session().ExecuteStmt(ctx, stmt)
 			if i == 0 {
 				rs0 = rs
 			}
@@ -357,6 +399,7 @@ func (tk *TestKit) ExecToErr(sql string, args ...interface{}) error {
 	if res != nil {
 		tk.require.NoError(res.Close())
 	}
+	tk.AddSQLToOutput(sql, err)
 	return err
 }
 
