@@ -1610,15 +1610,26 @@ func TestForeignKeyOnDeleteSetNull2(t *testing.T) {
 	tk.MustQuery("select count(*) from t2 where id is null").Check(testkit.Rows("32768"))
 }
 
+var splitTestComment = "--------------------------------------------------------------------------"
+
 func TestForeignKeyOnUpdateCascade(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	defer func() {
+		tk.AddOutputComment(splitTestComment)
+		tk.Close()
+	}()
+
+	testComment := "Test foreign key on update cascade"
+	tk.InitOutputTest("fk.test", "")
+
 	tk.MustExec("set @@global.tidb_enable_foreign_key=1")
 	tk.MustExec("set @@foreign_key_checks=1")
-	tk.MustExec("use test")
 
 	cases := []struct {
 		prepareSQLs []string
+		comment     string
 	}{
 		// Case-1: test unique index only contain foreign key columns.
 		{
@@ -1626,6 +1637,7 @@ func TestForeignKeyOnUpdateCascade(t *testing.T) {
 				"create table t1 (id int, a int, b int,  unique index(a, b));",
 				"create table t2 (b int, name varchar(10), a int, id int, unique index (a,b), foreign key fk(a, b) references t1(a, b) ON UPDATE CASCADE);",
 			},
+			comment: "Case-1: test unique index only contain foreign key columns.",
 		},
 		// Case-2: test unique index contain foreign key columns and other columns.
 		{
@@ -1633,6 +1645,7 @@ func TestForeignKeyOnUpdateCascade(t *testing.T) {
 				"create table t1 (id int key, a int, b int, unique index(a, b, id));",
 				"create table t2 (b int, name varchar(10), a int, id int key, unique index (a,b, id), foreign key fk(a, b) references t1(a, b) ON UPDATE CASCADE);",
 			},
+			comment: "Case-2: test unique index contain foreign key columns and other columns.",
 		},
 		// Case-3: test non-unique index only contain foreign key columns.
 		{
@@ -1640,6 +1653,7 @@ func TestForeignKeyOnUpdateCascade(t *testing.T) {
 				"create table t1 (id int key,a int, b int, index(a, b));",
 				"create table t2 (b int, a int, name varchar(10), id int key, index (a, b), foreign key fk(a, b) references t1(a, b) ON UPDATE CASCADE);",
 			},
+			comment: "Case-3: test non-unique index only contain foreign key columns.",
 		},
 		// Case-4: test non-unique index contain foreign key columns and other columns.
 		{
@@ -1647,10 +1661,12 @@ func TestForeignKeyOnUpdateCascade(t *testing.T) {
 				"create table t1 (id int key,a int, b int,  index(a, b, id));",
 				"create table t2 (name varchar(10), b int, id int key, a int, index (a, b, id), foreign key fk(a, b) references t1(a, b) ON UPDATE CASCADE);",
 			},
+			comment: "Case-4: test non-unique index contain foreign key columns and other columns.",
 		},
 	}
 
 	for idx, ca := range cases {
+		tk.AddOutputComment(testComment, ca.comment)
 		tk.MustExec("drop table if exists t2;")
 		tk.MustExec("drop table if exists t1;")
 		for _, sql := range ca.prepareSQLs {
@@ -1737,6 +1753,7 @@ func TestForeignKeyOnUpdateCascade(t *testing.T) {
 
 	cases = []struct {
 		prepareSQLs []string
+		comment     string
 	}{
 		// Case-5: test primary key only contain foreign key columns, and disable tidb_enable_clustered_index.
 		{
@@ -1745,6 +1762,7 @@ func TestForeignKeyOnUpdateCascade(t *testing.T) {
 				"create table t1 (id int, a int, b int,  primary key (a, b));",
 				"create table t2 (b int,  a int, name varchar(10), id int, primary key (a, b), foreign key fk(a, b) references t1(a, b) ON UPDATE CASCADE);",
 			},
+			comment: "Case-5: test primary key only contain foreign key columns, and disable tidb_enable_clustered_index.",
 		},
 		// Case-6: test primary key only contain foreign key columns, and enable tidb_enable_clustered_index.
 		{
@@ -1753,6 +1771,7 @@ func TestForeignKeyOnUpdateCascade(t *testing.T) {
 				"create table t1 (id int, a int, b int,  primary key (a, b));",
 				"create table t2 (name varchar(10), b int,  a int, id int, primary key (a, b), foreign key fk(a, b) references t1(a, b) ON UPDATE CASCADE);",
 			},
+			comment: "Case-6: test primary key only contain foreign key columns, and enable tidb_enable_clustered_index.",
 		},
 		// Case-7: test primary key contain foreign key columns and other column, and disable tidb_enable_clustered_index.
 		{
@@ -1761,6 +1780,7 @@ func TestForeignKeyOnUpdateCascade(t *testing.T) {
 				"create table t1 (id int, a int, b int,  primary key (a, b, id));",
 				"create table t2 (b int, name varchar(10),  a int, id int, primary key (a, b, id), foreign key fk(a, b) references t1(a, b) ON UPDATE CASCADE);",
 			},
+			comment: "Case-7: test primary key contain foreign key columns and other column, and disable tidb_enable_clustered_index.",
 		},
 		// Case-8: test primary key contain foreign key columns and other column, and enable tidb_enable_clustered_index.
 		{
@@ -1769,9 +1789,11 @@ func TestForeignKeyOnUpdateCascade(t *testing.T) {
 				"create table t1 (id int, a int, b int,  primary key (a, b, id));",
 				"create table t2 (b int,  a int, id int, name varchar(10), primary key (a, b, id), foreign key fk(a, b) references t1(a, b) ON UPDATE CASCADE);",
 			},
+			comment: "Case-8: test primary key contain foreign key columns and other column, and enable tidb_enable_clustered_index.",
 		},
 	}
 	for idx, ca := range cases {
+		tk.AddOutputComment(testComment, ca.comment)
 		tk.MustExec("drop table if exists t2;")
 		tk.MustExec("drop table if exists t1;")
 		for _, sql := range ca.prepareSQLs {
@@ -1826,6 +1848,7 @@ func TestForeignKeyOnUpdateCascade(t *testing.T) {
 	}
 
 	// Case-9: test primary key is handle and contain foreign key column.
+	tk.AddOutputComment(testComment, "Case-9: test primary key is handle and contain foreign key column.")
 	tk.MustExec("drop table if exists t2;")
 	tk.MustExec("drop table if exists t1;")
 	tk.MustExec("set @@tidb_enable_clustered_index=0;")
@@ -1845,7 +1868,14 @@ func TestForeignKeyOnUpdateCascade2(t *testing.T) {
 	tk.MustExec("set @@foreign_key_checks=1")
 	tk.MustExec("use test")
 
+	defer func() {
+		tk.AddOutputComment(splitTestComment)
+		tk.Close()
+	}()
+	tk.InitOutputTest("fk.test", "")
+
 	// Test update same old row in parent, but only the first old row do cascade update
+	tk.AddOutputComment("Test update same old row in parent, but only the first old row do cascade update")
 	tk.MustExec("create table t1 (id int key, a int,  index (a));")
 	tk.MustExec("create table t2 (id int key, pid int, constraint fk_pid foreign key (pid) references t1(a) ON UPDATE CASCADE);")
 	tk.MustExec("insert into t1 (id, a) values   (1,1), (2, 1)")
@@ -1855,6 +1885,7 @@ func TestForeignKeyOnUpdateCascade2(t *testing.T) {
 	tk.MustQuery("select id, pid from t2 order by id").Check(testkit.Rows("1 2", "2 2"))
 
 	// Test cascade delete in self table.
+	tk.AddOutputComment("Test cascade delete in self table")
 	tk.MustExec("drop table if exists t1, t2")
 	tk.MustExec("create table t1 (id int key, name varchar(10), leader int,  index(leader), foreign key (leader) references t1(id) ON UPDATE CASCADE);")
 	tk.MustExec("insert into t1 values (1, 'boss', null), (10, 'l1_a', 1), (11, 'l1_b', 1), (12, 'l1_c', 1)")
@@ -1867,10 +1898,12 @@ func TestForeignKeyOnUpdateCascade2(t *testing.T) {
 	tk.MustQuery("select id, name, leader from t1 order by id").Check(testkit.Rows("0 boss <nil>", "10 l1_a 0", "12 l1_c 0", "100 l2_a1 10", "110 l2_b1 10011", "1000 l3_a1 100", "10011 l1_b 0"))
 
 	// Test explain analyze with foreign key cascade.
+	tk.AddOutputComment("Test explain analyze with foreign key cascade.")
 	tk.MustExec("explain analyze update t1 set id=1 where id=10")
 	tk.MustQuery("select id, name, leader from t1 order by id").Check(testkit.Rows("0 boss <nil>", "1 l1_a 0", "12 l1_c 0", "100 l2_a1 1", "110 l2_b1 10011", "1000 l3_a1 100", "10011 l1_b 0"))
 
 	// Test cascade delete in self table with string type foreign key.
+	tk.AddOutputComment("Test cascade delete in self table with string type foreign key.")
 	tk.MustExec("drop table if exists t1, t2")
 	tk.MustExec("create table t1 (id varchar(100) key, name varchar(10), leader varchar(100),  index(leader), foreign key (leader) references t1(id) ON UPDATE CASCADE);")
 	tk.MustExec("insert into t1 values (1, 'boss', null), (10, 'l1_a', 1), (11, 'l1_b', 1), (12, 'l1_c', 1)")
@@ -1883,6 +1916,7 @@ func TestForeignKeyOnUpdateCascade2(t *testing.T) {
 	tk.MustQuery("select id, name, leader from t1 order by name").Check(testkit.Rows("0 boss <nil>", "10 l1_a 0", "10011 l1_b 0", "12 l1_c 0", "100 l2_a1 10", "110 l2_b1 10011", "1000 l3_a1 100"))
 
 	// Test cascade delete depth error.
+	tk.AddOutputComment("Test cascade delete depth error.")
 	tk.MustExec("drop table if exists t1, t2")
 	tk.MustExec("create table t0 (id int, unique index(id))")
 	tk.MustExec("insert into t0 values (1)")
@@ -1902,6 +1936,7 @@ func TestForeignKeyOnUpdateCascade2(t *testing.T) {
 	}
 
 	// Test handle many foreign key value in one cascade.
+	tk.AddOutputComment("Test handle many foreign key value in one cascade.")
 	tk.MustExec("create table t1 (id int auto_increment key, b int, index(b));")
 	tk.MustExec("create table t2 (id int, b int, foreign key fk(b) references t1(b) on update cascade)")
 	tk.MustExec("insert into t1 (b) values (1),(2),(3),(4),(5),(6),(7),(8);")
@@ -1917,11 +1952,22 @@ func TestForeignKeyOnUpdateCascade2(t *testing.T) {
 func TestForeignKeyOnUpdateSetNull(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	defer func() {
+		tk.AddOutputComment(splitTestComment)
+		tk.Close()
+	}()
+
+	testComment := "Test foreign key on update cascade"
+	tk.InitOutputTest("fk.test", "")
+
 	tk.MustExec("set @@global.tidb_enable_foreign_key=1")
 	tk.MustExec("set @@foreign_key_checks=1")
-	tk.MustExec("use test")
+	tk.MustExec("set @@global.tidb_enable_foreign_key=1")
+	tk.MustExec("set @@foreign_key_checks=1")
 
 	// Test handle many foreign key value in one cascade.
+	tk.AddOutputComment(testComment, "Test handle many foreign key value in one cascade")
 	tk.MustExec("create table t1 (id int auto_increment key, b int, index(b));")
 	tk.MustExec("create table t2 (id int, b int, foreign key fk(b) references t1(b) on update set null)")
 	tk.MustExec("insert into t1 (b) values (1),(2),(3),(4),(5),(6),(7),(8);")
@@ -2011,9 +2057,19 @@ func TestForeignKeyCascadeOnDiffColumnType(t *testing.T) {
 func TestForeignKeyOnInsertOnDuplicateUpdate(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	defer func() {
+		tk.AddOutputComment(splitTestComment)
+		tk.Close()
+	}()
+
+	testComment := "Test foreign key on update cascade in insert on duplicate key update statement"
+	tk.InitOutputTest("fk.test", "")
+
 	tk.MustExec("set @@global.tidb_enable_foreign_key=1")
 	tk.MustExec("set @@foreign_key_checks=1")
-	tk.MustExec("use test")
+
+	tk.AddOutputComment(testComment)
 	tk.MustExec("create table t1 (id int key, name varchar(10));")
 	tk.MustExec("create table t2 (id int key, pid int, foreign key fk(pid) references t1(id) ON UPDATE CASCADE ON DELETE CASCADE);")
 	tk.MustExec("insert into t1 values (1, 'a'), (2, 'b')")
