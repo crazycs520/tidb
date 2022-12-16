@@ -1701,7 +1701,11 @@ func (cc *clientConn) handleLoadData(ctx context.Context, loadDataInfo *executor
 	if !loadDataInfo.Table.Meta().IsBaseTable() {
 		return errors.New("can only load data into base tables")
 	}
-	err := cc.writeReq(ctx, loadDataInfo.Path)
+	p := loadDataInfo.Path
+	if p == "" {
+		p = "''"
+	}
+	err := cc.writeReq(ctx, p)
 	if err != nil {
 		return err
 	}
