@@ -3312,6 +3312,15 @@ func TestIssue21835(t *testing.T) {
 	tk.MustGetErrMsg("create table t( col decimal(1,2) not null default 0);", "[types:1427]For float(M,D), double(M,D) or decimal(M,D), M must be >= D (column 'col').")
 }
 
+func TestTemporaryTableCs(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+
+	tk.MustExec("create temporary table t1 (id int)")
+	tk.MustExec("alter table t1 add column a int")
+}
+
 func TestCreateTemporaryTable(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
