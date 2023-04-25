@@ -5,7 +5,18 @@ Usage:
 2. 
 
 ```sql
-select max(duration) as t,max(detail) as d from `GOROUTINE_ANALYZE` group by digest order by t desc, d desc\G
+show create table INFORMATION_SCHEMA.GOROUTINE_ANALYZE\G
+***************************[ 1. row ]***************************
+Table        | GOROUTINE_ANALYZE
+Create Table | CREATE TABLE `GOROUTINE_ANALYZE` (
+  `id` bigint(64) unsigned NOT NULL,
+  `state` varchar(64) DEFAULT NULL,
+  `digest` longtext DEFAULT NULL,
+  `duration` bigint(64) DEFAULT NULL COMMENT 'unit is minute',
+  `detail` longtext DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
+
+select max(duration) as t,max(detail) as d from INFORMATION_SCHEMA.GOROUTINE_ANALYZE group by digest order by t desc, d desc\G
 ```
 
 
