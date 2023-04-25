@@ -2,7 +2,8 @@
 Usage:
 
 1. move the `goroutine` file in the current directry.
-2. 
+2. start tidb server: `bin/tidb-server`
+3. use following SQL to analyze goroutine:
 
 ```sql
 show create table INFORMATION_SCHEMA.GOROUTINE_ANALYZE\G
