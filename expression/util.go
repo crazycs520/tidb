@@ -1335,6 +1335,7 @@ func RemoveMutableConst(ctx sessionctx.Context, exprs []Expression) {
 		case *Constant:
 			v.ParamMarker = nil
 			v.DeferredExpr = nil
+			logutil.BgLogger().Info("--- RemoveMutableConst", zap.Stack("stack"))
 		case *ScalarFunction:
 			RemoveMutableConst(ctx, v.GetArgs())
 		}
