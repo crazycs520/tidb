@@ -15,7 +15,11 @@
 package core
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/bindinfo"
@@ -458,6 +462,34 @@ func rebuildRange(p Plan) error {
 						return errors.New("rebuild to get an unsafe range")
 					}
 					x.Handle = kv.IntHandle(ranges[0].LowVal[0].GetInt64())
+				}
+				if x.TblInfo.Name.L == "cycle" {
+					params := sctx.GetSessionVars().PlanCacheParams.AllParamValues()
+					paramsStr := ""
+					for i, param := range params {
+						if i > 0 {
+							paramsStr += ","
+						}
+						paramsStr += param.String()
+					}
+					accessStr := bytes.Buffer{}
+					for _, expr := range x.AccessConditions {
+						scalaFn, ok := expr.(*expression.ScalarFunction)
+						if !ok {
+							continue
+						}
+						args := scalaFn.GetArgs()
+						if len(args) != 2 {
+							continue
+						}
+						constantVal := args[1].(*expression.Constant)
+						constantVal.Value.String()
+						evalVal, _ := constantVal.Eval(chunk.Row{})
+						msg := fmt.Sprintf("value: %v, ParamMarker: %v, DeferredExpr:%v, Eval: %v", constantVal.Value.String(), constantVal.ParamMarker, constantVal.DeferredExpr, evalVal.String())
+						accessStr.WriteString(msg)
+						accessStr.WriteString("    \t")
+					}
+					logutil.BgLogger().Info("--- plan cache rebuild range", zap.Uint64("start-ts", sctx.GetSessionVars().TxnCtx.StartTS), zap.Bool("pk-col-is-nil", pkCol == nil), zap.String("cache-params", paramsStr), zap.String("x.AccessConditions", accessStr.String()), zap.String("handle", x.Handle.String()))
 				}
 			}
 		}
