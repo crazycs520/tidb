@@ -17,6 +17,8 @@ package executor
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -304,6 +306,10 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 				failpoint.InjectContext(ctx, "pointGetRepeatableReadTest-step2", nil)
 			})
 		}
+	}
+
+	if e.tblInfo.Name.L == "cycle" {
+		logutil.BgLogger().Info("--- point get row", zap.Uint64("start-ts", e.ctx.GetSessionVars().TxnCtx.StartTS), zap.String("handle", e.handle.String()))
 	}
 
 	key := tablecodec.EncodeRowKeyWithHandle(tblID, e.handle)
