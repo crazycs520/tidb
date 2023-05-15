@@ -17,6 +17,10 @@ package cpuprofile
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	"fmt"
+	"github.com/pingcap/tidb/tablecodec"
+	"github.com/pingcap/tidb/util/codec"
 	"io"
 	"net"
 	"net/http"
@@ -240,4 +244,23 @@ func TestProfileHTTPHandler(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "profile duration exceeds server's WriteTimeout\n", string(body))
 	require.NoError(t, resp.Body.Close())
+}
+
+func TestPrint(t *testing.T) {
+	s := "7480000000000000FF645F728000000000FF0000040000000000FA"
+	key, err := hex.DecodeString(s)
+	require.NoError(t, err)
+	fmt.Printf("%X  \n", key)
+	//// Auto decode byte if needed.
+	_, bs, err := codec.DecodeBytes(key, nil)
+	if err == nil {
+		key = bs
+	}
+	fmt.Printf("%v  %v \n", hex.EncodeToString(key), key)
+	tableID := tablecodec.DecodeTableID(key)
+	fmt.Printf("%v \n", tableID)
+	//if tableID == 0 {
+	//	sc.AppendWarning(errors.Errorf("invalid key: %X", key))
+	//	return s
+	//}
 }

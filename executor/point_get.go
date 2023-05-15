@@ -307,6 +307,9 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 	}
 
 	key := tablecodec.EncodeRowKeyWithHandle(tblID, e.handle)
+	//if tblID == 100 {
+	//	fmt.Printf("\n----point get key: %v   %v  ------\n", key.String(), hex.EncodeToString(codec.EncodeBytes(nil, key)))
+	//}
 	val, err := e.getAndLock(ctx, key)
 	if err != nil {
 		return err
