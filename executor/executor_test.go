@@ -6305,3 +6305,14 @@ func TestProcessInfoOfSubQuery(t *testing.T) {
 	tk2.MustQuery("select 1 from information_schema.processlist where TxnStart != '' and info like 'select%sleep% from t%'").Check(testkit.Rows("1"))
 	wg.Wait()
 }
+
+func TestDebugCS0(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("create table t (i int key, j int);")
+	tk.MustExec("insert into t values (1, 1);")
+	time.Sleep(time.Second)
+	tk.MustExec("set @@tidb_read_staleness=-1;")
+	tk.MustQuery("select * from t where i = 1;").Check(testkit.Rows("1 1"))
+}
