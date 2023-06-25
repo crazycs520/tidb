@@ -18,6 +18,7 @@ package server
 import (
 	"context"
 	"crypto/x509"
+	"github.com/pingcap/failpoint"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -87,6 +88,27 @@ func TestLoadDataListPartition(t *testing.T) {
 	ts.runTestLoadDataForListPartition2(t)
 	ts.runTestLoadDataForListColumnPartition(t)
 	ts.runTestLoadDataForListColumnPartition2(t)
+}
+
+func TestStmtMaxExecutionTimeoutCs(t *testing.T) {
+	ts := createTidbTestSuite(t)
+	handle := ts.domain.ExpensiveQueryHandle().SetSessionManager(ts.server)
+	go handle.Run()
+
+	ts.runTestsOnNewDB(t, nil, "StmtMaxExecutionTimeout", func(dbt *testkit.DBTestKit) {
+		tk := dbt
+		tk.MustExec("use test")
+		tk.MustExec("create table t (i int key, j int);")
+		tk.MustExec("insert into t values (1, 1);")
+		time.Sleep(time.Second)
+		tk.MustExec("set @@tidb_read_staleness=-1;")
+		require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/store/mockstore/unistore/rpcDataIsNotReady", "return(true)"))
+		defer func() {
+			require.NoError(t, failpoint.Disable("github.com/pingcap/tidb/store/mockstore/unistore/"))
+		}()
+		tk.MustExec("set @@max_execution_time=60000")
+		tk.MustQuery("select * from t where i = 1;")
+	})
 }
 
 func TestInvalidTLS(t *testing.T) {
