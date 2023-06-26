@@ -63,8 +63,6 @@ import (
 	"github.com/pingcap/tidb/testkit/testdata"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util"
-	"github.com/pingcap/tidb/util/arena"
-	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/dbterror"
 	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/mock"
@@ -6316,5 +6314,9 @@ func TestDebugCS0(t *testing.T) {
 	tk.MustExec("insert into t values (1, 1);")
 	time.Sleep(time.Second)
 	tk.MustExec("set @@tidb_read_staleness=-1;")
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/store/mockstore/unistore/rpcDataIsNotReady", "return(true)"))
+	defer func() {
+		require.NoError(t, failpoint.Disable("github.com/pingcap/tidb/store/mockstore/unistore/rpcDataIsNotReady"))
+	}()
 	tk.MustQuery("select * from t where i = 1;").Check(testkit.Rows("1 1"))
 }

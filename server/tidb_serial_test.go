@@ -106,7 +106,7 @@ func TestStmtMaxExecutionTimeoutCs(t *testing.T) {
 		defer func() {
 			require.NoError(t, failpoint.Disable("github.com/pingcap/tidb/store/mockstore/unistore/"))
 		}()
-		tk.MustExec("set @@max_execution_time=60000")
+		//tk.MustExec("set @@max_execution_time=60000")
 		tk.MustQuery("select * from t where i = 1;")
 	})
 }
