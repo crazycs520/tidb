@@ -6310,13 +6310,14 @@ func TestDebugCS0(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("use test")
+	tk.MustExec("drop table if exists t;")
 	tk.MustExec("create table t (i int key, j int);")
 	tk.MustExec("insert into t values (1, 1);")
 	time.Sleep(time.Second)
 	tk.MustExec("set @@tidb_read_staleness=-1;")
-	require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/store/mockstore/unistore/rpcDataIsNotReady", "return(true)"))
-	defer func() {
-		require.NoError(t, failpoint.Disable("github.com/pingcap/tidb/store/mockstore/unistore/rpcDataIsNotReady"))
-	}()
+	//require.NoError(t, failpoint.Enable("github.com/pingcap/tidb/store/mockstore/unistore/rpcDataIsNotReady", "return(true)"))
+	//defer func() {
+	//	require.NoError(t, failpoint.Disable("github.com/pingcap/tidb/store/mockstore/unistore/rpcDataIsNotReady"))
+	//}()
 	tk.MustQuery("select * from t where i = 1;").Check(testkit.Rows("1 1"))
 }

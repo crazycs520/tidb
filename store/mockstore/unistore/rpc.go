@@ -84,6 +84,7 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 	})
 	failpoint.Inject("rpcDataIsNotReady", func(val failpoint.Value) {
 		if req.StaleRead && val.(bool) {
+			time.Sleep(time.Millisecond * 150)
 			failpoint.Return(tikvrpc.GenRegionErrorResp(req, &errorpb.Error{DataIsNotReady: &errorpb.DataIsNotReady{}}))
 		}
 	})
