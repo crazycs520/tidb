@@ -1475,6 +1475,10 @@ func resetCTEStorageMap(se sessionctx.Context) error {
 
 // LogSlowQuery is used to print the slow query in the log files.
 func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
+	if txnTS == 0 {
+		txnManager := sessiontxn.GetTxnManager(a.Ctx)
+		txnTS, _ = txnManager.GetStmtReadTS()
+	}
 	sessVars := a.Ctx.GetSessionVars()
 	stmtCtx := sessVars.StmtCtx
 	level := log.GetLevel()
