@@ -614,6 +614,12 @@ func TestTidbKvReadTimeout(t *testing.T) {
 	explain = fmt.Sprintf("%v", rows[0])
 	require.Regexp(t, ".*TableReader.* root  time:.*, loops:.* cop_task: {num: 1, .* rpc_num: 2.*", explain)
 
+	// Test for batch-get in write statement. tidb_kv_read_timeout is not work in write statement.
+	//rows = tk.MustQuery("explain analyze insert ignore into t values (10,10)").Rows()
+	//require.Len(t, rows, 1)
+	//explain = fmt.Sprintf("%v", rows[0])
+	//require.Regexp(t, ".*TableReader.* root  time:.*, loops:.* cop_task: {num: 1, .* rpc_num: 2.*", explain)
+
 	// Test for stale read.
 	tk.MustExec("set @a=now(6);")
 	tk.MustExec("set @@tidb_replica_read='closest-replicas';")
