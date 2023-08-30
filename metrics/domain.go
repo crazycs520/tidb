@@ -39,6 +39,15 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms ~ 524s
 		})
 
+	LoadSnapshotSchemaDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "tidb",
+			Subsystem: "domain",
+			Name:      "load_snapshot_schema_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) in load schema.",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms ~ 524s
+		}, []string{LblType})
+
 	// InfoCacheCounters are the counters of get/hit.
 	InfoCacheCounters = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
