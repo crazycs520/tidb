@@ -48,6 +48,7 @@ import (
 	"github.com/pingcap/tidb/domain/resourcegroup"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/infoschema"
+	infoschema_metrics "github.com/pingcap/tidb/infoschema/metrics"
 	"github.com/pingcap/tidb/infoschema/perfschema"
 	"github.com/pingcap/tidb/keyspace"
 	"github.com/pingcap/tidb/kv"
@@ -208,14 +209,6 @@ func (do *Domain) EtcdClient() *clientv3.Client {
 	return do.etcdClient
 }
 
-var (
-	LoadSnapshotSchemaDurationVersion     = metrics.LoadSnapshotSchemaDuration.WithLabelValues("get-version")
-	LoadSnapshotSchemaDurationLoadDiff    = metrics.LoadSnapshotSchemaDuration.WithLabelValues("load-diff-schema")
-	LoadSnapshotSchemaDurationTotal       = metrics.LoadSnapshotSchemaDuration.WithLabelValues("total")
-	LoadSnapshotSchemaDurationFetchAll    = metrics.LoadSnapshotSchemaDuration.WithLabelValues("fetch-all-schema")
-	LoadSnapshotSchemaDurationBuildInsert = metrics.LoadSnapshotSchemaDuration.WithLabelValues("build-insert")
-)
-
 // loadInfoSchema loads infoschema at startTS.
 // It returns:
 // 1. the needed infoschema
@@ -226,7 +219,7 @@ var (
 func (do *Domain) loadInfoSchema(startTS uint64) (infoschema.InfoSchema, bool, int64, *transaction.RelatedSchemaChange, error) {
 	start := time.Now()
 	defer func() {
-		LoadSnapshotSchemaDurationTotal.Observe(time.Since(start).Seconds())
+		infoschema_metrics.LoadSnapshotSchemaDurationTotal.Observe(time.Since(start).Seconds())
 	}()
 	snapshot := do.store.GetSnapshot(kv.NewVersion(startTS))
 	m := meta.NewSnapshotMeta(snapshot)
@@ -240,7 +233,7 @@ func (do *Domain) loadInfoSchema(startTS uint64) (infoschema.InfoSchema, bool, i
 		logutil.BgLogger().Warn("failed to get schema version", zap.Error(err), zap.Int64("version", neededSchemaVersion))
 		schemaTs = 0
 	}
-	LoadSnapshotSchemaDurationVersion.Observe(time.Since(start).Seconds())
+	infoschema_metrics.LoadSnapshotSchemaDurationVersion.Observe(time.Since(start).Seconds())
 
 	if is := do.infoCache.GetByVersion(neededSchemaVersion); is != nil {
 		// try to insert here as well to correct the schemaTs if previous is wrong
@@ -266,7 +259,7 @@ func (do *Domain) loadInfoSchema(startTS uint64) (infoschema.InfoSchema, bool, i
 		is, relatedChanges, err := do.tryLoadSchemaDiffs(m, currentSchemaVersion, neededSchemaVersion)
 		if err == nil {
 			do.infoCache.Insert(is, uint64(schemaTs))
-			LoadSnapshotSchemaDurationLoadDiff.Observe(time.Since(startTime).Seconds())
+			infoschema_metrics.LoadSnapshotSchemaDurationLoadDiff.Observe(time.Since(startTime).Seconds())
 			logutil.BgLogger().Info("diff load InfoSchema success",
 				zap.Int64("currentSchemaVersion", currentSchemaVersion),
 				zap.Int64("neededSchemaVersion", neededSchemaVersion),
@@ -299,7 +292,7 @@ func (do *Domain) loadInfoSchema(startTS uint64) (infoschema.InfoSchema, bool, i
 	if err != nil {
 		return nil, false, currentSchemaVersion, nil, err
 	}
-	LoadSnapshotSchemaDurationFetchAll.Observe(time.Since(startTime).Seconds())
+	infoschema_metrics.LoadSnapshotSchemaDurationFetchAll.Observe(time.Since(startTime).Seconds())
 	logutil.BgLogger().Info("full load InfoSchema success",
 		zap.Int64("currentSchemaVersion", currentSchemaVersion),
 		zap.Int64("neededSchemaVersion", neededSchemaVersion),
@@ -308,7 +301,7 @@ func (do *Domain) loadInfoSchema(startTS uint64) (infoschema.InfoSchema, bool, i
 	startTime = time.Now()
 	is := newISBuilder.Build()
 	do.infoCache.Insert(is, uint64(schemaTs))
-	LoadSnapshotSchemaDurationBuildInsert.Observe(time.Since(startTime).Seconds())
+	infoschema_metrics.LoadSnapshotSchemaDurationBuildInsert.Observe(time.Since(startTime).Seconds())
 	return is, false, currentSchemaVersion, nil, nil
 }
 

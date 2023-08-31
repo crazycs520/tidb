@@ -70,7 +70,7 @@ func InitDomainMetrics() {
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms ~ 524s
 		})
 
-	LoadSnapshotSchemaDuration = prometheus.NewHistogramVec(
+	LoadSnapshotSchemaDuration = NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "tidb",
 			Subsystem: "domain",
