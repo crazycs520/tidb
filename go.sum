@@ -233,8 +233,8 @@ github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwc
 github.com/cpuguy83/go-md2man/v2 v2.0.0/go.mod h1:maD7wRr/U5Z6m/iR4s+kqSMx2CaBsrgA7czyZG/E6dU=
 github.com/cpuguy83/go-md2man/v2 v2.0.1/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
 github.com/cpuguy83/go-md2man/v2 v2.0.2/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
-github.com/crazycs520/client-go/v2 v2.0.0-alpha.0.20230914024628-7e8947553ca6 h1:ud9f3VSh7oL7yJy6MuNDgX8xhn1CUBlYsi+5kB//ebs=
-github.com/crazycs520/client-go/v2 v2.0.0-alpha.0.20230914024628-7e8947553ca6/go.mod h1:ArIf1ebIbAY50A/pNnFjBAmTrRSas5AO22G4YMTPE+g=
+github.com/crazycs520/client-go/v2 v2.0.0-alpha.0.20230914152226-50583eeddce4 h1:rEAf5B0you0k7u4h/FEkY+4VYco9blf7IRR6FlpgPjE=
+github.com/crazycs520/client-go/v2 v2.0.0-alpha.0.20230914152226-50583eeddce4/go.mod h1:ArIf1ebIbAY50A/pNnFjBAmTrRSas5AO22G4YMTPE+g=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/creack/pty v1.1.11/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548 h1:iwZdTE0PVqJCos1vaoKsclOGD3ADKpshg3SRtYBbwso=
