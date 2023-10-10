@@ -78,7 +78,7 @@ func (l *LocationKeyRanges) splitKeyRangesByBuckets(bo *Backoffer) []*LocationKe
 	defer func() {
 		cost := time.Since(start)
 		if cost > time.Millisecond*50 {
-			logutil.Logger(bo.GetCtx()).Info("SplitKeyRangesByLocations takes too much time", zap.Duration("cost", cost))
+			logutil.Logger(bo.GetCtx()).Info("SplitKeyRangesByLocations takes too much time", zap.Duration("cost", cost), zap.Any("backoff-types", bo.GetBackoffSleepMS()))
 		}
 	}()
 	if l.Location.Buckets == nil || len(l.Location.Buckets.Keys) == 0 {
@@ -140,7 +140,7 @@ func (c *RegionCache) SplitKeyRangesByLocations(bo *Backoffer, ranges *KeyRanges
 	defer func() {
 		cost := time.Since(start)
 		if cost > time.Millisecond*50 {
-			logutil.Logger(bo.GetCtx()).Info("SplitKeyRangesByLocations takes too much time", zap.Duration("cost", cost))
+			logutil.Logger(bo.GetCtx()).Info("SplitKeyRangesByLocations takes too much time", zap.Duration("cost", cost), zap.Any("backoff-types", bo.GetBackoffSleepMS()))
 		}
 	}()
 	res := make([]*LocationKeyRanges, 0)
