@@ -73,7 +73,14 @@ func (l *LocationKeyRanges) getBucketVersion() uint64 {
 }
 
 // splitKeyRangeByBuckets splits ranges in the same location by buckets and returns a LocationKeyRanges array.
-func (l *LocationKeyRanges) splitKeyRangesByBuckets() []*LocationKeyRanges {
+func (l *LocationKeyRanges) splitKeyRangesByBuckets(bo *Backoffer) []*LocationKeyRanges {
+	start := time.Now()
+	defer func() {
+		cost := time.Since(start)
+		if cost > time.Millisecond*50 {
+			logutil.Logger(bo.GetCtx()).Info("SplitKeyRangesByLocations takes too much time", zap.Duration("cost", cost))
+		}
+	}()
 	if l.Location.Buckets == nil || len(l.Location.Buckets.Keys) == 0 {
 		return []*LocationKeyRanges{l}
 	}
@@ -83,7 +90,7 @@ func (l *LocationKeyRanges) splitKeyRangesByBuckets() []*LocationKeyRanges {
 	res := []*LocationKeyRanges{}
 	for ranges.Len() > 0 {
 		// ranges must be in loc.region, so the bucket returned by loc.LocateBucket is guaranteed to be not nil
-		bucket := loc.LocateBucket(ranges.At(0).StartKey)
+		bucket := loc.LocateBucket(bo.TiKVBackoffer(), ranges.At(0).StartKey)
 
 		// Iterate to the first range that is not complete in the bucket.
 		var r kv.KeyRange
@@ -129,6 +136,13 @@ const UnspecifiedLimit = -1
 
 // SplitKeyRangesByLocations splits the KeyRanges by logical info in the cache.
 func (c *RegionCache) SplitKeyRangesByLocations(bo *Backoffer, ranges *KeyRanges, limit int) ([]*LocationKeyRanges, error) {
+	start := time.Now()
+	defer func() {
+		cost := time.Since(start)
+		if cost > time.Millisecond*50 {
+			logutil.Logger(bo.GetCtx()).Info("SplitKeyRangesByLocations takes too much time", zap.Duration("cost", cost))
+		}
+	}()
 	res := make([]*LocationKeyRanges, 0)
 	for ranges.Len() > 0 {
 		if limit != UnspecifiedLimit && len(res) >= limit {
@@ -190,7 +204,7 @@ func (c *RegionCache) SplitKeyRangesByBuckets(bo *Backoffer, ranges *KeyRanges) 
 	}
 	res := make([]*LocationKeyRanges, 0, len(locs))
 	for _, loc := range locs {
-		res = append(res, loc.splitKeyRangesByBuckets()...)
+		res = append(res, loc.splitKeyRangesByBuckets(bo)...)
 	}
 	return res, nil
 }

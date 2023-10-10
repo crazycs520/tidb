@@ -441,11 +441,13 @@ func buildCopTasks(bo *Backoffer, ranges *KeyRanges, opt *buildCopTaskOpt) ([]*c
 	}
 	tasks := builder.build()
 	elapsed := time.Since(start)
-	if elapsed > time.Millisecond*500 {
+	if elapsed > time.Millisecond*100 {
 		logutil.BgLogger().Warn("buildCopTasks takes too much time",
 			zap.Duration("elapsed", elapsed),
 			zap.Int("range len", rangesLen),
-			zap.Int("task len", len(tasks)))
+			zap.Int("task len", len(tasks)),
+			zap.Int("backoff-ms", bo.GetTotalSleep()),
+			zap.Any("backoff-types", bo.GetBackoffSleepMS()))
 	}
 	if elapsed > time.Millisecond {
 		defer tracing.StartRegion(bo.GetCtx(), "copr.buildCopTasks").End()
