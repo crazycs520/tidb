@@ -16,7 +16,10 @@ package sessiontest
 
 import (
 	"context"
+	"math/rand"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/config"
@@ -202,4 +205,42 @@ func TestKill(t *testing.T) {
 	store := realtikvtest.CreateMockStoreAndSetup(t)
 	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("kill connection_id();")
+}
+
+func TestBatchClientDataRace(t *testing.T) {
+	// This test should use `go test -race` to run, use to detect data race.
+	if !*realtikvtest.WithRealTiKV {
+		t.Skip("skip test since it's only work for tikv")
+	}
+	config.UpdateGlobal(func(conf *config.Config) {
+		conf.TiKVClient.MaxBatchSize = 128
+	})
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("create table if not exists t (a int primary key, b int)")
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tk := testkit.NewTestKit(t, store)
+			tk.MustExec("use test")
+			for j := 0; j < 100; j++ {
+				ctx, cancel := context.WithCancel(context.Background())
+				go func() {
+					// mock for kill query execution or timeout.
+					time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)+1))
+					cancel()
+				}()
+				rs, _ := tk.ExecWithContext(ctx, "select * from t where a = 1")
+				if rs != nil {
+					session.ResultSetToStringSlice(ctx, tk.Session(), rs)
+				}
+			}
+
+		}()
+	}
+	wg.Wait()
 }

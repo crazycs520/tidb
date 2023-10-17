@@ -102,7 +102,7 @@ func CreateMockStoreAndDomainAndSetup(t *testing.T, opts ...mockstore.MockTiKVSt
 		config.UpdateGlobal(func(conf *config.Config) {
 			conf.TxnLocalLatches.Enabled = false
 		})
-		store, err = d.Open("tikv://127.0.0.1:2379?disableGC=true")
+		store, err = d.Open(*TiKVPath)
 		require.NoError(t, err)
 
 		dom, err = session.BootstrapSession(store)
