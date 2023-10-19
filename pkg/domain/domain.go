@@ -231,7 +231,7 @@ func (do *Domain) loadInfoSchema(startTS uint64) (infoschema.InfoSchema, bool, i
 	schemaTs, err := do.getTimestampForSchemaVersionWithNonEmptyDiff(m, neededSchemaVersion)
 	if err != nil {
 		logutil.BgLogger().Warn("failed to get schema version", zap.Error(err), zap.Int64("version", neededSchemaVersion))
-		schemaTs = 0
+		schemaTs = int64(startTS)
 	}
 
 	if is := do.infoCache.GetByVersion(neededSchemaVersion); is != nil {
