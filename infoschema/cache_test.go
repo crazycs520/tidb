@@ -26,6 +26,33 @@ func TestNewCache(t *testing.T) {
 	require.NotNil(t, ic)
 }
 
+func TestCacheFn(t *testing.T) {
+	ic := infoschema.NewCache(16)
+	require.NotNil(t, ic)
+	for i := 1; i <= 8; i++ {
+		ic.Insert(infoschema.MockInfoSchemaWithSchemaVer(nil, int64(i)), uint64(i))
+	}
+	// mock for meet error There is no Write MVCC info for the schema version
+	ic.Insert(infoschema.MockInfoSchemaWithSchemaVer(nil, int64(9)), uint64(0))
+	ic.Insert(infoschema.MockInfoSchemaWithSchemaVer(nil, int64(10)), uint64(10))
+
+	for i := 1; i <= 7; i++ {
+		require.NotNil(t, ic.GetBySnapshotTS(uint64(i)))
+		require.Equal(t, int64(i), ic.GetBySnapshotTS(uint64(i)).SchemaMetaVersion())
+	}
+	require.Nil(t, ic.GetBySnapshotTS(uint64(8)))
+	require.Nil(t, ic.GetBySnapshotTS(uint64(9)))
+	require.NotNil(t, ic.GetBySnapshotTS(uint64(10)))
+
+	// refill the cache
+	ic.Insert(infoschema.MockInfoSchemaWithSchemaVer(nil, int64(9)), uint64(9))
+
+	for i := 1; i <= 10; i++ {
+		require.NotNil(t, ic.GetBySnapshotTS(uint64(i)))
+		require.Equal(t, int64(i), ic.GetBySnapshotTS(uint64(i)).SchemaMetaVersion())
+	}
+}
+
 func TestInsert(t *testing.T) {
 	ic := infoschema.NewCache(3)
 	require.NotNil(t, ic)

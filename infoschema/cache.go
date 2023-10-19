@@ -109,14 +109,18 @@ func (h *InfoCache) getSchemaByTimestampNoLock(ts uint64) (InfoSchema, bool) {
 	// moreover, the most likely hit element in the array is the first one in steady mode
 	// thus it may have better performance than binary search
 	for i, is := range h.cache {
-		if is.timestamp == 0 || (i > 0 && h.cache[i-1].infoschema.SchemaMetaVersion() != is.infoschema.SchemaMetaVersion()+1) {
-			// the schema version doesn't have a timestamp or there is a gap in the schema cache
-			// ignore all the schema cache equals or less than this version in search by timestamp
-			break
+		if ts < uint64(is.timestamp) || is.timestamp == 0 {
+			continue
 		}
-		if ts >= uint64(is.timestamp) {
-			// found the largest version before the given ts
+		// ts >= uint64(is.timestamp) must be true here.
+		if i == 0 {
 			return is.infoschema, true
+		} else {
+			if h.cache[i-1].infoschema.SchemaMetaVersion() == is.infoschema.SchemaMetaVersion()+1 &&
+				uint64(h.cache[i-1].timestamp) > ts {
+				return is.infoschema, true
+			}
+			break
 		}
 	}
 
