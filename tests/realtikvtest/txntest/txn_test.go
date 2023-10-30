@@ -15,8 +15,11 @@
 package txntest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"github.com/pingcap/failpoint"
+	"math/rand"
 	"testing"
 
 	"github.com/pingcap/tidb/expression"
@@ -250,4 +253,52 @@ func TestAssertionWhenPessimisticLockLost(t *testing.T) {
 	tk1.MustExec("insert into t values (1, 'a') on duplicate key update val = concat(val, 'a')")
 	err := tk1.ExecToErr("commit")
 	require.NotContains(t, err.Error(), "assertion")
+}
+
+func TestIndexLookupReaderDebugCs(t *testing.T) {
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("set @@global.tidb_enable_paging=1")
+	tk.MustExec("set @@tidb_enable_paging=1")
+	tk = testkit.NewTestKit(t, store)
+	tk.MustExec("set @@tidb_enable_paging=1")
+	tk.MustExec("use test")
+	for cnt := 0; cnt < 100; cnt++ {
+		tk.MustExec("set @@tidb_enable_paging=1")
+		tk.MustExec("use test")
+		tk.MustExec("drop table if exists t1")
+		tk.MustExec("create table t1 (id varchar(40) primary key, a varchar(40), b varchar(100), index idx(a))")
+		keys := bytes.NewBuffer(nil)
+		conds := bytes.NewBuffer(nil)
+		for i := 0; i < 20; i++ {
+			tk.MustExec(fmt.Sprintf("insert into t1 values ('%d', '%d', '%d')", i, i, i))
+			if conds.Len() > 0 {
+				conds.WriteString(",")
+			}
+			conds.WriteString(fmt.Sprintf("'%d'", i))
+			if rand.Intn(10) < 6 {
+				continue
+			}
+			if keys.Len() > 0 {
+				keys.WriteString(",")
+			}
+			keys.WriteString(fmt.Sprintf("('%d')", i))
+		}
+		conds.WriteString(", '', '100', 'abc', '1000'")
+		tk.MustQuery("split table t1 by " + keys.String())
+		//tk.MustQuery("show table t1 regions").Check(testkit.Rows(""))
+
+		require.NoError(t, failpoint.Enable("tikvclient/mockEmptyRPCContext", "return(true)"))
+		defer func() {
+			require.NoError(t, failpoint.Disable("tikvclient/mockEmptyRPCContext"))
+		}()
+
+		fmt.Printf("-----------start-------------\n\n")
+		for i := 0; i < 200; i++ {
+			//tk.MustQuery("select * from t1 use index (idx) where a >= 0 order by id").Check(testkit.Rows("0 0 0", "1 1 1", "2 2 2", "3 3 3", "4 4 4", "5 5 5", "6 6 6", "7 7 7", "8 8 8", "9 9 9", "10 10 10", "11 11 11", "12 12 12", "13 13 13", "14 14 14", "15 15 15", "16 16 16", "17 17 17", "18 18 18", "19 19 19"))
+			result := tk.MustQuery("select * from t1 use index (idx) where a in (" + conds.String() + ")")
+			result.Rows()
+		}
+		fmt.Printf("----------- end -------------\n\n")
+	}
 }

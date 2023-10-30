@@ -1411,6 +1411,7 @@ func (w *tableWorker) executeTask(ctx context.Context, task *lookupTableTask) er
 		task.memTracker.Consume(memUsage)
 		sort.Sort(task)
 	}
+	//fmt.Printf("\n\nt: %v, idx_cnt: %v, table_cnt: %v , plan_cnt: %v ---------------------\n\n", w.idxLookup.table.Meta().Name.L, handleCnt, len(task.rows), len(w.idxLookup.tblPlans))
 
 	if handleCnt != len(task.rows) && !util.HasCancelled(ctx) &&
 		!w.idxLookup.ctx.GetSessionVars().StmtCtx.WeakConsistency {
