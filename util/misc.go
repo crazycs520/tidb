@@ -701,3 +701,7 @@ func createTLSCertificates(certpath string, keypath string, rsaKeySize int) erro
 	// use RSA and unspecified signature algorithm
 	return CreateCertificates(certpath, keypath, rsaKeySize, x509.RSA, x509.UnknownSignatureAlgorithm)
 }
+
+var ContextDebugCsKey = ContextDebugTypeKey{}
+
+type ContextDebugTypeKey struct{}

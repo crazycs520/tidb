@@ -19,8 +19,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/util"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
@@ -288,16 +291,32 @@ func TestIndexLookupReaderDebugCs(t *testing.T) {
 		tk.MustQuery("split table t1 by " + keys.String())
 		//tk.MustQuery("show table t1 regions").Check(testkit.Rows(""))
 
-		require.NoError(t, failpoint.Enable("tikvclient/mockEmptyRPCContext", "return(true)"))
+		require.NoError(t, failpoint.Enable("tikvclient/mockRegionErrNotLeader", "return(true)"))
 		defer func() {
-			require.NoError(t, failpoint.Disable("tikvclient/mockEmptyRPCContext"))
+			require.NoError(t, failpoint.Disable("tikvclient/mockRegionErrNotLeader"))
 		}()
 
 		fmt.Printf("-----------start-------------\n\n")
-		for i := 0; i < 200; i++ {
+		for i := 0; i < 10000; i++ {
 			//tk.MustQuery("select * from t1 use index (idx) where a >= 0 order by id").Check(testkit.Rows("0 0 0", "1 1 1", "2 2 2", "3 3 3", "4 4 4", "5 5 5", "6 6 6", "7 7 7", "8 8 8", "9 9 9", "10 10 10", "11 11 11", "12 12 12", "13 13 13", "14 14 14", "15 15 15", "16 16 16", "17 17 17", "18 18 18", "19 19 19"))
-			result := tk.MustQuery("select * from t1 use index (idx) where a in (" + conds.String() + ")")
-			result.Rows()
+			ctx := context.WithValue(context.Background(), util.ContextDebugCsKey, true)
+			ctx, cancel := context.WithCancel(ctx)
+			go func() {
+				time.Sleep(time.Microsecond * time.Duration(rand.Intn(2000)+20))
+				cancel()
+			}()
+			rs, err := tk.ExecWithContext(ctx, "select * from t1 use index (idx) where a in ("+conds.String()+")")
+			if err == nil {
+				_, err := session.ResultSetToStringSlice(ctx, tk.Session(), rs)
+				if err != nil {
+					require.Contains(t, err.Error(), "context canceled", err.Error())
+				}
+			} else {
+				require.Contains(t, err.Error(), "context canceled", err.Error())
+				//require.Equal(t, "context canceled", err.Error())
+			}
+			//result := tk.MustQueryWithContext(ctx, "select * from t1 use index (idx) where a in ("+conds.String()+")")
+			//result.Rows()
 		}
 		fmt.Printf("----------- end -------------\n\n")
 	}

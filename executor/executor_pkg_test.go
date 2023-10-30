@@ -437,3 +437,20 @@ func TestSortSpillDisk(t *testing.T) {
 	err = exec.Close()
 	require.NoError(t, err)
 }
+
+func TestAssertionWhenPessimisticLockLost(t *testing.T) {
+	ch := make(chan int, 10)
+	ch <- 1
+	ch <- 1
+	ch <- 1
+	//close(ch)
+	for {
+		select {
+		case v, ok := <-ch:
+			println(v, ok)
+		default:
+			println("default")
+			return
+		}
+	}
+}

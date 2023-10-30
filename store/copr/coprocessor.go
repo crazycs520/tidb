@@ -17,6 +17,7 @@ package copr
 import (
 	"context"
 	"fmt"
+	util2 "github.com/pingcap/tidb/util"
 	"math"
 	"net"
 	"strconv"
@@ -1062,6 +1063,10 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 		tidbmetrics.DistSQLCoprRespBodySize.WithLabelValues(storeAddr).Observe(float64(len(copResp.Data)))
 	}
 
+	if v := bo.GetCtx().Value(util2.ContextDebugCsKey); v != nil {
+		_ = v
+		//fmt.Printf("enable paging: %v , bo_total: %v--------\n\n", worker.req.Paging.Enable, bo.GetTotalSleep())
+	}
 	if worker.req.Paging.Enable {
 		return worker.handleCopPagingResult(bo, rpcCtx, &copResponse{pbResp: copResp}, cacheKey, cacheValue, task, ch, costTime)
 	}
