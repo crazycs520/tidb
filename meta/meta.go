@@ -402,6 +402,7 @@ func (m *Meta) GetSchemaVersionWithNonEmptyDiff() (int64, error) {
 	if diff == nil && v > 0 {
 		// Although the diff of v is undetermined, the last version's diff is deterministic(this is guaranteed by schemaVersionManager).
 		v--
+		logutil.BgLogger().Warn("get schema diff nil", zap.Int64("v", v))
 	}
 	return v, err
 }
