@@ -395,6 +395,7 @@ func (m *Meta) GetSchemaVersionWithNonEmptyDiff() (int64, error) {
 		return 0, err
 	}
 	diff, err := m.GetSchemaDiff(v)
+	logutil.BgLogger().Info("get schema diff", zap.Int64("v", v), zap.Any("diff", diff), zap.Error(err))
 	if err != nil {
 		return 0, err
 	}
