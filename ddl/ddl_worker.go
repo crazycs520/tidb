@@ -890,6 +890,7 @@ func (w *worker) HandleDDLJobTable(d *ddlCtx, job *model.Job) (int64, error) {
 	writeBinlog(d.binlogCli, txn, job)
 	// reset the SQL digest to make topsql work right.
 	w.sess.GetSessionVars().StmtCtx.ResetSQLDigest(job.Query)
+	logutil.BgLogger().Info("HandleDDLJobTable start commit ddl txn", zap.Int64("schema-version", schemaVer), zap.Uint64("txn-start", txn.StartTS()))
 	err = w.sess.commit()
 	d.unlockSchemaVersion(job.ID)
 	if err != nil {
@@ -1025,6 +1026,7 @@ func (w *worker) handleDDLJobQueue(d *ddlCtx) error {
 				return errors.Trace(err)
 			}
 			writeBinlog(d.binlogCli, txn, job)
+			logutil.BgLogger().Info("handleDDLJobQueue start commit ddl txn", zap.Int64("schema-version", schemaVer), zap.Uint64("txn-start", txn.StartTS()))
 			return nil
 		})
 
@@ -1183,7 +1185,7 @@ func (w *worker) runDDLJob(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, 
 	failpoint.Inject("mockPanicInRunDDLJob", func(val failpoint.Value) {})
 
 	if job.Type != model.ActionMultiSchemaChange {
-		logutil.Logger(w.logCtx).Info("[ddl] run DDL job", zap.String("job", job.String()))
+		logutil.Logger(w.logCtx).Info("[ddl] run DDL job", zap.String("job", job.String()), zap.Uint64("txn-start-ts", t.StartTS))
 	}
 	timeStart := time.Now()
 	if job.RealStartTS == 0 {
