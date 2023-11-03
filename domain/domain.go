@@ -268,6 +268,15 @@ func (do *Domain) getTimestampForSchemaVersionWithNonEmptyDiff(m *meta.Meta, ver
 			return 0, err
 		}
 		if data == nil || data.Info == nil || len(data.Info.Writes) == 0 {
+			if data.Info != nil && data.Info.Lock != nil {
+				logutil.BgLogger().Info("get schema version mvcc meet lock",
+					zap.Int64("version", version),
+					zap.String("lock", data.Info.Lock.String()))
+			} else {
+				logutil.BgLogger().Info("get empty mvcc info of schema version",
+					zap.Int64("version", version),
+					zap.Any("data", data))
+			}
 			return 0, errors.Errorf("There is no Write MVCC info for the schema version")
 		}
 		return int64(data.Info.Writes[0].CommitTs), nil
