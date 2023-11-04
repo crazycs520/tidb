@@ -267,7 +267,7 @@ func (do *Domain) getTimestampForSchemaVersionWithNonEmptyDiff(m *meta.Meta, ver
 		if err != nil {
 			return 0, err
 		}
-		if data == nil || data.Info == nil || len(data.Info.Writes) == 0 {
+		if data == nil || data.Info == nil || len(data.Info.Writes) == 0 || rand.Intn(500) < 5 {
 			return 0, errors.Errorf("There is no Write MVCC info for the schema version")
 		}
 		return int64(data.Info.Writes[0].CommitTs), nil
