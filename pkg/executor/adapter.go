@@ -1500,12 +1500,15 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	sessVars := a.Ctx.GetSessionVars()
 	stmtCtx := sessVars.StmtCtx
 	if sessVars.ConnectionID > 0 && !a.IsReadOnly(sessVars) {
-		logutil.BgLogger().Info("finish execute sql",
+		fields := []zap.Field{
 			zap.Uint64("start_ts", txnTS),
 			zap.Bool("succ", succ),
 			zap.String("sql", sessVars.StmtCtx.OriginalSQL),
-			zap.String("deleted-t1-id-val", sessVars.StmtCtx.TableT1Idx2Val),
-		)
+		}
+		if len(sessVars.StmtCtx.TableT1Idx2Val) > 0 {
+			fields = append(fields, zap.String("deleted-t1-id-val", sessVars.StmtCtx.TableT1Idx2Val))
+		}
+		logutil.BgLogger().Info("finish execute sql", fields...)
 	}
 	level := log.GetLevel()
 	cfg := config.GetGlobalConfig()

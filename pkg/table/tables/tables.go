@@ -1504,7 +1504,7 @@ func (t *TableCommon) removeRowIndices(ctx sessionctx.Context, h kv.Handle, rec 
 		if t.meta.Name.L == "t1" && v.Meta().Name.L == "idx2" && len(rec) >= 2 && len(vals) == 1 {
 			idStr, _ := rec[0].ToString()
 			valStr, _ := vals[0].ToString()
-			ctx.GetSessionVars().StmtCtx.TableT1Idx2Val = fmt.Sprintf("id: %v, val: %v", idStr, valStr)
+			ctx.GetSessionVars().StmtCtx.TableT1Idx2Val = fmt.Sprintf("id: %v, val: %v, handle: %v", idStr, valStr, h.String())
 		}
 		if err = v.Delete(ctx.GetSessionVars().StmtCtx, txn, vals, h); err != nil {
 			if v.Meta().State != model.StatePublic && kv.ErrNotExist.Equal(err) {
