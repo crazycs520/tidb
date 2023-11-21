@@ -1501,6 +1501,11 @@ func (t *TableCommon) removeRowIndices(ctx sessionctx.Context, h kv.Handle, rec 
 			logutil.BgLogger().Info("remove row index failed", zap.Any("index", v.Meta()), zap.Uint64("txnStartTS", txn.StartTS()), zap.String("handle", h.String()), zap.Any("record", rec), zap.Error(err))
 			return err
 		}
+		if t.meta.Name.L == "t1" && v.Meta().Name.L == "idx2" && len(rec) >= 2 && len(vals) == 1 {
+			idStr, _ := rec[0].ToString()
+			valStr, _ := vals[0].ToString()
+			ctx.GetSessionVars().StmtCtx.TableT1Idx2Val = fmt.Sprintf("id: %v, val: %v", idStr, valStr)
+		}
 		if err = v.Delete(ctx.GetSessionVars().StmtCtx, txn, vals, h); err != nil {
 			if v.Meta().State != model.StatePublic && kv.ErrNotExist.Equal(err) {
 				// If the index is not in public state, we may have not created the index,

@@ -1499,6 +1499,14 @@ func resetCTEStorageMap(se sessionctx.Context) error {
 func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	sessVars := a.Ctx.GetSessionVars()
 	stmtCtx := sessVars.StmtCtx
+	if sessVars.ConnectionID > 0 && !a.IsReadOnly(sessVars) {
+		logutil.BgLogger().Info("finish execute sql",
+			zap.Uint64("start_ts", txnTS),
+			zap.Bool("succ", succ),
+			zap.String("sql", sessVars.StmtCtx.OriginalSQL),
+			zap.String("deleted-t1-id-val", sessVars.StmtCtx.TableT1Idx2Val),
+		)
+	}
 	level := log.GetLevel()
 	cfg := config.GetGlobalConfig()
 	costTime := time.Since(sessVars.StartTime) + sessVars.DurationParse

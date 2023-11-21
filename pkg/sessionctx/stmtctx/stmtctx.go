@@ -424,6 +424,7 @@ type StatementContext struct {
 		value *uint64
 		eval  func() (uint64, error)
 	}
+	TableT1Idx2Val string
 }
 
 // NewStmtCtx creates a new statement context
