@@ -988,6 +988,7 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	sessVars := a.Ctx.GetSessionVars()
 	if sessVars.ConnectionID > 0 && !a.IsReadOnly(sessVars) {
 		fields := []zap.Field{
+			zap.Uint64("conn", sessVars.ConnectionID),
 			zap.Uint64("start_ts", txnTS),
 			zap.Bool("succ", succ),
 			zap.String("sql", sessVars.StmtCtx.OriginalSQL),
