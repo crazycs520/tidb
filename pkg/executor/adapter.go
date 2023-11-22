@@ -1501,9 +1501,11 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	stmtCtx := sessVars.StmtCtx
 	if sessVars.ConnectionID > 0 && !a.IsReadOnly(sessVars) {
 		fields := []zap.Field{
+			zap.Uint64("conn", sessVars.ConnectionID),
 			zap.Uint64("start_ts", txnTS),
 			zap.Bool("succ", succ),
 			zap.String("sql", sessVars.StmtCtx.OriginalSQL),
+			zap.Uint64("affect-rows", sessVars.StmtCtx.AffectedRows()),
 		}
 		if len(sessVars.StmtCtx.TableT1Idx2Val) > 0 {
 			fields = append(fields, zap.String("deleted-t1-id-val", sessVars.StmtCtx.TableT1Idx2Val))
