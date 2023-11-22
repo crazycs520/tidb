@@ -234,6 +234,7 @@ type StatementContext struct {
 		// LoadStartTime is to record the load start time to calculate latency
 		LoadStartTime time.Time
 	}
+	TableT1Idx2Val string
 }
 
 // StmtHints are SessionVars related sql hints.
