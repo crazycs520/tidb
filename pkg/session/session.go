@@ -2372,9 +2372,9 @@ func runStmt(ctx context.Context, se *session, s sqlexec.Statement) (rs sqlexec.
 	origTxnCtx := sessVars.TxnCtx
 	err = se.checkTxnAborted(s)
 	if err != nil {
-		if err == kv.ErrLockExpire {
-			se.RollbackTxn(ctx)
-		}
+		//if err == kv.ErrLockExpire {
+		//	se.RollbackTxn(ctx)
+		//}
 		return nil, err
 	}
 	if sessVars.TxnCtx.CouldRetry && !s.IsReadOnly(sessVars) {

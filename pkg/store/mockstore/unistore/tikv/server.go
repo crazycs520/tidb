@@ -16,6 +16,7 @@ package tikv
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -207,7 +208,9 @@ func (svr *Server) KvPessimisticLock(ctx context.Context, req *kvrpcpb.Pessimist
 	if waiter == nil {
 		return resp, nil
 	}
+	start := time.Now()
 	result := waiter.Wait()
+	fmt.Printf("KvPessimisticLock wait time: %vms  len(mutations): %v, req.wait_timeout=%v====================\n\n", time.Since(start).Seconds()*1000, len(req.Mutations), req.WaitTimeout)
 	svr.mvccStore.DeadlockDetectCli.CleanUpWaitFor(req.StartVersion, waiter.LockTS, waiter.KeyHash)
 	svr.mvccStore.lockWaiterManager.CleanUp(waiter)
 	if result.WakeupSleepTime == lockwaiter.WaitTimeout {
