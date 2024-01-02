@@ -17,6 +17,9 @@ package txntest
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/config"
+	"github.com/tikv/client-go/v2/txnkv/transaction"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -341,4 +344,28 @@ func TestTxnEntrySizeLimit(t *testing.T) {
 	tk1.MustExec("insert into t values (3, repeat('c', 7340032))")
 	tk1.MustExec("set session tidb_txn_entry_size_limit=0")
 	tk1.MustContainErrMsg("insert into t values (1, repeat('a', 7340032))", "[kv:8025]entry too large, the max entry size is 6291456")
+}
+
+func TestCleanLockWhenTxnExceedMaxTTL(t *testing.T) {
+	config.UpdateGlobal(func(conf *config.Config) {
+		conf.Performance.MaxTxnTTL = 1000
+	})
+	store := testkit.CreateMockStore(t)
+	atomic.StoreUint64(&transaction.ManagedLockTTL, 1000)
+	tk1 := testkit.NewTestKit(t, store)
+	tk2 := testkit.NewTestKit(t, store)
+	tk1.MustExec("use test")
+	tk2.MustExec("use test")
+	tk1.MustExec("drop table if exists t")
+	tk1.MustExec("create table t (a int primary key, b int)")
+	tk1.MustExec("begin pessimistic;")
+	tk1.MustExec("insert into t values (1, 1),(2,2),(3,3),(4,4);")
+	time.Sleep(time.Millisecond * 2000)
+	tk1.MustGetErrMsg("insert into t values (10, 10);", "[tikv:8229]TTL manager has timed out, pessimistic locks may expire, please commit or rollback this transaction")
+
+	start := time.Now()
+	tk2.MustExec("begin pessimistic;")
+	tk2.MustExec("insert into t values (1, 1),(2,2),(3,3),(4,4);")
+	tk2.MustExec("commit;")
+	require.Less(t, time.Since(start), time.Millisecond*200)
 }
