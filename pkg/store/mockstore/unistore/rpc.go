@@ -16,6 +16,7 @@ package unistore
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -92,6 +93,10 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 		if val.(bool) && timeout < time.Second {
 			failpoint.Return(tikvrpc.GenRegionErrorResp(req, &errorpb.Error{Message: "Deadline is exceeded"}))
 		}
+	})
+	failpoint.Inject("unistoreRPCSlowByInjestSleep", func(val failpoint.Value) {
+		fmt.Printf("sleep %v ----------------------\n\n", val)
+		time.Sleep(time.Duration(val.(int)) * time.Millisecond)
 	})
 
 	select {

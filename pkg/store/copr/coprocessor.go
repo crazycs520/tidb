@@ -668,7 +668,8 @@ type copIterator struct {
 	// If keepOrder, results are stored in copTask.respChan, read them out one by one.
 	tasks []*copTask
 	// curr indicates the curr id of the finished copTask
-	curr int
+	curr    int
+	workers []*copIteratorWorker
 
 	// sendRate controls the sending rate of copIteratorTaskSender
 	sendRate *util.RateLimit
@@ -834,6 +835,7 @@ func (it *copIterator) open(ctx context.Context, enabledRateLimitAction, enableC
 	taskCh := make(chan *copTask, 1)
 	smallTaskCh := make(chan *copTask, 1)
 	it.wg.Add(it.concurrency + it.smallTaskConcurrency)
+	it.workers = make([]*copIteratorWorker, 0, it.concurrency+it.smallTaskConcurrency)
 	// Start it.concurrency number of workers to handle cop requests.
 	for i := 0; i < it.concurrency+it.smallTaskConcurrency; i++ {
 		var ch chan *copTask
@@ -858,6 +860,7 @@ func (it *copIterator) open(ctx context.Context, enabledRateLimitAction, enableC
 			storeBatchedNum:            &it.storeBatchedNum,
 			storeBatchedFallbackNum:    &it.storeBatchedFallbackNum,
 		}
+		it.workers = append(it.workers, worker)
 		go worker.run(ctx)
 	}
 	taskSender := &copIteratorTaskSender{
