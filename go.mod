@@ -138,7 +138,7 @@ require (
 	golang.org/x/time v0.5.0
 	golang.org/x/tools v0.19.0
 	google.golang.org/api v0.162.0
-	google.golang.org/grpc v1.62.0
+	google.golang.org/grpc v1.62.1
 	gopkg.in/yaml.v2 v2.4.0
 	honnef.co/go/tools v0.4.7
 	k8s.io/api v0.28.4
@@ -168,7 +168,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.22.0 // indirect
 	gonum.org/v1/gonum v0.8.2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240304212257-790db918fca8 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240228224816-df926f6c8641 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240308144416-29370a3891b7 // indirect
 	k8s.io/utils v0.0.0-20230711102312-30195339c3c7 // indirect
 )
 
@@ -324,4 +324,4 @@ replace (
 	sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 )
 
-replace github.com/tikv/client-go/v2 => github.com/crazycs520/client-go/v2 v2.0.0-alpha.0.20240311023046-b92fc4749947
+replace github.com/tikv/client-go/v2 => ../client-go

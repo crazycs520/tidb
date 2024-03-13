@@ -16,6 +16,7 @@ package executor
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -25,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -2895,4 +2897,28 @@ func TestIssue51324(t *testing.T) {
 	tk.MustExec("insert ignore into t (id) values (11),(12),(3) on duplicate key update id = id+10")
 	tk.MustQuery("show warnings").Check(testkit.Rows("Warning 1364 Field 'a' doesn't have a default value", "Warning 1364 Field 'b' doesn't have a default value", "Warning 1364 Field 'c' doesn't have a default value", "Warning 1364 Field 'd' doesn't have a default value"))
 	tk.MustQuery("select * from t order by id").Check(testkit.Rows("13 <nil> <nil> 0 0", "21 1 <nil> 0 1", "22 1 <nil> 0 1"))
+}
+
+func TestSelectRPCStats(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	atomic.StoreUint32(&ddl.EnableSplitTableRegion, 1)
+	tk.MustExec("set global tidb_scatter_region = 1;")
+	tk.MustExec("use test;")
+	tk.MustExec("create table t (id int key);")
+	tk.MustQuery("split table t between (0) and (1000000) regions 10;")
+	tk.MustExec("set @@tidb_allow_batch_cop=0;")
+	tk.MustExec("set @@tidb_distsql_scan_concurrency=1;")
+	tk.MustQuery("select * from t;").Check(testkit.Rows())
+	res := tk.MustQuery("explain analyze select * from t;")
+	explain := getExplainResult(res)
+	require.Regexp(t, "TableReader.* cop_task: {num: 10, .* rpc_num: 10, .* max_distsql_concurrency: 1} .*", explain)
+}
+
+func getExplainResult(res *testkit.Result) string {
+	resBuff := bytes.NewBufferString("")
+	for _, row := range res.Rows() {
+		_, _ = fmt.Fprintf(resBuff, "%s\t", row)
+	}
+	return resBuff.String()
 }

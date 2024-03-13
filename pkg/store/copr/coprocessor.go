@@ -701,7 +701,8 @@ type copIterator struct {
 	storeBatchedNum         atomic.Uint64
 	storeBatchedFallbackNum atomic.Uint64
 
-	runawayChecker *resourcegroup.RunawayChecker
+	runawayChecker      *resourcegroup.RunawayChecker
+	unconsumedStatsChan chan *CopRuntimeStats
 }
 
 // copIteratorWorker receives tasks from copIteratorTaskSender, handles tasks and sends the copResponse to respChan.
@@ -724,6 +725,7 @@ type copIteratorWorker struct {
 
 	storeBatchedNum         *atomic.Uint64
 	storeBatchedFallbackNum *atomic.Uint64
+	unconsumedStatsChan     chan *CopRuntimeStats
 }
 
 // copIteratorTaskSender sends tasks to taskCh then wait for the workers to exit.
@@ -834,8 +836,9 @@ func (worker *copIteratorWorker) run(ctx context.Context) {
 func (it *copIterator) open(ctx context.Context, enabledRateLimitAction, enableCollectExecutionInfo bool) {
 	taskCh := make(chan *copTask, 1)
 	smallTaskCh := make(chan *copTask, 1)
-	it.wg.Add(it.concurrency + it.smallTaskConcurrency)
+	it.unconsumedStatsChan = make(chan *CopRuntimeStats, it.concurrency+it.smallTaskConcurrency)
 	it.workers = make([]*copIteratorWorker, 0, it.concurrency+it.smallTaskConcurrency)
+	it.wg.Add(it.concurrency + it.smallTaskConcurrency)
 	// Start it.concurrency number of workers to handle cop requests.
 	for i := 0; i < it.concurrency+it.smallTaskConcurrency; i++ {
 		var ch chan *copTask
@@ -859,6 +862,7 @@ func (it *copIterator) open(ctx context.Context, enabledRateLimitAction, enableC
 			pagingTaskIdx:              &it.pagingTaskIdx,
 			storeBatchedNum:            &it.storeBatchedNum,
 			storeBatchedFallbackNum:    &it.storeBatchedFallbackNum,
+			unconsumedStatsChan:        it.unconsumedStatsChan,
 		}
 		it.workers = append(it.workers, worker)
 		go worker.run(ctx)
@@ -1099,6 +1103,40 @@ func (it *copIterator) Next(ctx context.Context) (kv.ResultSubset, error) {
 	return resp, nil
 }
 
+type UnconsumedCopRuntimeStats interface {
+	CollectUnconsumedCopRuntimeStats() []*CopRuntimeStats
+}
+
+func (it *copIterator) CollectUnconsumedCopRuntimeStats() []*CopRuntimeStats {
+	if it == nil {
+		return nil
+	}
+	var totalStats []*CopRuntimeStats
+	for _, worker := range it.workers {
+		if len(worker.kvclient.Stats) > 0 {
+			copStats := new(CopRuntimeStats)
+			copStats.Stats = worker.kvclient.Stats
+			totalStats = append(totalStats, copStats)
+		}
+	}
+	return totalStats
+
+	//if it == nil || it.unconsumedStatsChan == nil || len(it.unconsumedStatsChan) == 0 {
+	//	return nil
+	//}
+	//var totalStats []*CopRuntimeStats
+	//for {
+	//	select {
+	//	case stats := <-it.unconsumedStatsChan:
+	//		if stats != nil {
+	//			totalStats = append(totalStats, stats)
+	//		}
+	//	default:
+	//		return totalStats
+	//	}
+	//}
+}
+
 // Associate each region with an independent backoffer. In this way, when multiple regions are
 // unavailable, TiDB can execute very quickly without blocking
 func chooseBackoffer(ctx context.Context, backoffermap map[uint64]*Backoffer, task *copTask, worker *copIteratorWorker) *Backoffer {
@@ -1128,6 +1166,15 @@ func (worker *copIteratorWorker) handleTask(ctx context.Context, task *copTask, 
 			resp := &copResponse{err: util2.GetRecoverError(r)}
 			// if panic has happened, set checkOOM to false to avoid another panic.
 			worker.sendToRespCh(resp, respCh, false)
+			//if len(worker.kvclient.Stats) > 0 {
+			//	copStats := new(CopRuntimeStats)
+			//	copStats.Stats = worker.kvclient.Stats
+			//	select {
+			//	case worker.unconsumedStatsChan <- copStats:
+			//		fmt.Printf("send stats to unconsumedStatsChansChan, ts: %v ----------\n\n", worker.req.StartTs)
+			//	default:
+			//	}
+			//}
 		}
 	}()
 	remainTasks := []*copTask{task}
@@ -1260,6 +1307,7 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 		err = worker.req.RunawayChecker.CheckCopRespError(err)
 	}
 	if err != nil {
+		fmt.Printf("send cop failed, err: %v  %v %v-------------\n\n\n", err.Error(), worker.kvclient.RegionRequestRuntimeStats.String(), bo.GetBackoffTimes())
 		if task.storeType == kv.TiDB {
 			err = worker.handleTiDBSendReqErr(err, task, ch)
 			return nil, err
@@ -1772,6 +1820,9 @@ func (worker *copIteratorWorker) handleCollectExecutionInfo(bo *Backoffer, rpcCt
 	}
 	if rpcCtx != nil {
 		resp.detail.CalleeAddress = rpcCtx.Addr
+	}
+	if resp.pbResp == nil {
+		return
 	}
 	sd := &util.ScanDetail{}
 	td := util.TimeDetail{}

@@ -612,6 +612,15 @@ func (r *selectResult) Close() error {
 					r.stats.storeBatchedNum, r.stats.storeBatchedFallbackNum = batched, fallback
 				}
 			}
+			if unconsumed, ok := r.resp.(copr.UnconsumedCopRuntimeStats); ok && unconsumed != nil {
+				unconsumedCopStats := unconsumed.CollectUnconsumedCopRuntimeStats()
+				logutil.BgLogger().Info("update cop stats--------", zap.Int("stats-count", len(unconsumedCopStats)))
+				for _, copStats := range unconsumedCopStats {
+					fmt.Printf("update cop stats: %v   %v -------------------\n\n", copStats.RegionRequestRuntimeStats.String(), copStats.ExecDetails.String())
+					_ = r.updateCopRuntimeStats(context.Background(), copStats, time.Duration(0))
+					r.ctx.GetSessionVars().StmtCtx.MergeExecDetails(&copStats.ExecDetails, nil)
+				}
+			}
 			r.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.RegisterStats(r.rootPlanID, r.stats)
 		}()
 	}

@@ -97,6 +97,7 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 	failpoint.Inject("unistoreRPCSlowByInjestSleep", func(val failpoint.Value) {
 		fmt.Printf("sleep %v ----------------------\n\n", val)
 		time.Sleep(time.Duration(val.(int)) * time.Millisecond)
+		failpoint.Return(tikvrpc.GenRegionErrorResp(req, &errorpb.Error{Message: "Deadline is exceeded"}))
 	})
 
 	select {
