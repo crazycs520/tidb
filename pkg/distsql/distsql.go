@@ -102,6 +102,7 @@ func Select(ctx context.Context, dctx distsqlctx.DistSQLContext, kvReq *kv.Reque
 	// for selectResult, we just use the kvReq.MemTracker prepared for co-processor
 	// instead of creating a new one for simplification.
 	return &selectResult{
+		ts:                 kvReq.StartTs,
 		label:              "dag",
 		resp:               resp,
 		rowLen:             len(fieldTypes),

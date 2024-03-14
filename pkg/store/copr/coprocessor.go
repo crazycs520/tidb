@@ -1112,6 +1112,7 @@ func (it *copIterator) CollectUnconsumedCopRuntimeStats() []*CopRuntimeStats {
 		return nil
 	}
 	var totalStats []*CopRuntimeStats
+	fmt.Printf(" CollectUnconsumedCopRuntimeStats   it.workers: %v  %v  ---------\n\n\n", len(it.workers), len(it.workers[0].kvclient.Stats))
 	for _, worker := range it.workers {
 		if len(worker.kvclient.Stats) > 0 {
 			copStats := new(CopRuntimeStats)

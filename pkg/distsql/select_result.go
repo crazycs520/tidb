@@ -281,6 +281,7 @@ func (ssr *serialSelectResults) Close() (err error) {
 }
 
 type selectResult struct {
+	ts    uint64
 	label string
 	resp  kv.Response
 
@@ -603,6 +604,15 @@ func (r *selectResult) Close() error {
 	if respSize > 0 {
 		r.memConsume(-respSize)
 	}
+	if unconsumed, ok := r.resp.(copr.UnconsumedCopRuntimeStats); ok && unconsumed != nil {
+		unconsumedCopStats := unconsumed.CollectUnconsumedCopRuntimeStats()
+		for _, copStats := range unconsumedCopStats {
+			copStats.CalleeAddress = "unknown"
+			_ = r.updateCopRuntimeStats(context.Background(), copStats, time.Duration(1))
+			fmt.Printf("update cop stats: %v   %v %v %v-------------------\n\n", copStats.RegionRequestRuntimeStats.String(), copStats.ExecDetails.String(), r.rootPlanID, r.stats.String())
+			//r.ctx.GetSessionVars().StmtCtx.MergeExecDetails(&copStats.ExecDetails, nil)
+		}
+	}
 	if r.stats != nil {
 		defer func() {
 			if ci, ok := r.resp.(copr.CopInfo); ok {
@@ -610,15 +620,6 @@ func (r *selectResult) Close() error {
 				batched, fallback := ci.GetStoreBatchInfo()
 				if batched != 0 || fallback != 0 {
 					r.stats.storeBatchedNum, r.stats.storeBatchedFallbackNum = batched, fallback
-				}
-			}
-			if unconsumed, ok := r.resp.(copr.UnconsumedCopRuntimeStats); ok && unconsumed != nil {
-				unconsumedCopStats := unconsumed.CollectUnconsumedCopRuntimeStats()
-				logutil.BgLogger().Info("update cop stats--------", zap.Int("stats-count", len(unconsumedCopStats)))
-				for _, copStats := range unconsumedCopStats {
-					fmt.Printf("update cop stats: %v   %v -------------------\n\n", copStats.RegionRequestRuntimeStats.String(), copStats.ExecDetails.String())
-					_ = r.updateCopRuntimeStats(context.Background(), copStats, time.Duration(0))
-					r.ctx.GetSessionVars().StmtCtx.MergeExecDetails(&copStats.ExecDetails, nil)
 				}
 			}
 			r.ctx.GetSessionVars().StmtCtx.RuntimeStatsColl.RegisterStats(r.rootPlanID, r.stats)
