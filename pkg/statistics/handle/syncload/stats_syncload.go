@@ -92,7 +92,7 @@ func (s *statsSyncLoad) SendLoadRequests(sc *stmtctx.StatementContext, neededHis
 		case s.StatsLoad.NeededItemsCh <- task:
 			continue
 		case <-timer.C:
-			return errors.New("sync load stats channel is full and timeout sending task to channel")
+			return errors.Errorf("sync load stats channel is full and timeout sending task to channel, next task: table id: %v, item id: %v, is index: %v", task.Item.TableID, task.Item.ID, task.Item.IsIndex)
 		}
 	}
 	sc.StatsLoad.LoadStartTime = time.Now()
