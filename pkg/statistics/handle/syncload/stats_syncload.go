@@ -73,6 +73,7 @@ func (s *statsSyncLoad) SendLoadRequests(sc *stmtctx.StatementContext, neededHis
 	if len(remainedItems) <= 0 {
 		return nil
 	}
+	logutil.BgLogger().Warn("[stats sync load]", zap.String("items", fmt.Sprintf("%v", remainedItems)))
 	sc.StatsLoad.Timeout = timeout
 	sc.StatsLoad.NeededItems = remainedItems
 	sc.StatsLoad.ResultCh = make(chan stmtctx.StatsLoadResult, len(remainedItems))

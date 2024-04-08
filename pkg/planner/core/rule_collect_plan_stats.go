@@ -16,6 +16,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/pingcap/failpoint"
@@ -67,6 +68,7 @@ func (collectPredicateColumnsPoint) optimize(_ context.Context, plan LogicalPlan
 	histNeededItems := collectHistNeededItems(histNeededColumns, histNeededIndices)
 	if histNeeded && len(histNeededItems) > 0 {
 		err := RequestLoadStats(plan.SCtx(), histNeededItems, syncWait)
+		logutil.BgLogger().Warn("[stats sync load]", zap.String("items", fmt.Sprintf("%v", histNeededItems)))
 		return plan, planChanged, err
 	}
 	return plan, planChanged, nil
