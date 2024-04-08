@@ -195,6 +195,7 @@ func (s *statsSyncLoad) SubLoadWorker(sctx sessionctx.Context, exit chan struct{
 			default:
 				// To avoid the thundering herd effect
 				// thundering herd effect: Everyone tries to retry a large number of requests simultaneously when a problem occurs.
+				logutil.BgLogger().Error("statsSyncLoad handleOneItemTask meets error", zap.Int64("table_id", task.Item.TableID), zap.Int64("hist_id", task.Item.ID), zap.Bool("is_index", task.Item.IsIndex), zap.Error(err))
 				r := rand.Intn(500)
 				time.Sleep(s.statsHandle.Lease()/10 + time.Duration(r)*time.Microsecond)
 				continue
@@ -239,16 +240,21 @@ func (s *statsSyncLoad) HandleOneTask(sctx sessionctx.Context, lastTask *statsty
 		}
 		return task, result.Err
 	case <-time.After(timeout):
+		logutil.BgLogger().Error("handle one task for stats loading timeout.", zap.Duration("timeout", timeout), zap.Int64("table_id", task.Item.TableID), zap.Int64("hist_id", task.Item.ID), zap.Bool("is_index", task.Item.IsIndex))
 		return task, nil
 	}
 }
 
 func (s *statsSyncLoad) handleOneItemTask(sctx sessionctx.Context, task *statstypes.NeededItemTask) (result *stmtctx.StatsLoadResult, err error) {
+	start := time.Now()
 	defer func() {
 		// recover for each task, worker keeps working
 		if r := recover(); r != nil {
 			logutil.BgLogger().Error("handleOneItemTask panicked", zap.Any("recover", r), zap.Stack("stack"))
 			err = errors.Errorf("stats loading panicked: %v", r)
+		}
+		if time.Since(start) >= time.Millisecond*99 {
+			logutil.BgLogger().Error("statsSyncLoad handleOneItemTask too slow", zap.Duration("cost", time.Since(start)), zap.Int64("table_id", task.Item.TableID), zap.Int64("hist_id", task.Item.ID), zap.Bool("is_index", task.Item.IsIndex))
 		}
 	}()
 	result = &stmtctx.StatsLoadResult{Item: task.Item.TableItemID}
