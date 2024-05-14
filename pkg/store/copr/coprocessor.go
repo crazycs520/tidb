@@ -1301,7 +1301,7 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 	costTime := time.Since(startTime)
 	copResp := resp.Resp.(*coprocessor.Response)
 
-	if costTime > minLogCopTaskTime {
+	if costTime > minLogCopTaskTime || bo.GetTotalSleep() > 1000 {
 		worker.logTimeCopTask(costTime, task, bo, copResp)
 	}
 
