@@ -182,8 +182,8 @@ github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSV
 github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwcJI5acqYI6dE=
 github.com/cpuguy83/go-md2man/v2 v2.0.1/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
 github.com/cpuguy83/go-md2man/v2 v2.0.3/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
-github.com/crazycs520/client-go/v2 v2.0.0-alpha.0.20240514120628-c9cb6b24d728 h1:l6BgP197m3NI3smeCm2/Xyje0MyolVdjOi+bqrqScwo=
-github.com/crazycs520/client-go/v2 v2.0.0-alpha.0.20240514120628-c9cb6b24d728/go.mod h1:/4cCrzN6+KY2U5JeR72TllnJTtA5hm9yI6zqlNrvJUo=
+github.com/crazycs520/client-go/v2 v2.0.0-alpha.0.20240515040958-30f6b8f02084 h1:en7m9G9USIMJlmrfn70FXHnaRiHWrHK6J26BFy5/34w=
+github.com/crazycs520/client-go/v2 v2.0.0-alpha.0.20240515040958-30f6b8f02084/go.mod h1:/4cCrzN6+KY2U5JeR72TllnJTtA5hm9yI6zqlNrvJUo=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548 h1:iwZdTE0PVqJCos1vaoKsclOGD3ADKpshg3SRtYBbwso=
 github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548/go.mod h1:e6NPNENfs9mPDVNRekM7lKScauxd5kXTr1Mfyig6TDM=
