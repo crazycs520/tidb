@@ -1,25 +1,25 @@
 package domain
 
 import (
+	"context"
 	"github.com/stretchr/testify/require"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-func TestTokenLimiterByKeyBasic(t *testing.T) {
-	tl := NewTokenLimiterByKey(2)
-	oldKey1Ch := tl.AddKey(1)
+func TestNewKeyLimiterBasic(t *testing.T) {
+	kl := NewKeyLimiter()
+	oldKey1Ch := kl.AddKey(1)
 	require.Nil(t, oldKey1Ch)
-	oldKey1Ch = tl.AddKey(1)
+	oldKey1Ch = kl.AddKey(1)
 	require.NotNil(t, oldKey1Ch)
-	oldKey1Ch = tl.AddKey(1)
+	oldKey1Ch = kl.AddKey(1)
 	require.NotNil(t, oldKey1Ch)
-	oldKey2Ch := tl.AddKey(2)
+	oldKey2Ch := kl.AddKey(2)
 	require.Nil(t, oldKey2Ch)
-	oldKey3Ch := tl.AddKey(3)
+	oldKey3Ch := kl.AddKey(3)
 	require.Nil(t, oldKey3Ch)
 	isChanClosed := func(ch chan struct{}) bool {
 		select {
@@ -30,44 +30,67 @@ func TestTokenLimiterByKeyBasic(t *testing.T) {
 		}
 	}
 	require.False(t, isChanClosed(oldKey1Ch))
-	tl.DeleteKey(1)
+	require.Equal(t, 3, len(kl.keys))
+	kl.ReleaseKey(1)
 	require.True(t, isChanClosed(oldKey1Ch))
+	require.Equal(t, 2, len(kl.keys))
+	// release unknown key is ok.
+	kl.ReleaseKey(100)
+	require.Equal(t, 2, len(kl.keys))
+	kl.ReleaseKey(2)
+	kl.ReleaseKey(3)
+	require.Equal(t, 0, len(kl.keys))
 }
 
 func TestTokenLimiterByKey(t *testing.T) {
-	tl := NewTokenLimiterByKey(2)
+	kl := NewKeyLimiter()
 
 	concurrency := 10
-	keyCount := 100
-
 	totalCount := int64(0)
-	execTask := func(n int) {
-		k := uint64(n % keyCount)
-		tl.AddKeyOrWaitFinish(k)
-		token := tl.Gey()
-		time.Sleep(time.Second)
-		atomic.AddInt64(&totalCount, 1)
-		tl.Put(token)
-		tl.DeleteKey(k)
+	benchFn := func(genKeyFn func() int) {
+		atomic.StoreInt64(&totalCount, 0)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
+		defer cancel()
+		execTask := func(k uint64) {
+			kl.AddKeyOrWaitFinish(k)
+			defer kl.ReleaseKey(k)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Millisecond * 80):
+				atomic.AddInt64(&totalCount, 1)
+			}
+		}
+		var wg sync.WaitGroup
+		for i := 0; i < concurrency; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				key := genKeyFn()
+				execTask(uint64(key))
+			}()
+		}
+		wg.Wait()
 	}
-	var wg sync.WaitGroup
-	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			execTask(rand.Int())
-			//cnt := 0
-			//for {
-			//	cnt++
-			//	select {
-			//	case <-time.After(time.Second):
-			//		return
-			//	default:
-			//		execTask(cnt)
-			//	}
-			//}
-		}()
-	}
-	wg.Wait()
-	require.Less(t, totalCount, int64(1))
+	// all concurrency worker run task with same key 1, then the final qps should be 1.
+	benchFn(func() int {
+		return 1
+	})
+	require.Equal(t, int64(1), totalCount)
+
+	// all concurrency worker run task with rand key [0, 1, 2], then the final qps should be 3.
+	k := 0
+	benchFn(func() int {
+		k++
+		return k % 3
+	})
+	require.Equal(t, int64(3), totalCount)
+
+	// all concurrency worker run task with different key, then the final qps should same with concurrency.
+	k = 0
+	benchFn(func() int {
+		k++
+		return k
+	})
+	require.Equal(t, int64(concurrency), totalCount)
 }

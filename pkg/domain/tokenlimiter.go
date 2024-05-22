@@ -66,19 +66,47 @@ func NewTokenLimiterByKey(count uint) *TokenLimiterByKey {
 	return tl
 }
 
+// KeyLimiter is used to limit the tasks which has same key to cannot be executed concurrently.
 type KeyLimiter struct {
 	sync.Mutex
 	keys map[uint64]chan struct{}
 }
 
-func NewKeyLimiter() *TokenLimiterByKey {
-	tl := &TokenLimiterByKey{count: count, ch: make(chan *Token, count)}
-	tl.mu.keys = make(map[uint64]chan struct{})
-	for i := uint(0); i < count; i++ {
-		tl.ch <- &Token{}
+func NewKeyLimiter() *KeyLimiter {
+	kl := &KeyLimiter{
+		keys: make(map[uint64]chan struct{}),
 	}
+	return kl
+}
 
-	return tl
+func (kl *KeyLimiter) AddKey(key uint64) chan struct{} {
+	kl.Lock()
+	defer kl.Unlock()
+	ch := kl.keys[key]
+	if ch == nil {
+		kl.keys[key] = make(chan struct{})
+	}
+	return ch
+}
+
+func (kl *KeyLimiter) AddKeyOrWaitFinish(key uint64) bool {
+	doneCh := kl.AddKey(key)
+	if doneCh == nil {
+		return true
+	}
+	_ = <-doneCh
+	return false
+}
+
+func (kl *KeyLimiter) ReleaseKey(key uint64) {
+	kl.Lock()
+	defer kl.Unlock()
+
+	ch := kl.keys[key]
+	delete(kl.keys, key)
+	if ch != nil {
+		close(ch)
+	}
 }
 
 //func loadSchema(ts uint64, tl *TokenLimiterByKey) {
