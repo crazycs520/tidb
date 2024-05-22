@@ -217,16 +217,18 @@ func (do *Domain) loadInfoSchema(startTS uint64) (infoschema.InfoSchema, bool, i
 	// 3. There are less 100 diffs.
 	startTime := time.Now()
 	if currentSchemaVersion != 0 && neededSchemaVersion > currentSchemaVersion && neededSchemaVersion-currentSchemaVersion < 100 {
-		is, relatedChanges, err := do.tryLoadSchemaDiffs(m, currentSchemaVersion, neededSchemaVersion)
+		is, relatedChanges, diffTypes, err := do.tryLoadSchemaDiffs(m, currentSchemaVersion, neededSchemaVersion)
 		if err == nil {
 			loadSchemaDurationLoadDiff.Observe(time.Since(startTime).Seconds())
 			do.infoCache.Insert(is, uint64(schemaTs))
 			logutil.BgLogger().Info("diff load InfoSchema success",
 				zap.Int64("currentSchemaVersion", currentSchemaVersion),
 				zap.Int64("neededSchemaVersion", neededSchemaVersion),
+				zap.Int64("gap", neededSchemaVersion-currentSchemaVersion),
 				zap.Duration("start time", time.Since(startTime)),
 				zap.Int64s("phyTblIDs", relatedChanges.PhyTblIDS),
-				zap.Uint64s("actionTypes", relatedChanges.ActionTypes))
+				zap.Uint64s("actionTypes", relatedChanges.ActionTypes),
+				zap.Strings("diffTypes", diffTypes))
 			return is, false, currentSchemaVersion, relatedChanges, nil
 		}
 		// We can fall back to full load, don't need to return the error.
@@ -369,17 +371,18 @@ func (do *Domain) fetchSchemasWithTables(schemas []*model.DBInfo, m *meta.Meta, 
 // Return true if the schema is loaded successfully.
 // Return false if the schema can not be loaded by schema diff, then we need to do full load.
 // The second returned value is the delta updated table and partition IDs.
-func (do *Domain) tryLoadSchemaDiffs(m *meta.Meta, usedVersion, newVersion int64) (infoschema.InfoSchema, *transaction.RelatedSchemaChange, error) {
+func (do *Domain) tryLoadSchemaDiffs(m *meta.Meta, usedVersion, newVersion int64) (infoschema.InfoSchema, *transaction.RelatedSchemaChange, []string, error) {
 	var diffs []*model.SchemaDiff
 	for usedVersion < newVersion {
 		usedVersion++
 		diff, err := m.GetSchemaDiff(usedVersion)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if diff == nil {
 			// Empty diff means the txn of generating schema version is committed, but the txn of `runDDLJob` is not or fail.
 			// It is safe to skip the empty diff because the infoschema is new enough and consistent.
+			logutil.BgLogger().Info("diff load InfoSchema get empty schema diff", zap.Int64("version", usedVersion))
 			continue
 		}
 		diffs = append(diffs, diff)
@@ -388,12 +391,15 @@ func (do *Domain) tryLoadSchemaDiffs(m *meta.Meta, usedVersion, newVersion int64
 	builder.SetDeltaUpdateBundles()
 	phyTblIDs := make([]int64, 0, len(diffs))
 	actions := make([]uint64, 0, len(diffs))
+	diffTypes := make([]string, 0, len(diffs))
 	for _, diff := range diffs {
 		IDs, err := builder.ApplyDiff(m, diff)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
+		diffTypes = append(diffTypes, diff.Type.String())
 		if canSkipSchemaCheckerDDL(diff.Type) {
+			logutil.BgLogger().Info("diff load InfoSchema skip schema check", zap.Int64("version", usedVersion), zap.String("type", diff.Type.String()))
 			continue
 		}
 		phyTblIDs = append(phyTblIDs, IDs...)
@@ -406,7 +412,7 @@ func (do *Domain) tryLoadSchemaDiffs(m *meta.Meta, usedVersion, newVersion int64
 	relatedChange := transaction.RelatedSchemaChange{}
 	relatedChange.PhyTblIDS = phyTblIDs
 	relatedChange.ActionTypes = actions
-	return is, &relatedChange, nil
+	return is, &relatedChange, diffTypes, nil
 }
 
 func canSkipSchemaCheckerDDL(tp model.ActionType) bool {
