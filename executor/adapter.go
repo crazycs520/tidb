@@ -22,6 +22,7 @@ import (
 	"runtime/trace"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -1477,6 +1478,9 @@ func resetCTEStorageMap(se sessionctx.Context) error {
 	return nil
 }
 
+var staleReadTSMap = sync.Map{}
+var lastLogTime = time.Now().Unix()
+
 // LogSlowQuery is used to print the slow query in the log files.
 func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	sessVars := a.Ctx.GetSessionVars()
@@ -1488,6 +1492,20 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	inEfficientScanRatio := atomic.LoadUint64(&cfg.Instance.InefficientScanRatio)
 	inEfficientScanNum := atomic.LoadUint64(&cfg.Instance.InefficientScanNum)
 	enable := cfg.Instance.EnableSlowLog.Load()
+
+	if txnTS == 0 && sessVars.TxnCtx.StaleReadTs > 0 {
+		staleReadTSMap.Store(sessVars.TxnCtx.StaleReadTs, 1)
+		if now := time.Now().Unix(); now > atomic.LoadInt64(&lastLogTime) {
+			atomic.StoreInt64(&lastLogTime, now)
+			cnt := 0
+			staleReadTSMap.Range(func(key, value any) bool {
+				cnt++
+				return true
+			})
+			staleReadTSMap = sync.Map{}
+			logutil.BgLogger().Info("stale ts counter", zap.Int("count", cnt))
+		}
+	}
 
 	// Check if it's an expensive mvcc scan. It's regarded as expensive if
 	// 1. The rocksdb_delete_skipped_count > processed_keys * inEfficientScanRatio.
