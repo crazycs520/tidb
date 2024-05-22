@@ -1494,16 +1494,23 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 	enable := cfg.Instance.EnableSlowLog.Load()
 
 	if txnTS == 0 && sessVars.TxnCtx.StaleReadTs > 0 {
-		staleReadTSMap.Store(sessVars.TxnCtx.StaleReadTs, 1)
+		count := int(1)
+		v, ok := staleReadTSMap.Load(sessVars.TxnCtx.StaleReadTs)
+		if ok {
+			count = v.(int) + 1
+		}
+		staleReadTSMap.Store(sessVars.TxnCtx.StaleReadTs, count)
 		if now := time.Now().Unix(); now > atomic.LoadInt64(&lastLogTime) {
 			atomic.StoreInt64(&lastLogTime, now)
-			cnt := 0
+			tsCnt := 0
+			qps := 0
 			staleReadTSMap.Range(func(key, value any) bool {
-				cnt++
+				tsCnt++
+				qps += value.(int)
 				return true
 			})
 			staleReadTSMap = sync.Map{}
-			logutil.BgLogger().Info("stale ts counter", zap.Int("count", cnt))
+			logutil.BgLogger().Info("stale ts counter", zap.Int("ts-count", tsCnt), zap.Int("qps", qps))
 		}
 	}
 
