@@ -108,23 +108,3 @@ func (kl *KeyLimiter) ReleaseKey(key uint64) {
 		close(ch)
 	}
 }
-
-//func loadSchema(ts uint64, tl *TokenLimiterByKey) {
-//	for {
-//		ok := loadFromCache()
-//		if ok {
-//			return
-//		}
-//		succ := tl.AddKey(ts)
-//		if !succ {
-//			continue
-//		}
-//		token := tl.Gey()
-//		err := loadFromTiKV()
-//		tl.DeleteKey(ts)
-//		tl.Put(token)
-//		if err {
-//			...
-//		}
-//	}
-//}

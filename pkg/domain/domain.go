@@ -196,8 +196,9 @@ type Domain struct {
 		sctxs map[sessionctx.Context]bool
 	}
 
-	mdlCheckCh      chan struct{}
-	stopAutoAnalyze atomicutil.Bool
+	mdlCheckCh        chan struct{}
+	stopAutoAnalyze   atomicutil.Bool
+	loadSchemaLimiter *KeyLimiter
 }
 
 type mdlCheckTableInfo struct {
@@ -514,6 +515,13 @@ func (do *Domain) GetSnapshotInfoSchema(snapshotTS uint64) (infoschema.InfoSchem
 	// if the snapshotTS is new enough, we can get infoschema directly through snapshotTS.
 	if is := do.infoCache.GetBySnapshotTS(snapshotTS); is != nil {
 		return is, nil
+	}
+	ok := do.loadSchemaLimiter.AddKeyOrWaitFinish(snapshotTS)
+	defer do.loadSchemaLimiter.ReleaseKey(snapshotTS)
+	if !ok {
+		if is := do.infoCache.GetBySnapshotTS(snapshotTS); is != nil {
+			return is, nil
+		}
 	}
 	is, _, _, _, err := do.loadInfoSchema(snapshotTS)
 	infoschema_metrics.LoadSchemaCounterSnapshot.Inc()
@@ -1098,7 +1106,8 @@ func NewDomain(store kv.Storage, ddlLease time.Duration, statsLease time.Duratio
 			jobsVerMap: make(map[int64]int64),
 			jobsIDsMap: make(map[int64]string),
 		},
-		mdlCheckCh: make(chan struct{}),
+		mdlCheckCh:        make(chan struct{}),
+		loadSchemaLimiter: NewKeyLimiter(),
 	}
 
 	do.infoCache = infoschema.NewCache(do, int(variable.SchemaVersionCacheLimit.Load()))
