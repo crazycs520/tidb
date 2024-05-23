@@ -449,6 +449,13 @@ func (sv *schemaVersionManager) setSchemaVersion(job *model.Job, store kv.Storag
 		var err error
 		m := meta.NewMeta(txn)
 		schemaVersion, err = m.GenSchemaVersion()
+		if err != nil {
+			return err
+		}
+		// mock schema gap
+		if job.Type == model.ActionDropTable {
+			schemaVersion, err = m.GenSchemaVersion()
+		}
 		return err
 	})
 	return schemaVersion, err
