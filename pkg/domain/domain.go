@@ -287,6 +287,7 @@ func (do *Domain) loadInfoSchema(startTS uint64) (infoschema.InfoSchema, bool, i
 			logutil.BgLogger().Info("diff load InfoSchema success",
 				zap.Int64("currentSchemaVersion", currentSchemaVersion),
 				zap.Int64("neededSchemaVersion", neededSchemaVersion),
+				zap.Int64("gap", neededSchemaVersion-currentSchemaVersion),
 				zap.Duration("start time", time.Since(startTime)),
 				zap.Int64("gotSchemaVersion", is.SchemaMetaVersion()),
 				zap.Int64s("phyTblIDs", relatedChanges.PhyTblIDS),
