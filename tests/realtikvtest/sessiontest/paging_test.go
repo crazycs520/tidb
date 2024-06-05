@@ -128,5 +128,5 @@ func TestIndexLookUpWithPaging(t *testing.T) {
 	rows := tk.MustQuery("explain analyze select * from t use index(idx) where b>0 and b < 512;").Rows()
 	require.Len(t, rows, 3)
 	explain := fmt.Sprintf("%v", rows[1])
-	require.Regexp(t, ".*IndexRangeScan.*rpc_info.*Cop:{num_rpc:1, total_time:.*", explain)
+	require.Regexp(t, ".*IndexRangeScan.*rpc_info.*Cop:{num_rpc:1, total_time:.*", explain, fmt.Sprintf("%v", rows[0]))
 }
