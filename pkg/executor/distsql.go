@@ -676,16 +676,15 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, workCh chan<
 			SetStartTS(e.startTS).
 			SetDesc(e.desc).
 			SetKeepOrder(e.keepOrder).
-			SetPaging(e.indexPaging).
 			SetTxnScope(e.txnScope).
 			SetReadReplicaScope(e.readReplicaScope).
 			SetIsStaleness(e.isStaleness).
 			SetFromSessionVars(e.Ctx().GetDistSQLCtx()).
+			SetPaging(e.indexPaging). // e.indexPaging has higher priority than session variable EnablePaging.
 			SetFromInfoSchema(e.Ctx().GetInfoSchema()).
 			SetClosestReplicaReadAdjuster(newClosestReadAdjuster(e.Ctx().GetDistSQLCtx(), &builder.Request, e.idxNetDataSize/float64(len(kvRanges)))).
 			SetMemTracker(tracker).
 			SetConnIDAndConnAlias(e.Ctx().GetSessionVars().ConnectionID, e.Ctx().GetSessionVars().SessionAlias)
-		builder.SetPaging(false)
 
 		results := make([]distsql.SelectResult, 0, len(kvRanges))
 		for _, kvRange := range kvRanges {
@@ -711,7 +710,7 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, workCh chan<
 				break
 			}
 			if e.Ctx().GetSessionVars().ConnectionID > 0 {
-				logutil.Logger(ctx).Info("index worker req", zap.Int("concurrency", kvReq.Concurrency), zap.Int("dist-concurrency", e.Ctx().GetSessionVars().DistSQLScanConcurrency()))
+				logutil.Logger(ctx).Info("index worker req", zap.Bool("index_paging", e.indexPaging), zap.Bool("req.paging", kvReq.Paging.Enable), zap.Uint64("req.paging.min", kvReq.Paging.MinPagingSize))
 			}
 			result, err := distsql.SelectWithRuntimeStats(ctx, e.Ctx().GetDistSQLCtx(), kvReq, tps, getPhysicalPlanIDs(e.idxPlans), idxID)
 			if err != nil {
