@@ -736,6 +736,7 @@ type copIteratorWorker struct {
 	storeBatchedNum         *atomic.Uint64
 	storeBatchedFallbackNum *atomic.Uint64
 	unconsumedStats         *unconsumedCopRuntimeStats
+	concurrency             int
 }
 
 // copIteratorTaskSender sends tasks to taskCh then wait for the workers to exit.
@@ -877,6 +878,7 @@ func (it *copIterator) open(ctx context.Context, enabledRateLimitAction, enableC
 			storeBatchedNum:            &it.storeBatchedNum,
 			storeBatchedFallbackNum:    &it.storeBatchedFallbackNum,
 			unconsumedStats:            it.unconsumedStats,
+			concurrency:                it.concurrency,
 		}
 		go worker.run(ctx)
 	}
@@ -1309,8 +1311,8 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 	costTime := time.Since(startTime)
 	copResp := resp.Resp.(*coprocessor.Response)
 
-	if costTime > minLogCopTaskTime {
-		worker.logTimeCopTask(costTime, task, bo, copResp)
+	if costTime > minLogCopTaskTime || (copReq.ConnectionId > 0 && worker.concurrency == 1) {
+		worker.logTimeCopTask(costTime, task, bo, copResp, &copReq)
 	}
 
 	storeID := strconv.FormatUint(req.Context.GetPeer().GetStoreId(), 10)
@@ -1344,7 +1346,7 @@ const (
 	minLogKVProcessTime = 100
 )
 
-func (worker *copIteratorWorker) logTimeCopTask(costTime time.Duration, task *copTask, bo *Backoffer, resp *coprocessor.Response) {
+func (worker *copIteratorWorker) logTimeCopTask(costTime time.Duration, task *copTask, bo *Backoffer, resp *coprocessor.Response, copReq *coprocessor.Request) {
 	logStr := fmt.Sprintf("[TIME_COP_PROCESS] resp_time:%s txnStartTS:%d region_id:%d store_addr:%s", costTime, worker.req.StartTs, task.region.GetID(), task.storeAddr)
 	if worker.kvclient.Stats != nil {
 		logStr += fmt.Sprintf(" stats:%s", worker.kvclient.Stats.String())
@@ -1386,6 +1388,15 @@ func (worker *copIteratorWorker) logTimeCopTask(costTime time.Duration, task *co
 		logStr = appendScanDetail(logStr, "write", detail.ScanDetail.Write)
 		logStr = appendScanDetail(logStr, "data", detail.ScanDetail.Data)
 		logStr = appendScanDetail(logStr, "lock", detail.ScanDetail.Lock)
+	}
+	logStr += fmt.Sprintf(" task_id:%d", task.taskID)
+	logStr += fmt.Sprintf(" task_paging_size:%d", task.pagingSize)
+	logStr += fmt.Sprintf(" req_paging_size:%d", copReq.PagingSize)
+	logStr += fmt.Sprintf(" worker.paging_enable:%v", worker.req.Paging.Enable)
+	logStr += fmt.Sprintf(" worker.paging_min:%v", worker.req.Paging.MinPagingSize)
+	logStr += fmt.Sprintf(" worker.paging_max:%v", worker.req.Paging.MaxPagingSize)
+	if task.ranges != nil {
+		logStr += fmt.Sprintf(" range:%v", task.ranges.String())
 	}
 	logutil.Logger(bo.GetCtx()).Info(logStr)
 }

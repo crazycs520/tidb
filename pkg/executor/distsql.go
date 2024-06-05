@@ -685,6 +685,7 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, workCh chan<
 			SetClosestReplicaReadAdjuster(newClosestReadAdjuster(e.Ctx().GetDistSQLCtx(), &builder.Request, e.idxNetDataSize/float64(len(kvRanges)))).
 			SetMemTracker(tracker).
 			SetConnIDAndConnAlias(e.Ctx().GetSessionVars().ConnectionID, e.Ctx().GetSessionVars().SessionAlias)
+		builder.SetPaging(false)
 
 		results := make([]distsql.SelectResult, 0, len(kvRanges))
 		for _, kvRange := range kvRanges {
@@ -708,6 +709,9 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, workCh chan<
 			if err != nil {
 				worker.syncErr(err)
 				break
+			}
+			if e.Ctx().GetSessionVars().ConnectionID > 0 {
+				logutil.Logger(ctx).Info("index worker req", zap.Int("concurrency", kvReq.Concurrency), zap.Int("dist-concurrency", e.Ctx().GetSessionVars().DistSQLScanConcurrency()))
 			}
 			result, err := distsql.SelectWithRuntimeStats(ctx, e.Ctx().GetDistSQLCtx(), kvReq, tps, getPhysicalPlanIDs(e.idxPlans), idxID)
 			if err != nil {
@@ -789,6 +793,9 @@ func (e *IndexLookUpExecutor) buildTableReader(ctx context.Context, task *lookup
 	if err != nil {
 		logutil.Logger(ctx).Error("build table reader from handles failed", zap.Error(err))
 		return nil, err
+	}
+	if e.Ctx().GetSessionVars().ConnectionID > 0 {
+		logutil.Logger(ctx).Info("build table reader", zap.Bool("enable_paging", tableReader.paging))
 	}
 	return tableReader, nil
 }
@@ -995,6 +1002,15 @@ func (w *indexWorker) fetchHandles(ctx context.Context, results []distsql.Select
 		if w.idxLookup.partitionTableMode {
 			task.partitionTable = w.idxLookup.prunedPartitions[i]
 		}
+		if len(handles) > 20 {
+			logutil.Logger(ctx).Warn("index lookup exec fetch handles", zap.Int("results", len(results)),
+				zap.Int("handles", len(handles)),
+				zap.Int("chunk-capacity", chk.Capacity()),
+				zap.Int("chunk-RequiredRows", chk.RequiredRows()),
+				zap.Int("w.batchSize", w.batchSize),
+				zap.Int("w.maxBatchSize", w.maxBatchSize),
+				zap.Int("w.maxChunkSize", w.maxChunkSize))
+		}
 		select {
 		case <-ctx.Done():
 			return nil
@@ -1164,6 +1180,7 @@ func (w *tableWorker) pickAndExecTask(ctx context.Context) {
 		if w.idxLookup.stats != nil {
 			atomic.AddInt64(&w.idxLookup.stats.TableRowScan, int64(time.Since(startTime)))
 			atomic.AddInt64(&w.idxLookup.stats.TableTaskNum, 1)
+			w.idxLookup.stats.TableTaskHandles = append(w.idxLookup.stats.TableTaskHandles, len(task.handles))
 		}
 		task.doneCh <- err
 	}
@@ -1227,6 +1244,7 @@ type IndexLookUpRunTimeStats struct {
 	TaskWait            int64
 	TableRowScan        int64
 	TableTaskNum        int64
+	TableTaskHandles    []int
 	Concurrency         int
 	// Record the `Next` call affected wait duration details.
 	NextWaitIndexScan        time.Duration
@@ -1253,7 +1271,7 @@ func (e *IndexLookUpRunTimeStats) String() string {
 		if buf.Len() > 0 {
 			buf.WriteByte(',')
 		}
-		buf.WriteString(fmt.Sprintf(" table_task: {total_time: %v, num: %d, concurrency: %d}", execdetails.FormatDuration(time.Duration(tableScan)), tableTaskNum, concurrency))
+		buf.WriteString(fmt.Sprintf(" table_task: {total_time: %v, num: %d, concurrency: %d, handles_cnt: %v}", execdetails.FormatDuration(time.Duration(tableScan)), tableTaskNum, concurrency, e.TableTaskHandles))
 	}
 	if e.NextWaitIndexScan > 0 || e.NextWaitTableLookUpBuild > 0 || e.NextWaitTableLookUpResp > 0 {
 		if buf.Len() > 0 {
@@ -1284,6 +1302,7 @@ func (e *IndexLookUpRunTimeStats) Merge(other execdetails.RuntimeStats) {
 	e.TaskWait += tmp.TaskWait
 	e.TableRowScan += tmp.TableRowScan
 	e.TableTaskNum += tmp.TableTaskNum
+	e.TableTaskHandles = append(e.TableTaskHandles, tmp.TableTaskHandles...)
 	e.NextWaitIndexScan += tmp.NextWaitIndexScan
 	e.NextWaitTableLookUpBuild += tmp.NextWaitTableLookUpBuild
 	e.NextWaitTableLookUpResp += tmp.NextWaitTableLookUpResp
