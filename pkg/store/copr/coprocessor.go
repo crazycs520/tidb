@@ -878,7 +878,7 @@ func (it *copIterator) open(ctx context.Context, enabledRateLimitAction, enableC
 			storeBatchedNum:            &it.storeBatchedNum,
 			storeBatchedFallbackNum:    &it.storeBatchedFallbackNum,
 			unconsumedStats:            it.unconsumedStats,
-			concurrency:                it.concurrency,
+			concurrency:                it.concurrency + it.smallTaskConcurrency,
 		}
 		go worker.run(ctx)
 	}

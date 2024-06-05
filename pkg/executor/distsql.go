@@ -680,11 +680,17 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, workCh chan<
 			SetReadReplicaScope(e.readReplicaScope).
 			SetIsStaleness(e.isStaleness).
 			SetFromSessionVars(e.Ctx().GetDistSQLCtx()).
-			SetPaging(e.indexPaging). // e.indexPaging has higher priority than session variable EnablePaging.
+			//SetPaging(e.indexPaging). // e.indexPaging has higher priority than session variable EnablePaging.
 			SetFromInfoSchema(e.Ctx().GetInfoSchema()).
 			SetClosestReplicaReadAdjuster(newClosestReadAdjuster(e.Ctx().GetDistSQLCtx(), &builder.Request, e.idxNetDataSize/float64(len(kvRanges)))).
 			SetMemTracker(tracker).
 			SetConnIDAndConnAlias(e.Ctx().GetSessionVars().ConnectionID, e.Ctx().GetSessionVars().SessionAlias)
+		if builder.Request.Paging.Enable && builder.Request.Paging.MinPagingSize < uint64(initBatchSize) {
+			builder.Request.Paging.MinPagingSize = uint64(initBatchSize)
+			if builder.Request.Paging.MaxPagingSize < uint64(initBatchSize) {
+				builder.Request.Paging.MaxPagingSize = uint64(initBatchSize)
+			}
+		}
 
 		results := make([]distsql.SelectResult, 0, len(kvRanges))
 		for _, kvRange := range kvRanges {
