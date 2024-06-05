@@ -102,3 +102,31 @@ func TestPagingActRowsAndProcessKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestIndexLookUpWithPaging(t *testing.T) {
+	defer config.RestoreFunc()
+	config.UpdateGlobal(func(conf *config.Config) {
+		conf.TiKVClient.CoprCache.CapacityMB = 0
+	})
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test;")
+	tk.MustExec("drop table if exists t;")
+	tk.MustExec("create table t (id int key, b int, c int, index idx (b))")
+	tk.MustExec("begin")
+	for i := 0; i < 512; i += 4 {
+		tk.MustExec(fmt.Sprintf("insert into t (id) values (%d), (%d), (%d), (%d)", i, i+1, i+2, i+3))
+	}
+	tk.MustExec(`update t set b = id`)
+	tk.MustExec("commit")
+	tk.Session().GetSessionVars().ConnectionID = 1
+	tk.MustExec(`set @@tidb_enable_paging=1`)
+	tk.MustExec(`set @@tidb_min_paging_size=128`)
+	tk.MustExec("set @@tidb_max_chunk_size=1024;")
+	fmt.Printf("----------------begin ----------\n\n")
+	tk.MustQuery("select count(*) from t").Check(testkit.Rows("512"))
+	rows := tk.MustQuery("explain analyze select * from t use index(idx) where b>0 and b < 512;").Rows()
+	require.Len(t, rows, 3)
+	explain := fmt.Sprintf("%v", rows[1])
+	require.Regexp(t, ".*IndexRangeScan.*rpc_info.*Cop:{num_rpc:1, total_time:.*", explain)
+}
