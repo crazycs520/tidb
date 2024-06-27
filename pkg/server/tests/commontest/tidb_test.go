@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2237,6 +2238,81 @@ func TestLocalhostClientMapping(t *testing.T) {
 	defer dbSocket.Close()
 	err = dbSocket.Ping()
 	require.Errorf(t, err, "Connection successful without matching host for unix domain socket!")
+}
+
+func TestPlanCacheWithDDL(t *testing.T) {
+	dsn := fmt.Sprintf(
+		"%s:%s@tcp(%s)/%s?charset=utf8mb4",
+		"root", "", net.JoinHostPort("10.0.1.9", strconv.Itoa(5000)), "test")
+	db, err := sql.Open("mysql", dsn)
+	require.NoError(t, err)
+	dsn2 := fmt.Sprintf(
+		"%s:%s@tcp(%s)/%s?charset=utf8mb4",
+		"root", "", net.JoinHostPort("10.0.1.9", strconv.Itoa(5001)), "test")
+	db2, err := sql.Open("mysql", dsn2)
+	require.NoError(t, err)
+	defer func() {
+		db.Close()
+		db2.Close()
+	}()
+
+	tk := testkit.NewDBTestKit(t, db)
+	tk.MustExec("use test;")
+	tk.MustExec(`set global tidb_ddl_enable_fast_reorg=on;`)
+	tk.MustExec(`set global foreign_key_checks=0;`)
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (pk int primary key, a int);")
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				tk.MustExec("alter table t add column d int;")
+				tk.MustExec("alter table t drop column d")
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		tk := testkit.NewDBTestKit(t, db2)
+		tk.MustExec("use test;")
+		for i := 0; i < 1024000000; i++ {
+			if i%100 == 0 {
+				tk.MustExec("prepare stmt_insert from 'insert into t (pk, a) values (?, ?)';")
+				tk.MustExec("prepare stmt_update from 'update t set a = ? where pk = ?';")
+				tk.MustExec("prepare stmt_delete from 'delete from t where pk = ?';")
+			}
+			tk.MustExec(fmt.Sprintf("set @a=%v, @b=%v, @c=%v", i, i+1, i+2))
+			tk.MustExec("execute stmt_insert using @a, @b")
+			tk.MustExec("execute stmt_update using @c, @a")
+			tk.MustExec("execute stmt_delete using @b")
+
+			//_, err := internalTK.Exec("execute stmt_insert using @a, @b")
+			//if err != nil && !strings.Contains(err.Error(), "Schema change caused error") {
+			//	require.NoError(t, err)
+			//}
+			//_, err = internalTK.Exec("execute stmt_update using @c, @a")
+			//if err != nil && !strings.Contains(err.Error(), "Schema change caused error") {
+			//	require.NoError(t, err)
+			//}
+			//_, err = internalTK.Exec("execute stmt_delete using @b")
+			//if err != nil && !strings.Contains(err.Error(), "Schema change caused error") {
+			//	require.NoError(t, err)
+			//}
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+		}
+	}()
+	wg.Wait()
 }
 
 func TestRcReadCheckTS(t *testing.T) {

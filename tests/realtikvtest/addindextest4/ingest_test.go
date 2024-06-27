@@ -15,11 +15,13 @@
 package addindextest_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/config"
@@ -145,6 +147,8 @@ func TestIngestMVIndexOnPartitionTable(t *testing.T) {
 		tk.MustExec("create database addindexlit;")
 		tk.MustExec("use addindexlit;")
 		tk.MustExec(`set global tidb_ddl_enable_fast_reorg=on;`)
+		tk.MustExec(`set global foreign_key_checks=0;`)
+		tk.MustExec(`set @@foreign_key_checks=0;`)
 
 		var sb strings.Builder
 
@@ -170,6 +174,7 @@ func TestIngestMVIndexOnPartitionTable(t *testing.T) {
 			}
 			wg.Done()
 		}()
+		time.Sleep(time.Millisecond * 100)
 		tk.MustExec(c)
 		rows := tk.MustQuery("admin show ddl jobs 1;").Rows()
 		require.Len(t, rows, 1)
@@ -179,6 +184,75 @@ func TestIngestMVIndexOnPartitionTable(t *testing.T) {
 		wg.Wait()
 		tk.MustExec("admin check table t")
 	}
+}
+
+func TestPlanCacheWithDDL(t *testing.T) {
+	config.UpdateGlobal(func(conf *config.Config) {
+		conf.PreparedPlanCache.Enabled = true
+		conf.PreparedPlanCache.Capacity = 100
+	})
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("drop database if exists addindexlit;")
+	tk.MustExec("create database addindexlit;")
+	tk.MustExec("use addindexlit;")
+	tk.MustExec(`set global tidb_ddl_enable_fast_reorg=on;`)
+	tk.MustExec(`set global foreign_key_checks=0;`)
+	tk.MustExec(`set foreign_key_checks=0;`)
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (pk int primary key, a int);")
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				tk.MustExec("alter table t add column d int;")
+				tk.MustExec("alter table t drop column d")
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		internalTK := testkit.NewTestKit(t, store)
+		internalTK.MustExec("use addindexlit;")
+		for i := 0; i < 1024000000; i++ {
+			if i%100 == 0 {
+				internalTK.MustExec("prepare stmt_insert from 'insert into t (pk, a) values (?, ?)';")
+				internalTK.MustExec("prepare stmt_update from 'update t set a = ? where pk = ?';")
+				internalTK.MustExec("prepare stmt_delete from 'delete from t where pk = ?';")
+			}
+			internalTK.MustExec(fmt.Sprintf("set @a=%v, @b=%v, @c=%v", i, i+1, i+2))
+			internalTK.MustExec("execute stmt_insert using @a, @b")
+			internalTK.MustExec("execute stmt_update using @c, @a")
+			internalTK.MustExec("execute stmt_delete using @b")
+
+			//_, err := internalTK.Exec("execute stmt_insert using @a, @b")
+			//if err != nil && !strings.Contains(err.Error(), "Schema change caused error") {
+			//	require.NoError(t, err)
+			//}
+			//_, err = internalTK.Exec("execute stmt_update using @c, @a")
+			//if err != nil && !strings.Contains(err.Error(), "Schema change caused error") {
+			//	require.NoError(t, err)
+			//}
+			//_, err = internalTK.Exec("execute stmt_delete using @b")
+			//if err != nil && !strings.Contains(err.Error(), "Schema change caused error") {
+			//	require.NoError(t, err)
+			//}
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+		}
+	}()
+	wg.Wait()
 }
 
 func TestAddIndexIngestAdjustBackfillWorker(t *testing.T) {
