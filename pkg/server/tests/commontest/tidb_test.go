@@ -19,6 +19,8 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/util/logutil"
+	"golang.org/x/exp/rand"
 	"io"
 	"net"
 	"os"
@@ -2282,29 +2284,25 @@ func TestPlanCacheWithDDL(t *testing.T) {
 		defer wg.Done()
 		tk := testkit.NewDBTestKit(t, db2)
 		tk.MustExec("use test;")
+		insertStmt := tk.MustPrepare("insert into t (pk, a) values (?, ?)")
+		updateStmt := tk.MustPrepare("update t set a = ? where pk = ?")
 		for i := 0; i < 1024000000; i++ {
-			if i%100 == 0 {
-				tk.MustExec("prepare stmt_insert from 'insert into t (pk, a) values (?, ?)';")
-				tk.MustExec("prepare stmt_update from 'update t set a = ? where pk = ?';")
-				tk.MustExec("prepare stmt_delete from 'delete from t where pk = ?';")
+			if rand.Intn(100) < 10 {
+				insertStmt = tk.MustPrepare("insert into t (pk, a) values (?, ?)")
+				updateStmt = tk.MustPrepare("update t set a = ? where pk = ?")
+				//tk.MustExec("prepare stmt_insert from 'insert into t (pk, a) values (?, ?)';")
+				//tk.MustExec("prepare stmt_update from 'update t set a = ? where pk = ?';")
+				//tk.MustExec("prepare stmt_delete from 'delete from t where pk = ?';")
 			}
-			tk.MustExec(fmt.Sprintf("set @a=%v, @b=%v, @c=%v", i, i+1, i+2))
-			tk.MustExec("execute stmt_insert using @a, @b")
-			tk.MustExec("execute stmt_update using @c, @a")
-			tk.MustExec("execute stmt_delete using @b")
+			//tk.MustExec(fmt.Sprintf("set @a=%v, @b=%v, @c=%v", i, i+1, i+2))
+			//tk.MustExec("execute stmt_insert using @a, @b")
+			//tk.MustExec("execute stmt_update using @c, @a")
+			//tk.MustExec("execute stmt_delete using @b")
+			_, err = insertStmt.Exec(i, i+1)
+			require.NoError(t, err)
+			_, err = updateStmt.Exec(i+2, i)
+			require.NoError(t, err)
 
-			//_, err := internalTK.Exec("execute stmt_insert using @a, @b")
-			//if err != nil && !strings.Contains(err.Error(), "Schema change caused error") {
-			//	require.NoError(t, err)
-			//}
-			//_, err = internalTK.Exec("execute stmt_update using @c, @a")
-			//if err != nil && !strings.Contains(err.Error(), "Schema change caused error") {
-			//	require.NoError(t, err)
-			//}
-			//_, err = internalTK.Exec("execute stmt_delete using @b")
-			//if err != nil && !strings.Contains(err.Error(), "Schema change caused error") {
-			//	require.NoError(t, err)
-			//}
 			select {
 			case <-ctx.Done():
 				return
@@ -2313,6 +2311,45 @@ func TestPlanCacheWithDDL(t *testing.T) {
 		}
 	}()
 	wg.Wait()
+}
+
+func TestPlanCacheWithDD2(t *testing.T) {
+	ts := servertestkit.CreateTidbTestSuite(t)
+
+	db, err := sql.Open("mysql", ts.GetDSN())
+	require.NoError(t, err)
+	db2, err := sql.Open("mysql", ts.GetDSN())
+	require.NoError(t, err)
+	defer func() {
+		err := db.Close()
+		require.NoError(t, err)
+		err = db2.Close()
+		require.NoError(t, err)
+	}()
+
+	tk := testkit.NewDBTestKit(t, db)
+	tk.MustExec("use test;")
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (pk int primary key, a int);")
+	stmt := tk.MustPrepare("update t set a = ? where pk = ?")
+	_, err = stmt.Exec(1, 1)
+	require.NoError(t, err)
+
+	tk2 := testkit.NewDBTestKit(t, db2)
+	tk2.MustExec("use test;")
+	//go func() {
+	time.Sleep(time.Millisecond * 10)
+	fmt.Printf(" alter add column start- --------------------\n\n")
+	tk2.MustExec("alter table t add column d int;")
+	//}()
+	//time.Sleep(time.Millisecond * 10)
+	logutil.EnableDevLog()
+	fmt.Printf("--------execute stmt_update begin ----------\n\n\n")
+	_, err = stmt.Exec(1, 1)
+	require.NoError(t, err)
+	logutil.DisableDevLog()
+	fmt.Printf("--------execute stmt_update finish ----------\n\n\n")
 }
 
 func TestRcReadCheckTS(t *testing.T) {

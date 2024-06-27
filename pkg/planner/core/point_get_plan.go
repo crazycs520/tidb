@@ -1909,6 +1909,7 @@ func tryUpdatePointPlan(ctx base.PlanContext, updateStmt *ast.UpdateStmt) base.P
 			pointGet.Lock, pointGet.LockWaitTime = getLockWaitTime(ctx, &ast.SelectLockInfo{LockType: ast.SelectLockForUpdate})
 		}
 		logutil.LogDevLog(fmt.Sprintf("point get plan schema len=%v, cols.len=%v", pointGet.schema.Len(), len(pointGet.TblInfo.Columns)))
+		//time.Sleep(time.Second * 3)
 		return buildPointUpdatePlan(ctx, pointGet, pointGet.dbName, pointGet.TblInfo, updateStmt)
 	}
 	batchPointGet := tryWhereIn2BatchPointGet(ctx, selStmt)
