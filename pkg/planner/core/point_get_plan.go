@@ -16,9 +16,11 @@ package core
 
 import (
 	math2 "math"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/pingcap/errors"
@@ -1318,9 +1320,9 @@ func tryPointGetPlan(ctx base.PlanContext, selStmt *ast.SelectStmt, check bool) 
 	if tbl == nil {
 		return nil
 	}
-	//if tbl.Name.L == "t" {
-	//	logutil.BgLogger().Info("-----tryPointGetPlan", zap.Int("cols", len(tbl.Columns)))
-	//}
+	if tbl.Name.L == "t" {
+		logutil.BgLogger().Info("-----tryPointGetPlan", zap.Int("cols", len(tbl.Columns)))
+	}
 
 	var pkColOffset int
 	for i, col := range tbl.Columns {
@@ -1910,7 +1912,7 @@ func tryUpdatePointPlan(ctx base.PlanContext, updateStmt *ast.UpdateStmt) base.P
 		if ctx.GetSessionVars().TxnCtx.IsPessimistic {
 			pointGet.Lock, pointGet.LockWaitTime = getLockWaitTime(ctx, &ast.SelectLockInfo{LockType: ast.SelectLockForUpdate})
 		}
-		//time.Sleep(10 * time.Millisecond)
+		time.Sleep(time.Duration(rand.Intn(100) * int(time.Millisecond)))
 		return buildPointUpdatePlan(ctx, pointGet, pointGet.dbName, pointGet.TblInfo, updateStmt)
 	}
 	batchPointGet := tryWhereIn2BatchPointGet(ctx, selStmt)
@@ -1949,9 +1951,9 @@ func buildPointUpdatePlan(ctx base.PlanContext, pointPlan base.PhysicalPlan, dbN
 	updatePlan.names = pointPlan.OutputNames()
 	is := ctx.GetInfoSchema().(infoschema.InfoSchema)
 	t, _ := is.TableByID(tbl.ID)
-	//if t.Meta().Name.L == "t" {
-	//	logutil.BgLogger().Info("-----buildPointUpdatePlan", zap.Int("cols", len(tbl.Columns)), zap.Int("t_by_id_cols", len(t.Meta().Columns)))
-	//}
+	if t.Meta().Name.L == "t" {
+		logutil.BgLogger().Info("-----buildPointUpdatePlan", zap.Int("cols", len(tbl.Columns)), zap.Int("t_by_id_cols", len(t.Meta().Columns)))
+	}
 	updatePlan.tblID2Table = map[int64]table.Table{
 		tbl.ID: t,
 	}
