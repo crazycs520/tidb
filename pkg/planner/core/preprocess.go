@@ -17,9 +17,6 @@ package core
 import (
 	"context"
 	"fmt"
-	"math"
-	"strings"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/expression"
@@ -51,6 +48,8 @@ import (
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	utilparser "github.com/pingcap/tidb/pkg/util/parser"
 	"go.uber.org/zap"
+	"math"
+	"strings"
 )
 
 // PreprocessOpt presents optional parameters to `Preprocess` method.
@@ -1578,6 +1577,9 @@ func (p *preprocessor) handleTableName(tn *ast.TableName) {
 		}
 	}
 
+	if tn.Name.L == "t" {
+		logutil.LogDevLogWithStack("preprocessor get table by name")
+	}
 	table, err := p.tableByName(tn)
 	if err != nil {
 		p.err = err
@@ -1782,6 +1784,7 @@ func (p *preprocessor) updateStateFromStaleReadProcessor() error {
 //   - transaction context
 func (p *preprocessor) ensureInfoSchema() infoschema.InfoSchema {
 	if p.InfoSchema != nil {
+		logutil.LogDevLog("preprocessor is initialized")
 		return p.InfoSchema
 	}
 

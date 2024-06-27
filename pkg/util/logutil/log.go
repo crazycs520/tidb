@@ -395,3 +395,24 @@ func proxyFields() []zap.Field {
 	}
 	return fields
 }
+
+var DevLogEnabled = false
+
+func EnableDevLog() {
+	DevLogEnabled = true
+}
+
+func DisableDevLog() {
+	DevLogEnabled = false
+}
+
+func LogDevLog(msg string) {
+	if DevLogEnabled {
+		BgLogger().Info(msg + "-----------------")
+	}
+}
+func LogDevLogWithStack(msg string) {
+	if DevLogEnabled {
+		BgLogger().Info(msg+"-----------------", zap.Stack("stack"))
+	}
+}

@@ -16,6 +16,7 @@ package isolation
 
 import (
 	"context"
+	"github.com/pingcap/tidb/pkg/util/logutil"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -115,6 +116,7 @@ func (p *baseTxnContextProvider) OnInitialize(ctx context.Context, tp sessiontxn
 	}
 
 	p.enterNewTxnType = tp
+	logutil.LogDevLog("baseTxnContextProvider OnInitialize, GetDomainInfoSchema")
 	p.infoSchema = p.sctx.GetDomainInfoSchema().(infoschema.InfoSchema)
 	txnCtx := &variable.TransactionContext{
 		TxnCtxNoNeedToRestore: variable.TxnCtxNoNeedToRestore{
@@ -124,6 +126,7 @@ func (p *baseTxnContextProvider) OnInitialize(ctx context.Context, tp sessiontxn
 			TxnScope:   sessVars.CheckAndGetTxnScope(),
 		},
 	}
+	logutil.LogDevLog("baseTxnContextProvider OnInitialize, TxnCtx.InfoSchema is set to latest domainInfoSchema")
 	if p.onInitializeTxnCtx != nil {
 		p.onInitializeTxnCtx(txnCtx)
 	}
@@ -149,6 +152,7 @@ func (p *baseTxnContextProvider) OnInitialize(ctx context.Context, tp sessiontxn
 // GetTxnInfoSchema returns the information schema used by txn
 func (p *baseTxnContextProvider) GetTxnInfoSchema() infoschema.InfoSchema {
 	if is := p.sctx.GetSessionVars().SnapshotInfoschema; is != nil {
+		logutil.LogDevLog("baseTxnContextProvider return snapshot is")
 		return is.(infoschema.InfoSchema)
 	}
 	if _, ok := p.infoSchema.(*infoschema.SessionExtendedInfoSchema); !ok {
@@ -156,6 +160,7 @@ func (p *baseTxnContextProvider) GetTxnInfoSchema() infoschema.InfoSchema {
 			InfoSchema: p.infoSchema,
 		}
 		p.sctx.GetSessionVars().TxnCtx.InfoSchema = p.infoSchema
+		logutil.LogDevLog("baseTxnContextProvider info is SessionExtendedInfoSchema")
 	}
 	return p.infoSchema
 }

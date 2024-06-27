@@ -17,6 +17,8 @@ package addindextest_test
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/util/logutil"
+	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -203,7 +205,7 @@ func TestPlanCacheWithDDL(t *testing.T) {
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t (pk int primary key, a int);")
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
 	defer cancel()
 	wg.Add(1)
 	go func() {
@@ -215,6 +217,8 @@ func TestPlanCacheWithDDL(t *testing.T) {
 			default:
 				tk.MustExec("alter table t add column d int;")
 				tk.MustExec("alter table t drop column d")
+				tk.MustExec("alter table t add column e int;")
+				tk.MustExec("alter table t drop column e")
 			}
 		}
 	}()
@@ -228,11 +232,14 @@ func TestPlanCacheWithDDL(t *testing.T) {
 			defer wg.Done()
 			internalTK := testkit.NewTestKit(t, store)
 			internalTK.MustExec("use addindexlit;")
+			internalTK.MustExec("prepare stmt_insert from 'insert into t (pk, a) values (?, ?)';")
+			internalTK.MustExec("prepare stmt_update from 'update t set a = ? where pk = ?';")
+			internalTK.MustExec("prepare stmt_delete from 'delete from t where pk = ?';")
 			for i := begin; i < end; i++ {
-				if i%10000 == 0 {
+				if rand.Intn(1000) < 5 {
 					internalTK.MustExec("prepare stmt_insert from 'insert into t (pk, a) values (?, ?)';")
 					internalTK.MustExec("prepare stmt_update from 'update t set a = ? where pk = ?';")
-					internalTK.MustExec("prepare stmt_delete from 'delete from t where pk = ?';")
+					//internalTK.MustExec("prepare stmt_delete from 'delete from t where pk = ?';")
 				}
 				internalTK.MustExec(fmt.Sprintf("set @a=%v, @b=%v, @c=%v", i, i+1, i+2))
 				internalTK.MustExec("execute stmt_insert using @a, @b")
@@ -260,6 +267,42 @@ func TestPlanCacheWithDDL(t *testing.T) {
 		}(begin, end)
 	}
 	wg.Wait()
+}
+
+func TestPlanCacheWithDDL2(t *testing.T) {
+	config.UpdateGlobal(func(conf *config.Config) {
+		conf.PreparedPlanCache.Enabled = true
+		conf.PreparedPlanCache.Capacity = 100
+	})
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("drop database if exists addindexlit;")
+	tk.MustExec("create database addindexlit;")
+	tk.MustExec("use addindexlit;")
+	tk.MustExec(`set global tidb_ddl_enable_fast_reorg=on;`)
+	tk.MustExec(`set global foreign_key_checks=0;`)
+	tk.MustExec(`set foreign_key_checks=0;`)
+
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (pk int primary key, a int);")
+	tk.MustExec("prepare stmt_update from 'update t set a = ? where pk = ?';")
+	tk.MustExec(fmt.Sprintf("set @a=%v, @b=%v, @c=%v", 1, 2, 3))
+	tk.MustExec("execute stmt_update using @b, @a")
+
+	tk2 := testkit.NewTestKit(t, store)
+	tk2.MustExec("use addindexlit;")
+
+	fmt.Printf("--------execute stmt_update begin ----------\n\n\n")
+	//go func() {
+	//time.Sleep(time.Millisecond * 10)
+	fmt.Printf(" alter add column start- --------------------\n\n")
+	tk2.MustExec("alter table t add column d int;")
+	//}()
+	//time.Sleep(time.Millisecond * 10)
+	logutil.EnableDevLog()
+	tk.MustExec("execute stmt_update using @c, @a")
+	logutil.DisableDevLog()
+	fmt.Printf("--------execute stmt_update finish ----------\n\n\n")
 }
 
 func TestAddIndexIngestAdjustBackfillWorker(t *testing.T) {

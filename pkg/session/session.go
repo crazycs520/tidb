@@ -2433,6 +2433,7 @@ func (s *session) PrepareStmt(sql string) (stmtID uint32, paramCount int, fields
 	}()
 	if s.sessionVars.TxnCtx.InfoSchema == nil {
 		// We don't need to create a transaction for prepare statement, just get information schema will do.
+		logutil.LogDevLog("session PrepareStmt init TxnCtx.InfoSchema")
 		s.sessionVars.TxnCtx.InfoSchema = domain.GetDomain(s).InfoSchema()
 	}
 	err = s.loadCommonGlobalVariablesIfNeeded()
@@ -4161,18 +4162,21 @@ func (s *session) GetInfoSchema() infoschemactx.MetaOnlyInfoSchema {
 	var is infoschema.InfoSchema
 	if snap, ok := vars.SnapshotInfoschema.(infoschema.InfoSchema); ok {
 		logutil.BgLogger().Info("use snapshot schema", zap.Uint64("conn", vars.ConnectionID), zap.Int64("schemaVersion", snap.SchemaMetaVersion()))
+		logutil.LogDevLog("session get snapshot info-schema")
 		is = snap
 	} else {
 		vars.TxnCtxMu.Lock()
 		if vars.TxnCtx != nil {
 			if tmp, ok := vars.TxnCtx.InfoSchema.(infoschema.InfoSchema); ok {
 				is = tmp
+				logutil.LogDevLog("session get txnCtx.InfoSchema")
 			}
 		}
 		vars.TxnCtxMu.Unlock()
 	}
 
 	if is == nil {
+		logutil.LogDevLog("session get domain latest info-schema")
 		is = domain.GetDomain(s).InfoSchema()
 	}
 

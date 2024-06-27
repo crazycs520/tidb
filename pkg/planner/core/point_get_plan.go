@@ -15,12 +15,11 @@
 package core
 
 import (
+	"fmt"
 	math2 "math"
-	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 	"unsafe"
 
 	"github.com/pingcap/errors"
@@ -1320,9 +1319,6 @@ func tryPointGetPlan(ctx base.PlanContext, selStmt *ast.SelectStmt, check bool) 
 	if tbl == nil {
 		return nil
 	}
-	if tbl.Name.L == "t" {
-		logutil.BgLogger().Info("-----tryPointGetPlan", zap.Int("cols", len(tbl.Columns)))
-	}
 
 	var pkColOffset int
 	for i, col := range tbl.Columns {
@@ -1912,7 +1908,7 @@ func tryUpdatePointPlan(ctx base.PlanContext, updateStmt *ast.UpdateStmt) base.P
 		if ctx.GetSessionVars().TxnCtx.IsPessimistic {
 			pointGet.Lock, pointGet.LockWaitTime = getLockWaitTime(ctx, &ast.SelectLockInfo{LockType: ast.SelectLockForUpdate})
 		}
-		time.Sleep(time.Duration(rand.Intn(100) * int(time.Millisecond)))
+		logutil.LogDevLog(fmt.Sprintf("point get plan schema len=%v, cols.len=%v", pointGet.schema.Len(), len(pointGet.TblInfo.Columns)))
 		return buildPointUpdatePlan(ctx, pointGet, pointGet.dbName, pointGet.TblInfo, updateStmt)
 	}
 	batchPointGet := tryWhereIn2BatchPointGet(ctx, selStmt)
@@ -1949,14 +1945,13 @@ func buildPointUpdatePlan(ctx base.PlanContext, pointPlan base.PhysicalPlan, dbN
 		VirtualAssignmentsOffset:  len(orderedList),
 	}.Init(ctx)
 	updatePlan.names = pointPlan.OutputNames()
+	logutil.LogDevLog("buildPointUpdatePlan get info-schema")
 	is := ctx.GetInfoSchema().(infoschema.InfoSchema)
 	t, _ := is.TableByID(tbl.ID)
-	if t.Meta().Name.L == "t" {
-		logutil.BgLogger().Info("-----buildPointUpdatePlan", zap.Int("cols", len(tbl.Columns)), zap.Int("t_by_id_cols", len(t.Meta().Columns)))
-	}
 	updatePlan.tblID2Table = map[int64]table.Table{
 		tbl.ID: t,
 	}
+	logutil.LogDevLog(fmt.Sprintf("buildPointUpdatePlan cols.len=%v", len(t.Meta().Columns)))
 	if tbl.GetPartitionInfo() != nil {
 		pt := t.(table.PartitionedTable)
 		updateTableList := ExtractTableList(updateStmt.TableRefs.TableRefs, true)
@@ -1977,6 +1972,7 @@ func buildPointUpdatePlan(ctx base.PlanContext, pointPlan base.PhysicalPlan, dbN
 		}
 	}
 	err := updatePlan.buildOnUpdateFKTriggers(ctx, is, updatePlan.tblID2Table)
+	logutil.LogDevLog("buildPointUpdatePlan buildOnUpdateFKTriggers finish")
 	if err != nil {
 		return nil
 	}
