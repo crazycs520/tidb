@@ -241,6 +241,6 @@ replace (
 	// fix potential security issue(CVE-2020-26160) introduced by indirect dependency.
 	github.com/dgrijalva/jwt-go => github.com/form3tech-oss/jwt-go v3.2.6-0.20210809144907-32ab6a8243d7+incompatible
 	github.com/pingcap/tidb/parser => ./parser
-	github.com/pingcap/tipb => github.com/crazycs520/tipb v0.0.0-20240625045556-205a3995d0e6
+	github.com/pingcap/tipb => github.com/crazycs520/tipb v0.0.0-20240702073954-37c08e4183dc
 	go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
 )
