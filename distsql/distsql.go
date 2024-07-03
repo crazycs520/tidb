@@ -150,6 +150,23 @@ func SelectWithRuntimeStats(ctx context.Context, sctx sessionctx.Context, kvReq 
 	return sr, nil
 }
 
+func ExtractExtraChunks(result SelectResult) []*tipb.Chunk {
+	if selectResult, ok := result.(*selectResult); ok {
+		if selectResult.selectResp == nil {
+			err := selectResult.fetchResp(context.Background())
+			if err != nil || selectResult.selectResp == nil {
+				return nil
+			}
+		}
+		if selectResult.selectResp.EncodeType == tipb.EncodeType_TypeChunk {
+			res := selectResult.selectResp.ExtraChunks
+			selectResult.selectResp.ExtraChunks = nil
+			return res
+		}
+	}
+	return nil
+}
+
 // Analyze do a analyze request.
 func Analyze(ctx context.Context, client kv.Client, kvReq *kv.Request, vars interface{},
 	isRestrict bool, stmtCtx *stmtctx.StatementContext) (SelectResult, error) {
