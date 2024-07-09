@@ -444,7 +444,8 @@ func (r *selectResult) readFromChunk(ctx context.Context, chk *chunk.Chunk) erro
 	}
 
 	for !chk.IsFull() {
-		if r.respChkIdx == len(r.selectResp.Chunks) {
+		chunks := r.selectResp.Chunks
+		if r.respChkIdx >= len(chunks) {
 			err := r.fetchResp(ctx)
 			if err != nil || r.selectResp == nil {
 				return err
@@ -452,7 +453,7 @@ func (r *selectResult) readFromChunk(ctx context.Context, chk *chunk.Chunk) erro
 		}
 
 		if r.respChunkDecoder.IsFinished() {
-			r.respChunkDecoder.Reset(r.selectResp.Chunks[r.respChkIdx].RowsData)
+			r.respChunkDecoder.Reset(chunks[r.respChkIdx].RowsData)
 		}
 		// If the next chunk size is greater than required rows * 0.8, reuse the memory of the next chunk and return
 		// immediately. Otherwise, splice the data to one chunk and wait the next chunk.
