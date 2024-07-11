@@ -444,17 +444,14 @@ func (r *selectResult) readFromChunk(ctx context.Context, chk *chunk.Chunk) erro
 	}
 
 	for !chk.IsFull() {
-		oldChunksLen := len(r.selectResp.Chunks)
-		oldRespChkIdx := r.respChkIdx
 		if r.respChkIdx == len(r.selectResp.Chunks) {
 			err := r.fetchResp(ctx)
-			if err != nil || r.selectResp == nil {
+			if err != nil || r.selectResp == nil || len(r.selectResp.Chunks) == 0 {
 				return err
 			}
 		}
 
 		if r.respChunkDecoder.IsFinished() {
-			logutil.Logger(ctx).Info("debug panic cs--", zap.Int("oldChunksLen", oldChunksLen), zap.Int("oldRespChkIdx", oldRespChkIdx), zap.Int("respChkIdx", r.respChkIdx), zap.Int("len(r.selectResp.Chunks)", len(r.selectResp.Chunks)))
 			r.respChunkDecoder.Reset(r.selectResp.Chunks[r.respChkIdx].RowsData)
 		}
 		// If the next chunk size is greater than required rows * 0.8, reuse the memory of the next chunk and return
