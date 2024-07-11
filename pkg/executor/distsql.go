@@ -1083,9 +1083,9 @@ func (w *indexWorker) extractTaskHandles(ctx context.Context, chk *chunk.Chunk, 
 		}
 		chk.SetRequiredRows(requiredRows, w.maxChunkSize)
 		startTime := time.Now()
-		extraChunks = append(extraChunks, distsql.ExtractExtraChunks(idxResult)...)
 
 		err = errors.Trace(idxResult.Next(ctx, chk))
+		extraChunks = append(extraChunks, distsql.ExtractExtraChunks(idxResult)...)
 		if err != nil {
 			return handles, nil, extraChunks, err
 		}
