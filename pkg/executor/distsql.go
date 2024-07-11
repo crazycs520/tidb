@@ -1269,6 +1269,7 @@ type IndexLookUpRunTimeStats struct {
 	TableRowScan        int64
 	TableTaskNum        int64
 	Concurrency         int
+	LocalRowScanNum     int
 	// Record the `Next` call affected wait duration details.
 	NextWaitIndexScan        time.Duration
 	NextWaitTableLookUpBuild time.Duration
@@ -1284,11 +1285,12 @@ func (e *IndexLookUpRunTimeStats) String() string {
 	tableTaskNum := atomic.LoadInt64(&e.TableTaskNum)
 	concurrency := e.Concurrency
 	if indexScan != 0 {
-		buf.WriteString(fmt.Sprintf("index_task: {total_time: %s, fetch_handle: %s, build: %s, wait: %s}",
+		buf.WriteString(fmt.Sprintf("index_task: {total_time: %s, fetch_handle: %s, build: %s, wait: %s, local_row_can: %v}",
 			execdetails.FormatDuration(time.Duration(fetchHandle)),
 			execdetails.FormatDuration(time.Duration(indexScan)),
 			execdetails.FormatDuration(time.Duration(fetchHandle-indexScan-taskWait)),
-			execdetails.FormatDuration(time.Duration(taskWait))))
+			execdetails.FormatDuration(time.Duration(taskWait)),
+			e.LocalRowScanNum))
 	}
 	if tableScan != 0 {
 		if buf.Len() > 0 {
@@ -1515,6 +1517,9 @@ func (w *tableWorker) executeTask(ctx context.Context, task *lookupTableTask) er
 				if decoder.IsFinished() {
 					respChkIdx++
 				}
+			}
+			if w.idxLookup.stats != nil {
+				w.idxLookup.stats.LocalRowScanNum += chk.NumRows()
 			}
 			iter := chunk.NewIterator4Chunk(chk)
 			for row := iter.Begin(); row != iter.End(); row = iter.Next() {
