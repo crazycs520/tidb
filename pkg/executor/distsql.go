@@ -1092,7 +1092,7 @@ func (w *indexWorker) extractTaskHandles(ctx context.Context, chk *chunk.Chunk, 
 		if w.idxLookup.stats != nil {
 			w.idxLookup.stats.indexScanBasicStats.Record(time.Since(startTime), chk.NumRows())
 		}
-		if chk.NumRows() == 0 {
+		if chk.NumRows() == 0 && len(extraChunks) == 0 {
 			return handles, retChk, extraChunks, nil
 		}
 		for i := 0; i < chk.NumRows(); i++ {
