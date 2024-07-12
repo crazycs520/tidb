@@ -1052,6 +1052,9 @@ func (a *ExecStmt) handlePessimisticLockError(ctx context.Context, lockErr error
 	a.retryCount++
 	a.retryStartTime = time.Now()
 
+	sessVars := a.Ctx.GetSessionVars()
+	oldEqual := sessVars.TxnCtx.LockTS == sessVars.TxnCtx.GetForUpdateTS()
+
 	err = txnManager.OnStmtRetry(ctx)
 	if err != nil {
 		return nil, err
@@ -1061,6 +1064,18 @@ func (a *ExecStmt) handlePessimisticLockError(ctx context.Context, lockErr error
 	// is determined which is beneficial for testing.
 	if _, err = txnManager.GetStmtForUpdateTS(); err != nil {
 		return nil, err
+	}
+
+	if sessVars.ConnectionID > 1000 {
+		logutil.Logger(a.GoCtx).Info("handlePessimisticLockError",
+			zap.Uint64("conn", sessVars.ConnectionID),
+			zap.Uint64("txn_ts", sessVars.TxnCtx.StartTS),
+			zap.Uint64("ForUpdateTS", sessVars.TxnCtx.GetForUpdateTS()),
+			zap.Uint64("LockTs", sessVars.TxnCtx.LockTS),
+			zap.Bool("old_equal", oldEqual),
+			zap.Uint64("for_update_ts - lock_tsl", sessVars.TxnCtx.GetForUpdateTS()-sessVars.TxnCtx.LockTS),
+			zap.Uint("retry-count", a.retryCount),
+			zap.String("sql", a.GetTextToLog()))
 	}
 
 	breakpoint.Inject(a.Ctx, sessiontxn.BreakPointOnStmtRetryAfterLockError)
@@ -1479,12 +1494,29 @@ func resetCTEStorageMap(se sessionctx.Context) error {
 
 // LogSlowQuery is used to print the slow query in the log files.
 func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
+
 	sessVars := a.Ctx.GetSessionVars()
 	stmtCtx := sessVars.StmtCtx
+	if sessVars.ConnectionID > 1000 {
+		logutil.Logger(a.GoCtx).Info("log slow query",
+			zap.Uint64("conn", sessVars.ConnectionID),
+			zap.Uint64("txn_ts", txnTS),
+			zap.Uint64("ForUpdateTS", sessVars.TxnCtx.GetForUpdateTS()),
+			zap.Uint64("LockTs", sessVars.TxnCtx.LockTS),
+			zap.Bool("for_update_ts_equal", sessVars.TxnCtx.LockTS == sessVars.TxnCtx.GetForUpdateTS()),
+			zap.Uint("retry-count", a.retryCount),
+			zap.String("sql", a.GetTextToLog()))
+		if sessVars.TxnCtx.LockTS != sessVars.TxnCtx.GetForUpdateTS() {
+			logutil.Logger(a.GoCtx).Info("unexpected ---------------------------------------------------")
+		}
+	}
 	level := log.GetLevel()
 	cfg := config.GetGlobalConfig()
 	costTime := time.Since(sessVars.StartTime) + sessVars.DurationParse
 	threshold := time.Duration(atomic.LoadUint64(&cfg.Instance.SlowThreshold)) * time.Millisecond
+	if a.Ctx.GetSessionVars().ConnectionID > 1000 {
+		threshold = time.Duration(0)
+	}
 	enable := cfg.Instance.EnableSlowLog.Load()
 	// if the level is Debug, or trace is enabled, print slow logs anyway
 	force := level <= zapcore.DebugLevel || trace.IsEnabled()

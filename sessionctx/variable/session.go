@@ -187,6 +187,7 @@ type TxnCtxNeedToRestore struct {
 // TxnCtxNoNeedToRestore stores transaction variables which do not need to restored when rolling back to a savepoint.
 type TxnCtxNoNeedToRestore struct {
 	forUpdateTS uint64
+	LockTS      uint64
 	Binlog      interface{}
 	InfoSchema  interface{}
 	History     interface{}

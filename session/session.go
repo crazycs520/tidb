@@ -3840,6 +3840,7 @@ func logGeneralQuery(execStmt *executor.ExecStmt, s *session, isPrepared bool) {
 		if !vars.EnableRedactLog {
 			query += vars.PreparedParams.String()
 		}
+		//forUpdateTs, err := sessiontxn.GetTxnManager(s).GetStmtForUpdateTS()
 		logutil.BgLogger().Info("GENERAL_LOG",
 			zap.Uint64("conn", vars.ConnectionID),
 			zap.String("user", vars.User.LoginString()),

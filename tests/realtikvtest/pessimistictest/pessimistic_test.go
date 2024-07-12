@@ -2288,6 +2288,117 @@ func TestSelectForUpdateConflictRetry(t *testing.T) {
 	<-tsCh
 }
 
+func TestAsyncCommitWithSchemaDebug(t *testing.T) {
+	if !*realtikvtest.WithRealTiKV {
+		t.Skip("TODO: implement commit_ts calculation in unistore")
+	}
+	//defer config.RestoreFunc()()
+	//config.UpdateGlobal(func(conf *config.Config) {
+	//})
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+
+	tk := createAsyncCommitTestKit(t, store)
+	tk.MustExec("drop table if exists t1")
+	tk.MustExec("create table t1 (c1 int primary key, c2 int)")
+	tk.MustExec("set @@tidb_general_log=1")
+	tk.MustExec("set tidb_txn_mode = 'pessimistic'")
+	tk.MustExec("set tx_isolation = 'READ-COMMITTED'")
+	tk.MustExec("set @@tidb_enable_async_commit=1")
+	tk.MustExec("set @@tidb_enable_1pc=0")
+	tk.MustExec("")
+
+	tk2 := createAsyncCommitTestKit(t, store)
+	tk2.MustExec("set @@tidb_general_log=1")
+	tk2.MustExec("set tidb_txn_mode = 'pessimistic'")
+	tk2.MustExec("set tx_isolation = 'READ-COMMITTED'")
+	tk2.MustExec("set @@tidb_enable_async_commit=1")
+	tk2.MustExec("set @@tidb_enable_1pc=0")
+
+	tk.Session().GetSessionVars().ConnectionID = 12345
+	tk2.Session().GetSessionVars().ConnectionID = 67890
+	for i := 0; i < 1; i++ {
+		tk.MustExec("delete from t1")
+		tk.MustExec("insert into t1 values(1, 1)")
+		tk.MustExec("commit")
+
+		tk.MustExec("set autocommit=0")
+		tk.MustQuery("select * from t1 where c1 = 1").Check(testkit.Rows("1 1"))
+		tk.MustQuery("select * from t1 where c1 = 1 for update").Check(testkit.Rows("1 1"))
+		tk.MustExec("update t1 set c2 = 2 where c1 = 1")
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer func() {
+				fmt.Printf("before wg done\n\n")
+				wg.Done()
+			}()
+			//time.Sleep(time.Millisecond * 1)
+			tk2.MustExec("set autocommit=0")
+			rows := tk2.MustQuery("select * from t1 where c1 = 1")
+			fmt.Printf("tk2 select finish, query result: %v ---\n\n\n", rows)
+			rows = tk2.MustQuery("select * from t1 where c1 = 1 for update")
+			fmt.Printf("tk2 select for update finish, query result: %v ---\n\n\n", rows)
+			tk2.MustExec("update t1 set c2 = 2 where c1 = 1")
+			tk2.MustExec("commit")
+		}()
+		time.Sleep(time.Millisecond * 2)
+		require.NoError(t, failpoint.Enable("tikvclient/beforeCommit", `return("delay(9)")`))
+		fmt.Printf("tk commit before ---\n")
+		tk.MustExec("commit")
+		require.NoError(t, failpoint.Disable("tikvclient/beforeCommit"))
+		fmt.Printf("tk commit finish ---\n")
+		wg.Wait()
+		tk.MustExec("set autocommit=1")
+		tk.MustQuery("select * from t1 where c1 = 1").Check(testkit.Rows("1 2"))
+	}
+
+}
+
+func TestAsyncCommitWithSchemaDebug2(t *testing.T) {
+	if !*realtikvtest.WithRealTiKV {
+		t.Skip("TODO: implement commit_ts calculation in unistore")
+	}
+	//defer config.RestoreFunc()()
+	//config.UpdateGlobal(func(conf *config.Config) {
+	//})
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+
+	tk := createAsyncCommitTestKit(t, store)
+	tk.MustExec("drop table if exists t1")
+	tk.MustExec("create table t1 (c1 int primary key, c2 int)")
+	tk.MustExec("set @@tidb_general_log=1")
+	tk.MustExec("set tidb_txn_mode = 'pessimistic'")
+	tk.MustExec("set tx_isolation = 'READ-COMMITTED'")
+	tk.MustExec("set @@tidb_enable_async_commit=1")
+	tk.MustExec("set @@tidb_enable_1pc=0")
+	tk.MustExec("delete from t1")
+	tk.MustExec("insert into t1 values(1, 1)")
+	tk.MustExec("commit")
+
+	//tk.Session().GetSessionVars().ConnectionID = 12345
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			tk2 := createAsyncCommitTestKit(t, store)
+			tk2.MustExec("set @@tidb_general_log=1")
+			tk2.MustExec("set tidb_txn_mode = 'pessimistic'")
+			tk2.MustExec("set tx_isolation = 'READ-COMMITTED'")
+			tk2.MustExec("set @@tidb_enable_async_commit=1")
+			tk2.MustExec("set @@tidb_enable_1pc=0")
+			tk2.Session().GetSessionVars().ConnectionID = 2000 + uint64(i)
+
+			for j := 0; j < 100; j++ {
+				tk2.MustExec("set autocommit=0")
+				tk2.MustQuery("select * from t1 where c1 = 1 for update").Check(testkit.Rows("1 1"))
+				tk2.MustExec("commit")
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
 func TestAsyncCommitWithSchemaChange(t *testing.T) {
 	if !*realtikvtest.WithRealTiKV {
 		t.Skip("TODO: implement commit_ts calculation in unistore")
