@@ -309,10 +309,14 @@ type selectResult struct {
 	// distSQLConcurrency and paging are only for collecting information, and they don't affect the process of execution.
 	distSQLConcurrency int
 	paging             bool
+	extraChunks        []*tipb.Chunk
 }
 
 func (r *selectResult) fetchResp(ctx context.Context) error {
 	for {
+		if r.selectResp != nil && len(r.selectResp.ExtraChunks) > 0 {
+			r.extraChunks = append(r.extraChunks, r.selectResp.ExtraChunks...)
+		}
 		r.respChkIdx = 0
 		startTime := time.Now()
 		resultSubset, err := r.resp.Next(ctx)

@@ -155,10 +155,14 @@ func SelectWithRuntimeStats(ctx context.Context, dctx *distsqlctx.DistSQLContext
 }
 
 func ExtractExtraChunks(result SelectResult) []*tipb.Chunk {
-	if selectResult, ok := result.(*selectResult); ok && selectResult.selectResp != nil && selectResult.selectResp.EncodeType == tipb.EncodeType_TypeChunk {
-		res := selectResult.selectResp.ExtraChunks
-		selectResult.selectResp.ExtraChunks = nil
-		return res
+	if selectResult, ok := result.(*selectResult); ok {
+		chks := selectResult.extraChunks
+		selectResult.extraChunks = nil
+		if selectResult.selectResp != nil && len(selectResult.selectResp.ExtraChunks) > 0 {
+			chks = append(chks, selectResult.selectResp.ExtraChunks...)
+			selectResult.selectResp.ExtraChunks = nil
+		}
+		return chks
 	}
 	return nil
 }
