@@ -335,4 +335,4 @@ replace (
 	sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 )
 
-replace github.com/pingcap/tipb => github.com/crazycs520/tipb v0.0.0-20240703105317-4d702ed67f40
+replace github.com/pingcap/tipb => github.com/crazycs520/tipb v0.0.0-20240722065543-dc5e149075ff

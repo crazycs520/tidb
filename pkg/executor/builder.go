@@ -3941,7 +3941,8 @@ func buildNoRangeIndexLookUpReader(b *executorBuilder, v *plannercore.PhysicalIn
 	if err != nil {
 		return nil, err
 	}
-	indexReq.ExtraTableInfo = tableReq.Executors[0].TblScan
+	tableId := tableReq.Executors[0].TblScan.TableId
+	indexReq.ExtraTableId = &tableId
 	indexReq.ExtraExecutors = tableReq.Executors
 	indexReq.ExtraOutputOffsets = tableReq.OutputOffsets
 	ts := v.TablePlans[0].(*plannercore.PhysicalTableScan)
