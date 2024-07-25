@@ -100,6 +100,7 @@ type recordSet struct {
 	lastErrs   []error
 	txnStartTS uint64
 	once       sync.Once
+	execDur    time.Duration
 }
 
 func (a *recordSet) Fields() []*ast.ResultField {
@@ -152,7 +153,14 @@ func colNames2ResultFields(schema *expression.Schema, names []*types.FieldName, 
 // next query.
 // If stmt is not nil and chunk with some rows inside, we simply update last query found rows by the number of row in chunk.
 func (a *recordSet) Next(ctx context.Context, req *chunk.Chunk) (err error) {
+	start := time.Now()
 	defer func() {
+		if a.execDur == 0 {
+			sessVars := a.stmt.Ctx.GetSessionVars()
+			executeDuration := time.Since(sessVars.StartTime) - sessVars.DurationCompile
+			a.execDur = executeDuration
+		}
+		a.execDur += time.Since(start)
 		r := recover()
 		if r == nil {
 			return
@@ -196,6 +204,7 @@ func (a *recordSet) NewChunk(alloc chunk.Allocator) *chunk.Chunk {
 func (a *recordSet) Finish() error {
 	var err error
 	a.once.Do(func() {
+		start := time.Now()
 		err = exec.Close(a.executor)
 		cteErr := resetCTEStorageMap(a.stmt.Ctx)
 		if cteErr != nil {
@@ -212,6 +221,8 @@ func (a *recordSet) Finish() error {
 				logutil.BgLogger().Warn("kill, this SQL might be stuck in the network stack while writing packets to the client.", zap.Uint64("connection ID", a.stmt.Ctx.GetSessionVars().ConnectionID))
 			}
 		}
+		a.execDur += time.Since(start)
+		executor_metrics.SessionExecuteRunDurationGeneralExec.Observe(a.execDur.Seconds())
 	})
 	if err != nil {
 		a.lastErrs = append(a.lastErrs, err)
