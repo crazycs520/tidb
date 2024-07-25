@@ -154,12 +154,12 @@ func colNames2ResultFields(schema *expression.Schema, names []*types.FieldName, 
 // If stmt is not nil and chunk with some rows inside, we simply update last query found rows by the number of row in chunk.
 func (a *recordSet) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 	start := time.Now()
+	if a.execDur == 0 {
+		sessVars := a.stmt.Ctx.GetSessionVars()
+		executeDuration := time.Since(sessVars.StartTime) - sessVars.DurationCompile
+		a.execDur = executeDuration
+	}
 	defer func() {
-		if a.execDur == 0 {
-			sessVars := a.stmt.Ctx.GetSessionVars()
-			executeDuration := time.Since(sessVars.StartTime) - sessVars.DurationCompile
-			a.execDur = executeDuration
-		}
 		a.execDur += time.Since(start)
 		r := recover()
 		if r == nil {
