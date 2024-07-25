@@ -189,6 +189,7 @@ func RegisterMetrics() {
 	prometheus.MustRegister(OngoingTxnDurationHistogram)
 	prometheus.MustRegister(MppCoordinatorStats)
 	prometheus.MustRegister(MppCoordinatorLatency)
+	prometheus.MustRegister(IndexLookupQueryLatency)
 	prometheus.MustRegister(TimeJumpBackCounter)
 	prometheus.MustRegister(TransactionDuration)
 	prometheus.MustRegister(StatementDeadlockDetectDuration)

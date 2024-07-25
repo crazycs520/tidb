@@ -39,6 +39,8 @@ var (
 
 	// MppCoordinatorLatency records latencies of mpp coordinator operations.
 	MppCoordinatorLatency *prometheus.HistogramVec
+
+	IndexLookupQueryLatency *prometheus.HistogramVec
 )
 
 // InitExecutorMetrics initializes excutor metrics.
@@ -100,5 +102,14 @@ func InitExecutorMetrics() {
 			Name:      "mpp_coordinator_latency",
 			Help:      "Bucketed histogram of processing time (ms) of mpp coordinator operations.",
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 28), // 1ms ~ 1.5days
+		}, []string{LblType})
+
+	IndexLookupQueryLatency = NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "tidb",
+			Subsystem: "executor",
+			Name:      "index_lookup_query_latency",
+			Help:      "Bucketed histogram of processing time (s) of index lookup query.",
+			Buckets:   prometheus.ExponentialBuckets(0.000001, 2, 28), // 1us ~
 		}, []string{LblType})
 }

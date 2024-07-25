@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tidb/pkg/executor/internal/exec"
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -831,10 +832,21 @@ func (e *IndexLookUpExecutor) buildTableReader(ctx context.Context, task *lookup
 	return tableReader, nil
 }
 
+var IndexLookupQueryIndexTaskTotalLatency = metrics.IndexLookupQueryLatency.WithLabelValues("index_task_total")
+var IndexLookupQueryFetchHandleLatency = metrics.IndexLookupQueryLatency.WithLabelValues("fetch_handle")
+var IndexLookupQueryWaitSendToChLatency = metrics.IndexLookupQueryLatency.WithLabelValues("wait_send_to_chan")
+var IndexLookupQueryTableTaskTotalLatency = metrics.IndexLookupQueryLatency.WithLabelValues("table_task_total")
+
 // Close implements Exec Close interface.
 func (e *IndexLookUpExecutor) Close() error {
 	if e.stats != nil {
-		defer e.Ctx().GetSessionVars().StmtCtx.RuntimeStatsColl.RegisterStats(e.ID(), e.stats)
+		defer func() {
+			IndexLookupQueryIndexTaskTotalLatency.Observe(time.Duration(e.stats.FetchHandleTotal).Seconds())
+			IndexLookupQueryFetchHandleLatency.Observe(time.Duration(e.stats.FetchHandle).Seconds())
+			IndexLookupQueryWaitSendToChLatency.Observe(time.Duration(e.stats.TaskWait).Seconds())
+			IndexLookupQueryTableTaskTotalLatency.Observe(time.Duration(e.stats.TableRowScan).Seconds())
+			e.Ctx().GetSessionVars().StmtCtx.RuntimeStatsColl.RegisterStats(e.ID(), e.stats)
+		}()
 	}
 	if e.indexUsageReporter != nil {
 		e.indexUsageReporter.ReportCopIndexUsageForTable(
