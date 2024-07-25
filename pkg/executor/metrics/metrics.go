@@ -129,6 +129,11 @@ var (
 	MppCoordinatorStatsReportNotReceived     prometheus.Gauge
 
 	MppCoordinatorLatencyRcvReport prometheus.Observer
+
+	IndexLookupQueryIndexTaskTotalLatency prometheus.Observer
+	IndexLookupQueryFetchHandleLatency    prometheus.Observer
+	IndexLookupQueryWaitSendToChLatency   prometheus.Observer
+	IndexLookupQueryTableTaskTotalLatency prometheus.Observer
 )
 
 func init() {
@@ -216,6 +221,12 @@ func InitMetricsVars() {
 	MppCoordinatorStatsReportNotReceived = metrics.MppCoordinatorStats.WithLabelValues("reportNotRcv")
 
 	MppCoordinatorLatencyRcvReport = metrics.MppCoordinatorLatency.WithLabelValues("rcvReports")
+
+	IndexLookupQueryIndexTaskTotalLatency = metrics.IndexLookupQueryLatency.WithLabelValues("index_task_total")
+	IndexLookupQueryFetchHandleLatency = metrics.IndexLookupQueryLatency.WithLabelValues("fetch_handle")
+	IndexLookupQueryWaitSendToChLatency = metrics.IndexLookupQueryLatency.WithLabelValues("wait_send_to_chan")
+	IndexLookupQueryTableTaskTotalLatency = metrics.IndexLookupQueryLatency.WithLabelValues("table_task_total")
+
 }
 
 // InitPhaseDurationObserverMap init observer map
