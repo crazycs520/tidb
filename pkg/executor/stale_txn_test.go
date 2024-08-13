@@ -1296,6 +1296,31 @@ func TestStaleReadNoExtraTSORequest(t *testing.T) {
 	require.NoError(t, failpoint.Disable("github.com/pingcap/tidb/pkg/session/assertTSONotRequest"))
 }
 
+func TestStaleReadNoExtraTSORequestCs(t *testing.T) {
+	config.UpdateGlobal(func(conf *config.Config) {
+		conf.Labels = map[string]string{"zone": "z1"}
+	})
+
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	// For mocktikv, safe point is not initialized, we manually insert it for snapshot to use.
+	safePointName := "tikv_gc_safe_point"
+	safePointValue := "20160102-15:04:05 -0700"
+	safePointComment := "All versions after safe point can be accessed. (DO NOT EDIT)"
+	updateSafePoint := fmt.Sprintf(`INSERT INTO mysql.tidb VALUES ('%[1]s', '%[2]s', '%[3]s')
+	ON DUPLICATE KEY
+	UPDATE variable_value = '%[2]s', comment = '%[3]s'`, safePointName, safePointValue, safePointComment)
+	tk.MustExec(updateSafePoint)
+	tk.MustExec("use test")
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (id int);")
+	time.Sleep(3 * time.Second)
+
+	// use tidb_read_staleness
+	tk.MustExec(`set @@tidb_read_staleness='-1'`)
+	tk.MustQuery("select * from t")
+}
+
 func TestPlanCacheWithStaleReadByBinaryProto(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 
