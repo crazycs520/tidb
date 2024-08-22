@@ -50,7 +50,7 @@ import (
 type baseBuiltinFunc struct {
 	bufAllocator columnBufferAllocator
 	args         []Expression
-	tp           *types.FieldType
+	tp           *types.FieldType `plan-cache-clone:"shallow"`
 	pbCode       tipb.ScalarFuncSig
 	ctor         collate.Collator
 
@@ -413,7 +413,9 @@ func (b *baseBuiltinFunc) cloneFrom(from *baseBuiltinFunc) {
 	b.pbCode = from.pbCode
 	b.bufAllocator = newLocalColumnPool()
 	b.childrenVectorizedOnce = new(sync.Once)
-	b.ctor = from.ctor
+	if from.ctor != nil {
+		b.ctor = from.ctor.Clone()
+	}
 }
 
 func (*baseBuiltinFunc) Clone() builtinFunc {
@@ -732,7 +734,7 @@ var funcs = map[string]functionClass{
 	ast.Lower:           &lowerFunctionClass{baseFunctionClass{ast.Lower, 1, 1}},
 	ast.Lpad:            &lpadFunctionClass{baseFunctionClass{ast.Lpad, 3, 3}},
 	ast.LTrim:           &lTrimFunctionClass{baseFunctionClass{ast.LTrim, 1, 1}},
-	ast.Mid:             &substringFunctionClass{baseFunctionClass{ast.Mid, 3, 3}},
+	ast.Mid:             &substringFunctionClass{baseFunctionClass{ast.Mid, 2, 3}},
 	ast.MakeSet:         &makeSetFunctionClass{baseFunctionClass{ast.MakeSet, 2, -1}},
 	ast.Oct:             &octFunctionClass{baseFunctionClass{ast.Oct, 1, 1}},
 	ast.OctetLength:     &lengthFunctionClass{baseFunctionClass{ast.OctetLength, 1, 1}},

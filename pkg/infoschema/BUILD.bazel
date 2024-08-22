@@ -57,6 +57,7 @@ go_library(
         "//pkg/util/set",
         "//pkg/util/size",
         "//pkg/util/stmtsummary",
+        "//pkg/util/tracing",
         "@com_github_ngaut_pools//:pools",
         "@com_github_pingcap_errors//:errors",
         "@com_github_pingcap_failpoint//:failpoint",
@@ -90,7 +91,7 @@ go_test(
     ],
     embed = [":infoschema"],
     flaky = True,
-    shard_count = 21,
+    shard_count = 22,
     deps = [
         "//pkg/ddl/placement",
         "//pkg/domain",

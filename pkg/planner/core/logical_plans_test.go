@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/expression"
@@ -32,6 +33,8 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/terror"
 	"github.com/pingcap/tidb/pkg/planner/core/base"
+	"github.com/pingcap/tidb/pkg/planner/core/operator/logicalop"
+	"github.com/pingcap/tidb/pkg/planner/core/rule"
 	"github.com/pingcap/tidb/pkg/planner/property"
 	"github.com/pingcap/tidb/pkg/planner/util"
 	"github.com/pingcap/tidb/pkg/sessionctx"
@@ -138,7 +141,7 @@ func TestPredicatePushDown(t *testing.T) {
 		require.NoError(t, err, comment)
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err)
-		p, err = logicalOptimize(context.TODO(), flagConvertOuterToInnerJoin|flagPredicatePushDown|flagDecorrelate|flagPrunColumns|flagPrunColumnsAgain, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagConvertOuterToInnerJoin|rule.FlagPredicatePushDown|rule.FlagDecorrelate|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain, p.(base.LogicalPlan))
 		require.NoError(t, err)
 		testdata.OnRecord(func() {
 			output[ith] = ToString(p)
@@ -158,10 +161,10 @@ func TestImplicitCastNotNullFlag(t *testing.T) {
 	require.NoError(t, err, comment)
 	p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 	require.NoError(t, err)
-	p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagJoinReOrder|flagPrunColumns|flagEliminateProjection, p.(base.LogicalPlan))
+	p, err = logicalOptimize(context.TODO(), rule.FlagPredicatePushDown|rule.FlagJoinReOrder|rule.FlagPruneColumns|rule.FlagEliminateProjection, p.(base.LogicalPlan))
 	require.NoError(t, err)
 	// AggFuncs[0] is count; AggFuncs[1] is bit_and, args[0] is return type of the implicit cast
-	castNotNullFlag := (p.(*LogicalProjection).Children()[0].(*LogicalSelection).Children()[0].(*LogicalAggregation).AggFuncs[1].Args[0].GetType(s.ctx.GetExprCtx().GetEvalCtx()).GetFlag()) & mysql.NotNullFlag
+	castNotNullFlag := (p.(*logicalop.LogicalProjection).Children()[0].(*logicalop.LogicalSelection).Children()[0].(*logicalop.LogicalAggregation).AggFuncs[1].Args[0].GetType(s.ctx.GetExprCtx().GetEvalCtx()).GetFlag()) & mysql.NotNullFlag
 	var nullableFlag uint = 0
 	require.Equal(t, nullableFlag, castNotNullFlag)
 }
@@ -176,11 +179,11 @@ func TestEliminateProjectionUnderUnion(t *testing.T) {
 	require.NoError(t, err, comment)
 	p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 	require.NoError(t, err)
-	p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagJoinReOrder|flagPrunColumns|flagEliminateProjection, p.(base.LogicalPlan))
+	p, err = logicalOptimize(context.TODO(), rule.FlagPredicatePushDown|rule.FlagJoinReOrder|rule.FlagPruneColumns|rule.FlagEliminateProjection, p.(base.LogicalPlan))
 	require.NoError(t, err)
 	// after folding constants, the null flag should keep the same with the old one's (i.e., the schema's).
-	schemaNullFlag := p.(*LogicalProjection).Children()[0].(*LogicalJoin).Children()[1].Children()[1].(*LogicalProjection).Schema().Columns[0].RetType.GetFlag() & mysql.NotNullFlag
-	exprNullFlag := p.(*LogicalProjection).Children()[0].(*LogicalJoin).Children()[1].Children()[1].(*LogicalProjection).Exprs[0].GetType(s.ctx.GetExprCtx().GetEvalCtx()).GetFlag() & mysql.NotNullFlag
+	schemaNullFlag := p.(*logicalop.LogicalProjection).Children()[0].(*logicalop.LogicalJoin).Children()[1].Children()[1].(*logicalop.LogicalProjection).Schema().Columns[0].RetType.GetFlag() & mysql.NotNullFlag
+	exprNullFlag := p.(*logicalop.LogicalProjection).Children()[0].(*logicalop.LogicalJoin).Children()[1].Children()[1].(*logicalop.LogicalProjection).Exprs[0].GetType(s.ctx.GetExprCtx().GetEvalCtx()).GetFlag() & mysql.NotNullFlag
 	require.Equal(t, exprNullFlag, schemaNullFlag)
 }
 
@@ -204,11 +207,11 @@ func TestJoinPredicatePushDown(t *testing.T) {
 		require.NoError(t, err, comment)
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err, comment)
-		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagDecorrelate|flagPrunColumns|flagPrunColumnsAgain, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagPredicatePushDown|rule.FlagDecorrelate|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain, p.(base.LogicalPlan))
 		require.NoError(t, err, comment)
-		proj, ok := p.(*LogicalProjection)
+		proj, ok := p.(*logicalop.LogicalProjection)
 		require.True(t, ok, comment)
-		join, ok := proj.Children()[0].(*LogicalJoin)
+		join, ok := proj.Children()[0].(*logicalop.LogicalJoin)
 		require.True(t, ok, comment)
 		leftPlan, ok := join.Children()[0].(*DataSource)
 		require.True(t, ok, comment)
@@ -245,18 +248,18 @@ func TestOuterWherePredicatePushDown(t *testing.T) {
 		require.NoError(t, err, comment)
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err, comment)
-		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagDecorrelate|flagPrunColumns|flagPrunColumnsAgain, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagPredicatePushDown|rule.FlagDecorrelate|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain, p.(base.LogicalPlan))
 		require.NoError(t, err, comment)
-		proj, ok := p.(*LogicalProjection)
+		proj, ok := p.(*logicalop.LogicalProjection)
 		require.True(t, ok, comment)
-		selection, ok := proj.Children()[0].(*LogicalSelection)
+		selection, ok := proj.Children()[0].(*logicalop.LogicalSelection)
 		require.True(t, ok, comment)
 		selCond := expression.StringifyExpressionsWithCtx(ectx, selection.Conditions)
 		testdata.OnRecord(func() {
 			output[i].Sel = selCond
 		})
 		require.Equal(t, output[i].Sel, selCond, comment)
-		join, ok := selection.Children()[0].(*LogicalJoin)
+		join, ok := selection.Children()[0].(*logicalop.LogicalJoin)
 		require.True(t, ok, comment)
 		leftPlan, ok := join.Children()[0].(*DataSource)
 		require.True(t, ok, comment)
@@ -291,16 +294,16 @@ func TestSimplifyOuterJoin(t *testing.T) {
 		require.NoError(t, err, comment)
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err, comment)
-		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagPrunColumns|flagPrunColumnsAgain|flagConvertOuterToInnerJoin, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagPredicatePushDown|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain|rule.FlagConvertOuterToInnerJoin, p.(base.LogicalPlan))
 		require.NoError(t, err, comment)
 		planString := ToString(p)
 		testdata.OnRecord(func() {
 			output[i].Best = planString
 		})
 		require.Equal(t, output[i].Best, planString, comment)
-		join, ok := p.(base.LogicalPlan).Children()[0].(*LogicalJoin)
+		join, ok := p.(base.LogicalPlan).Children()[0].(*logicalop.LogicalJoin)
 		if !ok {
-			join, ok = p.(base.LogicalPlan).Children()[0].Children()[0].(*LogicalJoin)
+			join, ok = p.(base.LogicalPlan).Children()[0].Children()[0].(*logicalop.LogicalJoin)
 			require.True(t, ok, comment)
 		}
 		testdata.OnRecord(func() {
@@ -332,10 +335,10 @@ func TestAntiSemiJoinConstFalse(t *testing.T) {
 		require.NoError(t, err, comment)
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err, comment)
-		p, err = logicalOptimize(context.TODO(), flagDecorrelate|flagPredicatePushDown|flagPrunColumns|flagPrunColumnsAgain, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagDecorrelate|rule.FlagPredicatePushDown|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain, p.(base.LogicalPlan))
 		require.NoError(t, err, comment)
 		require.Equal(t, ca.best, ToString(p), comment)
-		join, _ := p.(base.LogicalPlan).Children()[0].(*LogicalJoin)
+		join, _ := p.(base.LogicalPlan).Children()[0].(*logicalop.LogicalJoin)
 		require.Equal(t, ca.joinType, join.JoinType.String(), comment)
 	}
 }
@@ -361,13 +364,13 @@ func TestDeriveNotNullConds(t *testing.T) {
 		require.NoError(t, err, comment)
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err, comment)
-		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagPrunColumns|flagPrunColumnsAgain|flagDecorrelate, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagPredicatePushDown|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain|rule.FlagDecorrelate, p.(base.LogicalPlan))
 		require.NoError(t, err, comment)
 		testdata.OnRecord(func() {
 			output[i].Plan = ToString(p)
 		})
 		require.Equal(t, output[i].Plan, ToString(p), comment)
-		join := p.(base.LogicalPlan).Children()[0].(*LogicalJoin)
+		join := p.(base.LogicalPlan).Children()[0].(*logicalop.LogicalJoin)
 		left := join.Children()[0].(*DataSource)
 		right := join.Children()[1].(*DataSource)
 		leftConds := expression.StringifyExpressionsWithCtx(ectx, left.PushedDownConds)
@@ -390,7 +393,7 @@ func TestExtraPKNotNullFlag(t *testing.T) {
 	require.NoError(t, err, comment)
 	p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 	require.NoError(t, err, comment)
-	ds := p.(*LogicalProjection).Children()[0].(*LogicalAggregation).Children()[0].(*DataSource)
+	ds := p.(*logicalop.LogicalProjection).Children()[0].(*logicalop.LogicalAggregation).Children()[0].(*DataSource)
 	require.Equal(t, "_tidb_rowid", ds.Columns[2].Name.L)
 	require.Equal(t, mysql.PriKeyFlag|mysql.NotNullFlag, ds.Columns[2].GetFlag())
 	require.Equal(t, mysql.PriKeyFlag|mysql.NotNullFlag, ds.Schema().Columns[2].RetType.GetFlag())
@@ -473,13 +476,13 @@ func TestDupRandJoinCondsPushDown(t *testing.T) {
 	require.NoError(t, err, comment)
 	p, err := BuildLogicalPlanForTest(context.Background(), s.sctx, stmt, s.is)
 	require.NoError(t, err, comment)
-	p, err = logicalOptimize(context.TODO(), flagPredicatePushDown, p.(base.LogicalPlan))
+	p, err = logicalOptimize(context.TODO(), rule.FlagPredicatePushDown, p.(base.LogicalPlan))
 	require.NoError(t, err, comment)
-	proj, ok := p.(*LogicalProjection)
+	proj, ok := p.(*logicalop.LogicalProjection)
 	require.True(t, ok, comment)
-	join, ok := proj.Children()[0].(*LogicalJoin)
+	join, ok := proj.Children()[0].(*logicalop.LogicalJoin)
 	require.True(t, ok, comment)
-	leftPlan, ok := join.Children()[0].(*LogicalSelection)
+	leftPlan, ok := join.Children()[0].(*logicalop.LogicalSelection)
 	require.True(t, ok, comment)
 	leftCond := expression.StringifyExpressionsWithCtx(s.ctx.GetExprCtx().GetEvalCtx(), leftPlan.Conditions)
 	// Condition with mutable function cannot be de-duplicated when push down join conds.
@@ -543,7 +546,7 @@ func TestTablePartition(t *testing.T) {
 		})
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, isChoices[ca.IsIdx])
 		require.NoError(t, err)
-		p, err = logicalOptimize(context.TODO(), flagDecorrelate|flagPrunColumns|flagPrunColumnsAgain|flagPredicatePushDown|flagPartitionProcessor, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagDecorrelate|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain|rule.FlagPredicatePushDown|rule.FlagPartitionProcessor, p.(base.LogicalPlan))
 		require.NoError(t, err)
 		planString := ToString(p)
 		testdata.OnRecord(func() {
@@ -570,7 +573,7 @@ func TestSubquery(t *testing.T) {
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err)
 		if lp, ok := p.(base.LogicalPlan); ok {
-			p, err = logicalOptimize(context.TODO(), flagBuildKeyInfo|flagDecorrelate|flagPrunColumns|flagPrunColumnsAgain|flagSemiJoinRewrite, lp)
+			p, err = logicalOptimize(context.TODO(), rule.FlagBuildKeyInfo|rule.FlagDecorrelate|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain|rule.FlagSemiJoinRewrite, lp)
 			require.NoError(t, err)
 		}
 		testdata.OnRecord(func() {
@@ -599,7 +602,7 @@ func TestPlanBuilder(t *testing.T) {
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err)
 		if lp, ok := p.(base.LogicalPlan); ok {
-			p, err = logicalOptimize(context.TODO(), flagPrunColumns|flagPrunColumnsAgain, lp)
+			p, err = logicalOptimize(context.TODO(), rule.FlagPruneColumns|rule.FlagPruneColumnsAgain, lp)
 			require.NoError(t, err)
 		}
 		testdata.OnRecord(func() {
@@ -623,7 +626,7 @@ func TestJoinReOrder(t *testing.T) {
 
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err)
-		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagJoinReOrder, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagPredicatePushDown|rule.FlagJoinReOrder, p.(base.LogicalPlan))
 		require.NoError(t, err)
 		planString := ToString(p)
 		testdata.OnRecord(func() {
@@ -652,7 +655,7 @@ func TestEagerAggregation(t *testing.T) {
 
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err)
-		p, err = logicalOptimize(context.TODO(), flagBuildKeyInfo|flagPredicatePushDown|flagPrunColumns|flagPrunColumnsAgain|flagPushDownAgg, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagBuildKeyInfo|rule.FlagPredicatePushDown|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain|rule.FlagPushDownAgg, p.(base.LogicalPlan))
 		require.NoError(t, err)
 		testdata.OnRecord(func() {
 			output[ith] = ToString(p)
@@ -678,7 +681,7 @@ func TestColumnPruning(t *testing.T) {
 
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err)
-		lp, err := logicalOptimize(ctx, flagPredicatePushDown|flagPrunColumns|flagPrunColumnsAgain, p.(base.LogicalPlan))
+		lp, err := logicalOptimize(ctx, rule.FlagPredicatePushDown|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain, p.(base.LogicalPlan))
 		require.NoError(t, err)
 		testdata.OnRecord(func() {
 			output[i] = make(map[int][]string)
@@ -707,7 +710,7 @@ func TestSortByItemsPruning(t *testing.T) {
 
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err)
-		lp, err := logicalOptimize(ctx, flagEliminateProjection|flagPredicatePushDown|flagPrunColumns|flagPrunColumnsAgain, p.(base.LogicalPlan))
+		lp, err := logicalOptimize(ctx, rule.FlagEliminateProjection|rule.FlagPredicatePushDown|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain, p.(base.LogicalPlan))
 		require.NoError(t, err)
 		checkOrderByItems(lp, t, &output[i], comment)
 	}
@@ -737,7 +740,7 @@ func TestProjectionEliminator(t *testing.T) {
 
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err)
-		p, err = logicalOptimize(context.TODO(), flagBuildKeyInfo|flagPrunColumns|flagPrunColumnsAgain|flagEliminateProjection, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagBuildKeyInfo|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain|rule.FlagEliminateProjection, p.(base.LogicalPlan))
 		require.NoError(t, err)
 		require.Equal(t, tt.best, ToString(p), fmt.Sprintf("for %s %d", tt.sql, ith))
 	}
@@ -751,18 +754,18 @@ func TestCS3389(t *testing.T) {
 	require.NoError(t, err)
 	p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 	require.NoError(t, err)
-	p, err = logicalOptimize(context.TODO(), flagBuildKeyInfo|flagPrunColumns|flagPrunColumnsAgain|flagEliminateProjection|flagJoinReOrder, p.(base.LogicalPlan))
+	p, err = logicalOptimize(context.TODO(), rule.FlagBuildKeyInfo|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain|rule.FlagEliminateProjection|rule.FlagJoinReOrder, p.(base.LogicalPlan))
 	require.NoError(t, err)
 
 	// Assert that all Projection is not empty and there is no Projection between Aggregation and Join.
-	proj, isProj := p.(*LogicalProjection)
+	proj, isProj := p.(*logicalop.LogicalProjection)
 	require.True(t, isProj)
 	require.True(t, len(proj.Exprs) > 0)
 	child := proj.Children()[0]
-	agg, isAgg := child.(*LogicalAggregation)
+	agg, isAgg := child.(*logicalop.LogicalAggregation)
 	require.True(t, isAgg)
 	child = agg.Children()[0]
-	_, isJoin := child.(*LogicalJoin)
+	_, isJoin := child.(*logicalop.LogicalJoin)
 	require.True(t, isJoin)
 }
 
@@ -779,7 +782,7 @@ func TestAllocID(t *testing.T) {
 func checkDataSourceCols(p base.LogicalPlan, t *testing.T, ans map[int][]string, comment string) {
 	ectx := p.SCtx().GetExprCtx().GetEvalCtx()
 	switch v := p.(type) {
-	case *DataSource, *LogicalUnionAll, *LogicalLimit:
+	case *DataSource, *logicalop.LogicalUnionAll, *logicalop.LogicalLimit:
 		testdata.OnRecord(func() {
 			ans[p.ID()] = make([]string, p.Schema().Len())
 		})
@@ -788,9 +791,9 @@ func checkDataSourceCols(p base.LogicalPlan, t *testing.T, ans map[int][]string,
 		require.Equal(t, len(colList), len(p.Schema().Columns), comment)
 		for i, col := range p.Schema().Columns {
 			testdata.OnRecord(func() {
-				colList[i] = col.StringWithCtx(ectx)
+				colList[i] = col.StringWithCtx(ectx, errors.RedactLogDisable)
 			})
-			require.Equal(t, colList[i], col.StringWithCtx(ectx), comment)
+			require.Equal(t, colList[i], col.StringWithCtx(ectx, errors.RedactLogDisable), comment)
 		}
 	}
 	for _, child := range p.Children() {
@@ -801,15 +804,15 @@ func checkDataSourceCols(p base.LogicalPlan, t *testing.T, ans map[int][]string,
 func checkOrderByItems(p base.LogicalPlan, t *testing.T, colList *[]string, comment string) {
 	ectx := p.SCtx().GetExprCtx().GetEvalCtx()
 	switch p := p.(type) {
-	case *LogicalSort:
+	case *logicalop.LogicalSort:
 		testdata.OnRecord(func() {
 			*colList = make([]string, len(p.ByItems))
 		})
 		for i, col := range p.ByItems {
 			testdata.OnRecord(func() {
-				(*colList)[i] = col.StringWithCtx(ectx)
+				(*colList)[i] = col.StringWithCtx(ectx, errors.RedactLogDisable)
 			})
-			s := col.StringWithCtx(ectx)
+			s := col.StringWithCtx(ectx, errors.RedactLogDisable)
 			require.Equal(t, (*colList)[i], s, comment)
 		}
 	}
@@ -1029,9 +1032,9 @@ func checkUniqueKeys(p base.LogicalPlan, t *testing.T, ans map[int][][]string, s
 		require.Equal(t, len(keyList[i]), len(p.Schema().Keys[i]), fmt.Sprintf("for %s, %v %v, the number of column doesn't match", sql, p.ID(), keyList[i]))
 		for j := range keyList[i] {
 			testdata.OnRecord(func() {
-				keyList[i][j] = p.Schema().Keys[i][j].StringWithCtx(ectx)
+				keyList[i][j] = p.Schema().Keys[i][j].StringWithCtx(ectx, errors.RedactLogDisable)
 			})
-			require.Equal(t, keyList[i][j], p.Schema().Keys[i][j].StringWithCtx(ectx), fmt.Sprintf("for %s, %v %v, column dosen't match", sql, p.ID(), keyList[i]))
+			require.Equal(t, keyList[i][j], p.Schema().Keys[i][j].StringWithCtx(ectx, errors.RedactLogDisable), fmt.Sprintf("for %s, %v %v, column dosen't match", sql, p.ID(), keyList[i]))
 		}
 	}
 	testdata.OnRecord(func() {
@@ -1060,7 +1063,7 @@ func TestUniqueKeyInfo(t *testing.T) {
 
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err)
-		lp, err := logicalOptimize(context.TODO(), flagPredicatePushDown|flagPrunColumns|flagBuildKeyInfo, p.(base.LogicalPlan))
+		lp, err := logicalOptimize(context.TODO(), rule.FlagPredicatePushDown|rule.FlagPruneColumns|rule.FlagBuildKeyInfo, p.(base.LogicalPlan))
 		require.NoError(t, err)
 		testdata.OnRecord(func() {
 			output[ith] = make(map[int][][]string)
@@ -1084,7 +1087,7 @@ func TestAggPrune(t *testing.T) {
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err)
 
-		p, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagPrunColumns|flagPrunColumnsAgain|flagBuildKeyInfo|flagEliminateAgg|flagEliminateProjection, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagPredicatePushDown|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain|rule.FlagBuildKeyInfo|rule.FlagEliminateAgg|rule.FlagEliminateProjection, p.(base.LogicalPlan))
 		require.NoError(t, err)
 		planString := ToString(p)
 		testdata.OnRecord(func() {
@@ -1993,10 +1996,10 @@ func TestSkylinePruning(t *testing.T) {
 			switch v := lp.(type) {
 			case *DataSource:
 				ds = v
-			case *LogicalSort:
+			case *logicalop.LogicalSort:
 				byItems = v.ByItems
 				lp = lp.Children()[0]
-			case *LogicalProjection:
+			case *logicalop.LogicalProjection:
 				newItems := make([]*util.ByItems, 0, len(byItems))
 				for _, col := range byItems {
 					idx := v.Schema().ColumnIndex(col.Expr.(*expression.Column))
@@ -2011,7 +2014,7 @@ func TestSkylinePruning(t *testing.T) {
 				lp = lp.Children()[0]
 			}
 		}
-		paths := ds.skylinePruning(byItemsToProperty(byItems))
+		paths := skylinePruning(ds, byItemsToProperty(byItems))
 		require.Equal(t, tt.result, pathsName(paths), comment)
 		domain.GetDomain(sctx).StatsHandle().Close()
 	}
@@ -2112,9 +2115,9 @@ func TestConflictedJoinTypeHints(t *testing.T) {
 	require.NoError(t, err)
 	p, err = logicalOptimize(ctx, builder.optFlag, p.(base.LogicalPlan))
 	require.NoError(t, err)
-	proj, ok := p.(*LogicalProjection)
+	proj, ok := p.(*logicalop.LogicalProjection)
 	require.True(t, ok)
-	join, ok := proj.Children()[0].(*LogicalJoin)
+	join, ok := proj.Children()[0].(*logicalop.LogicalJoin)
 	require.True(t, ok)
 	require.Nil(t, join.HintInfo)
 	require.Equal(t, uint(0), join.PreferJoinType)
@@ -2139,12 +2142,12 @@ func TestSimplyOuterJoinWithOnlyOuterExpr(t *testing.T) {
 	require.NoError(t, err)
 	p, err = logicalOptimize(ctx, builder.optFlag, p.(base.LogicalPlan))
 	require.NoError(t, err)
-	proj, ok := p.(*LogicalProjection)
+	proj, ok := p.(*logicalop.LogicalProjection)
 	require.True(t, ok)
-	join, ok := proj.Children()[0].(*LogicalJoin)
+	join, ok := proj.Children()[0].(*logicalop.LogicalJoin)
 	require.True(t, ok)
 	// previous wrong JoinType is InnerJoin
-	require.Equal(t, RightOuterJoin, join.JoinType)
+	require.Equal(t, logicalop.RightOuterJoin, join.JoinType)
 }
 
 func TestResolvingCorrelatedAggregate(t *testing.T) {
@@ -2189,7 +2192,7 @@ func TestResolvingCorrelatedAggregate(t *testing.T) {
 		require.NoError(t, err, comment)
 		p, err := BuildLogicalPlanForTest(ctx, s.sctx, stmt, s.is)
 		require.NoError(t, err, comment)
-		p, err = logicalOptimize(context.TODO(), flagBuildKeyInfo|flagEliminateProjection|flagPrunColumns|flagPrunColumnsAgain, p.(base.LogicalPlan))
+		p, err = logicalOptimize(context.TODO(), rule.FlagBuildKeyInfo|rule.FlagEliminateProjection|rule.FlagPruneColumns|rule.FlagPruneColumnsAgain, p.(base.LogicalPlan))
 		require.NoError(t, err, comment)
 		require.Equal(t, tt.best, ToString(p), comment)
 	}
@@ -2346,7 +2349,7 @@ func TestRollupExpand(t *testing.T) {
 	require.Equal(t, builder.currentBlockExpand.DistinctSize, 3)
 	require.Equal(t, len(builder.currentBlockExpand.DistinctGroupByCol), 2)
 
-	_, err = logicalOptimize(context.TODO(), flagPredicatePushDown|flagJoinReOrder|flagPrunColumns|flagEliminateProjection|flagResolveExpand, p.(base.LogicalPlan))
+	_, err = logicalOptimize(context.TODO(), rule.FlagPredicatePushDown|rule.FlagJoinReOrder|rule.FlagPruneColumns|rule.FlagEliminateProjection|rule.FlagResolveExpand, p.(base.LogicalPlan))
 	require.NoError(t, err)
 
 	expand := builder.currentBlockExpand
@@ -2354,11 +2357,14 @@ func TestRollupExpand(t *testing.T) {
 	require.Equal(t, builder.currentBlockExpand.LevelExprs != nil, true)
 	require.Equal(t, len(builder.currentBlockExpand.LevelExprs), 3)
 	// for grouping set {}: gid = '00' = 0
-	require.Equal(t, expression.ExplainExpressionList(s.ctx.GetExprCtx().GetEvalCtx(), expand.LevelExprs[0], expand.Schema()), "test.t.a, <nil>->Column#13, <nil>->Column#14, 0->gid")
+	require.Equal(t, expression.ExplainExpressionList(s.ctx.GetExprCtx().GetEvalCtx(), expand.LevelExprs[0], expand.Schema(), errors.RedactLogDisable),
+		"test.t.a, <nil>->Column#13, <nil>->Column#14, 0->gid")
 	// for grouping set {a}: gid = '01' = 1
-	require.Equal(t, expression.ExplainExpressionList(s.ctx.GetExprCtx().GetEvalCtx(), expand.LevelExprs[1], expand.Schema()), "test.t.a, Column#13, <nil>->Column#14, 1->gid")
+	require.Equal(t, expression.ExplainExpressionList(s.ctx.GetExprCtx().GetEvalCtx(), expand.LevelExprs[1], expand.Schema(), errors.RedactLogDisable),
+		"test.t.a, Column#13, <nil>->Column#14, 1->gid")
 	// for grouping set {a,b}: gid = '11' = 3
-	require.Equal(t, expression.ExplainExpressionList(s.ctx.GetExprCtx().GetEvalCtx(), expand.LevelExprs[2], expand.Schema()), "test.t.a, Column#13, Column#14, 3->gid")
+	require.Equal(t, expression.ExplainExpressionList(s.ctx.GetExprCtx().GetEvalCtx(), expand.LevelExprs[2], expand.Schema(), errors.RedactLogDisable),
+		"test.t.a, Column#13, Column#14, 3->gid")
 
 	require.Equal(t, expand.Schema().Len(), 4)
 	// source column a should be kept as real.
