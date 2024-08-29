@@ -553,7 +553,9 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 	}
 	ctx = a.observeStmtBeginForTopSQL(ctx)
 
+	executor_metrics.StmtBeforeBuildExecDuration.Observe(time.Since(a.Ctx.GetSessionVars().StartTime).Seconds())
 	e, err := a.buildExecutor()
+	executor_metrics.StmtAfterBuildExecDuration.Observe(time.Since(a.Ctx.GetSessionVars().StartTime).Seconds())
 	if err != nil {
 		return nil, err
 	}
