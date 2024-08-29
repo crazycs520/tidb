@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	stderrs "errors"
 	"fmt"
+	executor_metrics "github.com/pingcap/tidb/pkg/executor/metrics"
 	"math"
 	"math/rand"
 	"runtime/pprof"
@@ -1577,6 +1578,7 @@ func (s *session) Parse(ctx context.Context, sql string) ([]ast.StmtNode, error)
 
 	durParse := time.Since(parseStartTime)
 	s.GetSessionVars().DurationParse = durParse
+	executor_metrics.StmtParseDuration.Observe(durParse.Seconds())
 	isInternal := s.isInternal()
 	if isInternal {
 		session_metrics.SessionExecuteParseDurationInternal.Observe(durParse.Seconds())
@@ -2121,6 +2123,7 @@ func (s *session) ExecuteStmt(ctx context.Context, stmtNode ast.StmtNode) (sqlex
 
 	durCompile := time.Since(s.sessionVars.StartTime)
 	s.GetSessionVars().DurationCompile = durCompile
+	executor_metrics.StmtCompileDuration.Observe(durCompile.Seconds())
 	if s.isInternal() {
 		session_metrics.SessionExecuteCompileDurationInternal.Observe(durCompile.Seconds())
 	} else {

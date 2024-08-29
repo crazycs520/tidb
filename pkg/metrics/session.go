@@ -22,6 +22,7 @@ var (
 	SessionExecuteParseDuration        *prometheus.HistogramVec
 	SessionExecuteCompileDuration      *prometheus.HistogramVec
 	SessionExecuteRunDuration          *prometheus.HistogramVec
+	StmtExecuteRunDuration             *prometheus.HistogramVec
 	SchemaLeaseErrorCounter            *prometheus.CounterVec
 	SessionRetry                       *prometheus.HistogramVec
 	SessionRetryErrorCounter           *prometheus.CounterVec
@@ -79,6 +80,15 @@ func InitSessionMetrics() {
 			Help:      "Bucketed histogram of processing time (s) in running executor.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 30), // 100us ~ 15h
 		}, []string{LblSQLType})
+
+	StmtExecuteRunDuration = NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "tidb",
+			Subsystem: "session",
+			Name:      "stmt_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) in running executor.",
+			Buckets:   prometheus.ExponentialBuckets(0.000004, 2, 28), // 4us ~ 0.8h
+		}, []string{LblType})
 
 	SchemaLeaseErrorCounter = NewCounterVec(
 		prometheus.CounterOpts{

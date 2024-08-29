@@ -77,7 +77,12 @@ var (
 
 	SessionExecuteRunDurationInternal prometheus.Observer
 	SessionExecuteRunDurationGeneral  prometheus.Observer
-	TotalTiFlashQuerySuccCounter      prometheus.Counter
+
+	StmtParseDuration            prometheus.Observer
+	StmtCompileDuration          prometheus.Observer
+	StmtExecOpenDuration         prometheus.Observer
+	StmtExecDuration             prometheus.Observer
+	TotalTiFlashQuerySuccCounter prometheus.Counter
 
 	// pre-define observers for non-internal queries
 	ExecBuildLocking       prometheus.Observer
@@ -169,6 +174,12 @@ func InitMetricsVars() {
 
 	SessionExecuteRunDurationInternal = metrics.SessionExecuteRunDuration.WithLabelValues(metrics.LblInternal)
 	SessionExecuteRunDurationGeneral = metrics.SessionExecuteRunDuration.WithLabelValues(metrics.LblGeneral)
+
+	StmtParseDuration = metrics.StmtExecuteRunDuration.WithLabelValues("parse")
+	StmtCompileDuration = metrics.StmtExecuteRunDuration.WithLabelValues("compile")
+	StmtExecOpenDuration = metrics.StmtExecuteRunDuration.WithLabelValues("after_exec_open")
+	StmtExecDuration = metrics.StmtExecuteRunDuration.WithLabelValues("exec")
+
 	TotalTiFlashQuerySuccCounter = metrics.TiFlashQueryTotalCounter.WithLabelValues("", metrics.LblOK)
 
 	ExecBuildLocking = metrics.ExecPhaseDuration.WithLabelValues(PhaseBuildLocking, "0")

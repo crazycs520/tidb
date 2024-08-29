@@ -1243,6 +1243,7 @@ func (a *ExecStmt) openExecutor(ctx context.Context, e exec.Executor) (err error
 	}()
 	start := time.Now()
 	err = exec.Open(ctx, e)
+	executor_metrics.StmtExecOpenDuration.Observe(time.Since(a.Ctx.GetSessionVars().StartTime).Seconds())
 	a.phaseOpenDurations[0] += time.Since(start)
 	return err
 }
@@ -1421,6 +1422,8 @@ func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, err error, hasMoreResults boo
 	} else {
 		executor_metrics.SessionExecuteRunDurationGeneral.Observe(executeDuration.Seconds())
 	}
+	executor_metrics.StmtExecDuration.Observe(executeDuration.Seconds())
+
 	// Reset DurationParse due to the next statement may not need to be parsed (not a text protocol query).
 	sessVars.DurationParse = 0
 	// Clean the stale read flag when statement execution finish
