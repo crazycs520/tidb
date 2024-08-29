@@ -80,6 +80,7 @@ var (
 
 	StmtParseDuration            prometheus.Observer
 	StmtCompileDuration          prometheus.Observer
+	StmtBeforeExecOpenDuration   prometheus.Observer
 	StmtExecOpenDuration         prometheus.Observer
 	StmtExecDuration             prometheus.Observer
 	TotalTiFlashQuerySuccCounter prometheus.Counter
@@ -177,6 +178,7 @@ func InitMetricsVars() {
 
 	StmtParseDuration = metrics.StmtExecuteRunDuration.WithLabelValues("parse")
 	StmtCompileDuration = metrics.StmtExecuteRunDuration.WithLabelValues("compile")
+	StmtBeforeExecOpenDuration = metrics.StmtExecuteRunDuration.WithLabelValues("before_exec_open")
 	StmtExecOpenDuration = metrics.StmtExecuteRunDuration.WithLabelValues("after_exec_open")
 	StmtExecDuration = metrics.StmtExecuteRunDuration.WithLabelValues("exec")
 

@@ -1242,6 +1242,7 @@ func (a *ExecStmt) openExecutor(ctx context.Context, e exec.Executor) (err error
 		}
 	}()
 	start := time.Now()
+	executor_metrics.StmtBeforeExecOpenDuration.Observe(time.Since(a.Ctx.GetSessionVars().StartTime).Seconds())
 	err = exec.Open(ctx, e)
 	executor_metrics.StmtExecOpenDuration.Observe(time.Since(a.Ctx.GetSessionVars().StartTime).Seconds())
 	a.phaseOpenDurations[0] += time.Since(start)
