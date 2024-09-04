@@ -3813,7 +3813,7 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 	} else {
 		physicalTableID = is.Table.ID
 	}
-	startTS := 452323724854461442
+	startTS := uint64(452313714854461442) + uint64(time.Since(time.Unix(1725441468, 0)).Microseconds())
 	paging := b.ctx.GetSessionVars().EnablePaging
 
 	e := &IndexReaderExecutor{
