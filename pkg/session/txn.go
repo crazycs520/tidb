@@ -290,6 +290,9 @@ func (txn *LazyTxn) changePendingToValid(ctx context.Context, sctx sessionctx.Co
 		return errors.New("transaction future is not set")
 	}
 
+	//if strings.Contains(sctx.GetSessionVars().StmtCtx.OriginalSQL, " from t ") {
+	//	logutil.BgLogger().Info("txn wait begin", zap.Stack("stack"))
+	//}
 	future := txn.txnFuture
 	txn.txnFuture = nil
 
