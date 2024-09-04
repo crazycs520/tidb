@@ -3087,5 +3087,6 @@ func TestIndexReaderDebug(t *testing.T) {
 	tk.MustExec("use test")
 	tk.MustExec("create table t(a int key, b int, c int, index idx(b));")
 	tk.MustExec("insert into t values (1,1,1), (2,2,2), (3,3,3)")
+	tk.Session().GetSessionVars().ConnectionID = 100
 	tk.MustQuery("select a from t use index (idx) where b > 1 and b < 10").Check(testkit.Rows("2", "3"))
 }

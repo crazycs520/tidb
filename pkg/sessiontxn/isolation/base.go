@@ -16,6 +16,8 @@ package isolation
 
 import (
 	"context"
+	"github.com/pingcap/tidb/pkg/util/logutil"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -368,6 +370,9 @@ func (p *baseTxnContextProvider) replaceTxnTsFuture(future oracle.Future) error 
 		return err
 	}
 
+	if p.sctx.GetSessionVars().ConnectionID == 100 {
+		logutil.BgLogger().Info("prepare ts future", zap.Stack("stack"))
+	}
 	p.isTxnPrepared = true
 	return nil
 }

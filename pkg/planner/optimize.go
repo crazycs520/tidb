@@ -233,9 +233,9 @@ func Optimize(ctx context.Context, sctx sessionctx.Context, node *resolve.NodeW,
 			return fp, fp.OutputNames(), nil
 		}
 	}
-	if err := pctx.AdviseTxnWarmup(); err != nil {
-		return nil, nil, err
-	}
+	//if err := pctx.AdviseTxnWarmup(); err != nil {
+	//	return nil, nil, err
+	//}
 
 	enableUseBinding := sessVars.UsePlanBaselines
 	stmtNode, isStmtNode := node.Node.(ast.StmtNode)

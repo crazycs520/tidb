@@ -108,6 +108,13 @@ func (p *OptimisticTxnContextProvider) GetStmtForUpdateTS() (uint64, error) {
 	return p.baseTxnContextProvider.GetStmtForUpdateTS()
 }
 
+func (p *OptimisticTxnContextProvider) AdviseWarmup() error {
+	if p.optimizeWithMaxTS {
+		return nil
+	}
+	return p.baseTxnContextProvider.AdviseWarmup()
+}
+
 // AdviseOptimizeWithPlan providers optimization according to the plan
 // It will use MaxTS as the startTS in autocommit txn for some plans.
 func (p *OptimisticTxnContextProvider) AdviseOptimizeWithPlan(plan any) (err error) {
