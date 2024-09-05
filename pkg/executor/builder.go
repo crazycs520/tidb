@@ -19,6 +19,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/sessiontxn/isolation"
 	"math"
 	"slices"
 	"strconv"
@@ -3813,9 +3814,24 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 	} else {
 		physicalTableID = is.Table.ID
 	}
-	startTS, err := b.getSnapshotTS()
-	if err != nil {
-		return nil, err
+	getStartTS := func(tryUseMaxTS bool) (uint64, error) {
+		if b.forDataReaderBuilder {
+			return b.dataReaderTS, nil
+		}
+
+		txnManager := sessiontxn.GetTxnManager(b.ctx)
+		if b.inInsertStmt || b.inUpdateStmt || b.inDeleteStmt || b.inSelectLockStmt {
+			return txnManager.GetStmtForUpdateTS()
+		}
+		if tryUseMaxTS {
+			ctxProvider := txnManager.GetContextProvider()
+			if optimisticTxnCtxProvider := ctxProvider.(*isolation.OptimisticTxnContextProvider); optimisticTxnCtxProvider != nil {
+				if optimisticTxnCtxProvider.TryOptimizeWithMaxTS {
+					return uint64(math.MaxUint64), nil
+				}
+			}
+		}
+		return txnManager.GetStmtReadTS()
 	}
 	paging := b.ctx.GetSessionVars().EnablePaging
 
@@ -3824,7 +3840,7 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 		BaseExecutorV2:             exec.NewBaseExecutorV2(b.ctx.GetSessionVars(), v.Schema(), v.ID()),
 		indexUsageReporter:         b.buildIndexUsageReporter(v),
 		dagPB:                      dagReq,
-		startTS:                    startTS,
+		getStartTS:                 getStartTS,
 		txnScope:                   b.txnScope,
 		readReplicaScope:           b.readReplicaScope,
 		isStaleness:                b.isStaleness,

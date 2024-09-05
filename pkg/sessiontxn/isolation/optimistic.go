@@ -33,7 +33,8 @@ var emptyOptimisticTxnContextProvider = OptimisticTxnContextProvider{}
 // OptimisticTxnContextProvider provides txn context for optimistic transaction
 type OptimisticTxnContextProvider struct {
 	baseTxnContextProvider
-	optimizeWithMaxTS bool
+	optimizeWithMaxTS    bool
+	TryOptimizeWithMaxTS bool
 }
 
 // ResetForNewTxn resets OptimisticTxnContextProvider to an initial state for a new txn
@@ -152,6 +153,10 @@ func (p *OptimisticTxnContextProvider) AdviseOptimizeWithPlan(plan any) (err err
 		if sessVars.StmtCtx.Priority == mysql.NoPriority {
 			sessVars.StmtCtx.Priority = kv.PriorityHigh
 		}
+	}
+	ok = plannercore.IsIndexReaderByAutoCommit(p.sctx.GetSessionVars(), realPlan)
+	if ok {
+		p.TryOptimizeWithMaxTS = true
 	}
 	return nil
 }
