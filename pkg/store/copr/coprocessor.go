@@ -831,6 +831,9 @@ func (worker *copIteratorWorker) run(ctx context.Context) {
 
 // open starts workers and sender goroutines.
 func (it *copIterator) open(ctx context.Context, enabledRateLimitAction, enableCollectExecutionInfo bool) {
+	if (it.concurrency + it.smallTaskConcurrency) <= 1 {
+		return
+	}
 	taskCh := make(chan *copTask, 1)
 	smallTaskCh := make(chan *copTask, 1)
 	it.unconsumedStats = &unconsumedCopRuntimeStats{}
@@ -1048,9 +1051,15 @@ func (it *copIterator) Next(ctx context.Context) (kv.ResultSubset, error) {
 			}
 		}
 	})
-	// If data order matters, response should be returned in the same order as copTask slice.
+	// If concurrency is 1, send req direct without other worker.
+	// else if data order matters, response should be returned in the same order as copTask slice.
 	// Otherwise all responses are returned from a single channel.
-	if it.respChan != nil {
+	if (it.concurrency + it.smallTaskConcurrency) <= 1 {
+		resp = it.sendReq(ctx)
+		if resp == nil {
+			return nil, nil
+		}
+	} else if it.respChan != nil {
 		// Get next fetched resp from chan
 		resp, ok, closed = it.recvFromRespCh(ctx, it.respChan)
 		if !ok || closed {
@@ -1097,6 +1106,50 @@ func (it *copIterator) Next(ctx context.Context) (kv.ResultSubset, error) {
 		return nil, errors.Trace(err)
 	}
 	return resp, nil
+}
+
+func (it *copIterator) sendReq(ctx context.Context) *copResponse {
+	if len(it.tasks) == 0 {
+		return nil
+	}
+	worker := &copIteratorWorker{
+		wg:                         &it.wg,
+		store:                      it.store,
+		req:                        it.req,
+		finishCh:                   it.finishCh,
+		vars:                       it.vars,
+		kvclient:                   txnsnapshot.NewClientHelper(it.store.store, &it.resolvedLocks, &it.committedLocks, false),
+		memTracker:                 it.memTracker,
+		replicaReadSeed:            it.replicaReadSeed,
+		enableCollectExecutionInfo: config.GetGlobalConfig().Instance.EnableCollectExecutionInfo.Load(),
+		pagingTaskIdx:              &it.pagingTaskIdx,
+		storeBatchedNum:            &it.storeBatchedNum,
+		storeBatchedFallbackNum:    &it.storeBatchedFallbackNum,
+	}
+	backoffermap := make(map[uint64]*Backoffer)
+	respCh := make(chan *copResponse, 2)
+	for len(it.tasks) > 0 {
+		curTask := it.tasks[0]
+		curTask.respChan = respCh
+		bo := chooseBackoffer(ctx, backoffermap, curTask, worker)
+		tasks, err := worker.handleTaskOnce(bo, curTask, respCh)
+		if err != nil {
+			resp := &copResponse{err: errors.Trace(err)}
+			return resp
+		}
+		if len(tasks) > 0 {
+			it.tasks = append(tasks, it.tasks[1:]...)
+		} else {
+			it.tasks = it.tasks[1:]
+		}
+		select {
+		case resp := <-respCh:
+			return resp
+		default:
+			continue
+		}
+	}
+	return nil
 }
 
 // HasUnconsumedCopRuntimeStats indicate whether has unconsumed CopRuntimeStats.
@@ -1303,7 +1356,7 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 		remains, err = worker.handleCopPagingResult(bo, rpcCtx, &copResponse{pbResp: copResp}, cacheKey, cacheValue, task, ch, costTime)
 	} else {
 		// Handles the response for non-paging copTask.
-		remains, err = worker.handleCopResponse(bo, rpcCtx, &copResponse{pbResp: copResp}, cacheKey, cacheValue, task, ch, nil, costTime)
+		remains, err = worker.handleCopResponse(bo, rpcCtx, &copResponse{pbResp: copResp}, cacheKey, cacheValue, task, ch, costTime)
 	}
 	if req.ReadType != "" {
 		for _, remain := range remains {
@@ -1373,7 +1426,7 @@ func appendScanDetail(logStr string, columnFamily string, scanInfo *kvrpcpb.Scan
 }
 
 func (worker *copIteratorWorker) handleCopPagingResult(bo *Backoffer, rpcCtx *tikv.RPCContext, resp *copResponse, cacheKey []byte, cacheValue *coprCacheValue, task *copTask, ch chan<- *copResponse, costTime time.Duration) ([]*copTask, error) {
-	remainedTasks, err := worker.handleCopResponse(bo, rpcCtx, resp, cacheKey, cacheValue, task, ch, nil, costTime)
+	remainedTasks, err := worker.handleCopResponse(bo, rpcCtx, resp, cacheKey, cacheValue, task, ch, costTime)
 	if err != nil || len(remainedTasks) != 0 {
 		// If there is region error or lock error, keep the paging size and retry.
 		for _, remainedTask := range remainedTasks {
@@ -1403,7 +1456,7 @@ func (worker *copIteratorWorker) handleCopPagingResult(bo *Backoffer, rpcCtx *ti
 // returns more tasks when that happens, or handles the response if no error.
 // if we're handling coprocessor paging response, lastRange is the range of last
 // successful response, otherwise it's nil.
-func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *tikv.RPCContext, resp *copResponse, cacheKey []byte, cacheValue *coprCacheValue, task *copTask, ch chan<- *copResponse, lastRange *coprocessor.KeyRange, costTime time.Duration) ([]*copTask, error) {
+func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *tikv.RPCContext, resp *copResponse, cacheKey []byte, cacheValue *coprCacheValue, task *copTask, ch chan<- *copResponse, costTime time.Duration) ([]*copTask, error) {
 	if ver := resp.pbResp.GetLatestBucketsVersion(); task.bucketsVer < ver {
 		worker.store.GetRegionCache().UpdateBucketsIfNeeded(task.region, ver)
 	}
