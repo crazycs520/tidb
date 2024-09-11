@@ -109,7 +109,8 @@ func AdviseOptimizeWithPlanAndThenWarmUp(sctx sessionctx.Context, plan any) erro
 	if err := txnManager.AdviseOptimizeWithPlan(plan); err != nil {
 		return err
 	}
-	return txnManager.AdviseWarmup()
+	return nil
+	//return txnManager.AdviseWarmup()
 }
 
 // TxnContextProvider provides txn context
