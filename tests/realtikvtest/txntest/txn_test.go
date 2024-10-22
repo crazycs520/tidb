@@ -17,6 +17,9 @@ package txntest
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -289,4 +292,65 @@ func TestSelectLockForPartitionTable(t *testing.T) {
 	// wait until tk2 finished
 	res = <-ch
 	require.True(t, res)
+}
+
+func TestStaleReadPushMaxTs(t *testing.T) {
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	for i := 0; i < 10; i++ {
+		go func(id int) {
+			tk := testkit.NewTestKit(t, store)
+			tk.MustExec("use test")
+			tk.MustExec(fmt.Sprintf("drop table if exists ts%v", id))
+			tk.MustExec(fmt.Sprintf("create table ts%v(a int key, b int, c int, key idx(b))", id))
+			tk.MustQuery(fmt.Sprintf("split table ts%v between (0) and (10000) regions 6", id)).Rows()
+			time.Sleep(time.Second)
+			for {
+				interval := rand.Intn(5) - 4
+				now := time.Now().Add(time.Duration(interval * int(time.Millisecond)))
+				query := fmt.Sprintf("select * from ts%v as of timestamp '%v' where a = %v", id, now.Format("2006-01-02 15:04:05.123"), rand.Intn(100000))
+				rs, err := tk.ExecWithContext(context.Background(), query)
+				if err == nil {
+					require.NotNil(t, rs)
+					res := tk.ResultSetToResultWithCtx(context.Background(), rs, "")
+					_ = res.Rows()
+				} else {
+					require.Error(t, err)
+					require.Equal(t, "cannot set read timestamp to a future time", err.Error())
+				}
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+			}
+		}(i)
+	}
+
+	var wg sync.WaitGroup
+	for i := 3; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			tk1 := testkit.NewTestKit(t, store)
+			tk1.MustExec("use test")
+			tk1.MustExec("set @@tidb_enable_async_commit=1")
+			tk1.MustExec(fmt.Sprintf("drop table if exists t%v", id))
+			tk1.MustExec(fmt.Sprintf("drop table if exists t_%v", id))
+			tk1.MustExec(fmt.Sprintf("create table t%v(a int key, b int, c int, index idx(b), index (c,b))", id))
+			tk1.MustExec(fmt.Sprintf("create table t_%v(a int key, b int, c int, index idx(b), index (c,b))", id))
+			tk1.MustQuery(fmt.Sprintf("split table t%v between (0) and (10000) regions 1", id)).Rows()
+			tk1.MustQuery(fmt.Sprintf("split table t_%v between (0) and (10000) regions 1", id)).Rows()
+			for i := 0; i < 100000; i++ {
+				tk1.MustExec("begin")
+				tk1.MustExec(fmt.Sprintf("insert into t%v values (%v, %v, %v)", id, i, i, i))
+				tk1.MustExec(fmt.Sprintf("insert into t_%v values (%v, %v, %v)", id, i, i, i))
+				tk1.MustExec("commit")
+				tk1.MustQuery(fmt.Sprintf("select b from t%v where a=%v", id, i)).Check(testkit.Rows(strconv.Itoa(i)))
+				tk1.MustQuery(fmt.Sprintf("select b from t_%v where a=%v", id, i)).Check(testkit.Rows(strconv.Itoa(i)))
+			}
+		}(i)
+	}
+	wg.Wait()
+	cancel()
 }
