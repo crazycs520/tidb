@@ -952,7 +952,7 @@ func (b *executorBuilder) buildLoadData(v *plannercore.LoadData) Executor {
 		OnDuplicate:  v.OnDuplicate,
 		loadDataInfo: loadDataInfo,
 	}
-	var defaultLoadDataBatchCnt uint64 = 20000 // TODO this will be changed to variable in another pr
+	var defaultLoadDataBatchCnt uint64 = 2 // TODO this will be changed to variable in another pr
 	loadDataExec.loadDataInfo.InitQueues()
 	loadDataExec.loadDataInfo.SetMaxRowsInBatch(defaultLoadDataBatchCnt)
 

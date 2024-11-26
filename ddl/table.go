@@ -281,6 +281,8 @@ func onDropTableOrView(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int64, _ er
 		return ver, errors.Trace(err)
 	}
 
+	logutil.BgLogger().Info("[ddl] on drop table====", zap.Int64("job", job.ID), zap.String("state", job.SchemaState.String()), zap.String("table", tblInfo.Name.O))
+	time.Sleep(time.Second)
 	originalState := job.SchemaState
 	switch tblInfo.State {
 	case model.StatePublic:

@@ -373,7 +373,9 @@ func (e *LoadDataInfo) CommitWork(ctx context.Context) error {
 					zap.Duration("commit time usage", time.Since(start)),
 					zap.Uint64("keys processed", commitTask.cnt),
 					zap.Uint64("tasks processed", tasks),
-					zap.Int("tasks in queue", len(e.commitTaskQueue)))
+					zap.Int("tasks in queue", len(e.commitTaskQueue)),
+					zap.Uint64("max-batch-size", e.maxRowsInBatch),
+					zap.Int("task count", len(commitTask.rows)))
 			} else {
 				end = true
 			}

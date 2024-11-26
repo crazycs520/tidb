@@ -3223,6 +3223,7 @@ func (s *session) RefreshTxnCtx(ctx context.Context) error {
 
 	s.updateStatsDeltaToCollector()
 
+	time.Sleep(time.Second)
 	return sessiontxn.NewTxn(ctx, s)
 }
 
