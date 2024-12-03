@@ -1464,7 +1464,8 @@ func NewRuntimeStatsColl(reuse *RuntimeStatsColl) *RuntimeStatsColl {
 		// Go compiler optimize this cleanup code pattern to a clearmap() function.
 		reuse.mu.Lock()
 		defer reuse.mu.Unlock()
-		for k := range reuse.rootStats {
+		for k, stats := range reuse.rootStats {
+			rootRuntimeStatsPool.Put(stats)
 			delete(reuse.rootStats, k)
 		}
 		for k := range reuse.copStats {
@@ -1501,6 +1502,14 @@ func (e *RuntimeStatsColl) RegisterStats(planID int, info RuntimeStats) {
 	}
 }
 
+var rootRuntimeStatsPool = sync.Pool{
+	New: func() interface{} {
+		return &RootRuntimeStats{
+			basic: &BasicRuntimeStats{},
+		}
+	},
+}
+
 // GetBasicRuntimeStats gets basicRuntimeStats for a executor
 // When rootStat/rootStat's basicRuntimeStats is nil, the behavior is decided by initNewExecutorStats argument:
 // 1. If true, it created a new one, and increase basicRuntimeStats' executorCount
@@ -1510,7 +1519,7 @@ func (e *RuntimeStatsColl) GetBasicRuntimeStats(planID int, initNewExecutorStats
 	defer e.mu.Unlock()
 	stats, ok := e.rootStats[planID]
 	if !ok && initNewExecutorStats {
-		stats = NewRootRuntimeStats()
+		stats = rootRuntimeStatsPool.Get().(*RootRuntimeStats)
 		e.rootStats[planID] = stats
 	}
 	if stats == nil {
