@@ -1317,6 +1317,15 @@ type BasicRuntimeStats struct {
 	rows atomic.Int64
 }
 
+func (e *BasicRuntimeStats) reset() {
+	e.executorCount.Store(0)
+	e.loop.Store(0)
+	e.consume.Store(0)
+	e.open.Store(0)
+	e.close.Store(0)
+	e.rows.Store(0)
+}
+
 // GetActRows return total rows of BasicRuntimeStats.
 func (e *BasicRuntimeStats) GetActRows() int64 {
 	return e.rows.Load()
@@ -1361,6 +1370,13 @@ type RootRuntimeStats struct {
 // NewRootRuntimeStats returns a new RootRuntimeStats
 func NewRootRuntimeStats() *RootRuntimeStats {
 	return &RootRuntimeStats{}
+}
+
+func (e *RootRuntimeStats) reset() {
+	if e.basic != nil {
+		e.basic.reset()
+	}
+	e.groupRss = nil
 }
 
 // GetActRows return total rows of RootRuntimeStats.
@@ -1465,6 +1481,7 @@ func NewRuntimeStatsColl(reuse *RuntimeStatsColl) *RuntimeStatsColl {
 		reuse.mu.Lock()
 		defer reuse.mu.Unlock()
 		for k, stats := range reuse.rootStats {
+			stats.reset()
 			rootRuntimeStatsPool.Put(stats)
 			delete(reuse.rootStats, k)
 		}
