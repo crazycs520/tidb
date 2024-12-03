@@ -72,12 +72,12 @@ func (b *executorBuilder) buildPointGet(p *plannercore.PointGetPlan) exec.Execut
 	}
 
 	e := &PointGetExecutor{
-		BaseExecutor: exec.NewBaseExecutor(b.ctx, p.Schema(), p.ID()),
-		//indexUsageReporter: b.buildIndexUsageReporter(p),
-		txnScope:         b.txnScope,
-		readReplicaScope: b.readReplicaScope,
-		isStaleness:      b.isStaleness,
-		partitionNames:   p.PartitionNames,
+		BaseExecutor:       exec.NewBaseExecutor(b.ctx, p.Schema(), p.ID()),
+		indexUsageReporter: b.buildIndexUsageReporter(p),
+		txnScope:           b.txnScope,
+		readReplicaScope:   b.readReplicaScope,
+		isStaleness:        b.isStaleness,
+		partitionNames:     p.PartitionNames,
 	}
 
 	e.SetInitCap(1)
@@ -269,14 +269,15 @@ func (e *PointGetExecutor) Close() error {
 	if e.RuntimeStats() != nil && e.snapshot != nil {
 		e.snapshot.SetOption(kv.CollectRuntimeStats, nil)
 	}
-	if e.indexUsageReporter != nil {
+	if e.indexUsageReporter != nil && e.stats != nil {
 		tableID := e.tblInfo.ID
 		physicalTableID := GetPhysID(e.tblInfo, e.partitionDefIdx)
 		kvReqTotal := e.stats.SnapshotRuntimeStats.GetCmdRPCCount(tikvrpc.CmdGet)
+		rows := e.RuntimeStats().GetActRows()
 		if e.idxInfo != nil {
-			e.indexUsageReporter.ReportPointGetIndexUsage(tableID, physicalTableID, e.idxInfo.ID, e.ID(), kvReqTotal)
+			e.indexUsageReporter.ReportPointGetIndexUsage(tableID, physicalTableID, e.idxInfo.ID, kvReqTotal, rows)
 		} else {
-			e.indexUsageReporter.ReportPointGetIndexUsageForHandle(e.tblInfo, physicalTableID, e.ID(), kvReqTotal)
+			e.indexUsageReporter.ReportPointGetIndexUsageForHandle(e.tblInfo, physicalTableID, kvReqTotal, rows)
 		}
 	}
 	e.done = false
