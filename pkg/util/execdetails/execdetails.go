@@ -1534,6 +1534,16 @@ func (e *RuntimeStatsColl) GetRootStats(planID int) *RootRuntimeStats {
 	return runtimeStats
 }
 
+func (e *RuntimeStatsColl) GetPlanActRows(planID int) int64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	runtimeStats, exists := e.rootStats[planID]
+	if !exists {
+		return 0
+	}
+	return runtimeStats.GetActRows()
+}
+
 // GetCopStats gets the CopRuntimeStats specified by planID.
 func (e *RuntimeStatsColl) GetCopStats(planID int) *CopRuntimeStats {
 	e.mu.Lock()
