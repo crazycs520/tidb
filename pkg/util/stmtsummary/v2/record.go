@@ -185,16 +185,13 @@ func NewStmtRecord(info *stmtsummary.StmtExecInfo) *StmtRecord {
 	}
 	// sampleSQL / authUsers(sampleUser) / samplePlan / prevSQL / indexNames store the values shown at the first time,
 	// because it compacts performance to update every time.
-	samplePlan, planHint, _ := info.PlanGenerator()
+	samplePlan, planHint, _ := info.LazyInfo.GetEncodedPlan()
 	if len(samplePlan) > MaxEncodedPlanSizeInBytes {
 		samplePlan = plancodec.PlanDiscardedEncoded
 	}
-	binPlan := ""
-	if info.BinaryPlanGenerator != nil {
-		binPlan = info.BinaryPlanGenerator()
-		if len(binPlan) > MaxEncodedPlanSizeInBytes {
-			binPlan = plancodec.BinaryPlanDiscardedEncoded
-		}
+	binPlan := info.LazyInfo.GetBinaryPlan()
+	if len(binPlan) > MaxEncodedPlanSizeInBytes {
+		binPlan = plancodec.BinaryPlanDiscardedEncoded
 	}
 	return &StmtRecord{
 		SchemaName:    info.SchemaName,
@@ -620,10 +617,10 @@ func GenerateStmtExecInfo4Test(digest string) *stmtsummary.StmtExecInfo {
 	stmtExecInfo := &stmtsummary.StmtExecInfo{
 		SchemaName: "schema_name",
 		//OriginalSQL:    stringutil.StringerStr("original_sql1"),
-		NormalizedSQL:  "normalized_sql",
-		Digest:         digest,
-		PlanDigest:     "plan_digest",
-		PlanGenerator:  func() (string, string, any) { return "", "", nil },
+		NormalizedSQL: "normalized_sql",
+		Digest:        digest,
+		PlanDigest:    "plan_digest",
+		//PlanGenerator:  func() (string, string, any) { return "", "", nil },
 		User:           "user",
 		TotalLatency:   10000,
 		ParseLatency:   100,

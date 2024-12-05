@@ -2023,8 +2023,6 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	stmtExecInfo.Digest = digest.String()
 	stmtExecInfo.PrevSQL = prevSQL
 	stmtExecInfo.PrevSQLDigest = prevSQLDigest
-	//stmtExecInfo.PlanGenerator = planGenerator
-	//stmtExecInfo.BinaryPlanGenerator = binPlanGen
 	stmtExecInfo.PlanDigest = planDigest
 	//stmtExecInfo.PlanDigestGen = planDigestGen
 	stmtExecInfo.User = userString
@@ -2090,12 +2088,25 @@ func (a *ExecStmt) GetOriginalSQL() string {
 	return lazy.String()
 }
 
-func (a *ExecStmt) GetEncodedPlan() (string, string, any) {
+func (a *ExecStmt) GetEncodedPlan() (p string, h string, e any) {
+	defer func() {
+		e = recover()
+		if e != nil {
+			logutil.BgLogger().Warn("fail to generate plan info",
+				zap.Stack("backtrace"),
+				zap.Any("error", e))
+		}
+	}()
 
-	return "", "", nil
+	sessVars := a.Ctx.GetSessionVars()
+	p, h = getEncodedPlan(sessVars.StmtCtx, !sessVars.InRestrictedSQL)
+	return
 }
 
 func (a *ExecStmt) GetBinaryPlan() string {
+	if variable.GenerateBinaryPlan.Load() {
+		return getBinaryPlan(a.Ctx)
+	}
 	return ""
 }
 

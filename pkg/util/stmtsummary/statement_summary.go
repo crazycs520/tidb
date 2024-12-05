@@ -227,34 +227,31 @@ type stmtSummaryByDigestElement struct {
 
 // StmtExecInfo records execution information of each statement.
 type StmtExecInfo struct {
-	SchemaName string
-	//OriginalSQL         fmt.Stringer
-	Charset             string
-	Collation           string
-	NormalizedSQL       string
-	Digest              string
-	PrevSQL             string
-	PrevSQLDigest       string
-	PlanGenerator       func() (string, string, any)
-	BinaryPlanGenerator func() string
-	PlanDigest          string
-	PlanDigestGen       func() string
-	User                string
-	TotalLatency        time.Duration
-	ParseLatency        time.Duration
-	CompileLatency      time.Duration
-	StmtCtx             *stmtctx.StatementContext
-	CopTasks            *execdetails.CopTasksDetails
-	ExecDetail          *execdetails.ExecDetails
-	MemMax              int64
-	DiskMax             int64
-	StartTime           time.Time
-	IsInternal          bool
-	Succeed             bool
-	PlanInCache         bool
-	PlanInBinding       bool
-	ExecRetryCount      uint
-	ExecRetryTime       time.Duration
+	SchemaName     string
+	Charset        string
+	Collation      string
+	NormalizedSQL  string
+	Digest         string
+	PrevSQL        string
+	PrevSQLDigest  string
+	PlanDigest     string
+	PlanDigestGen  func() string
+	User           string
+	TotalLatency   time.Duration
+	ParseLatency   time.Duration
+	CompileLatency time.Duration
+	StmtCtx        *stmtctx.StatementContext
+	CopTasks       *execdetails.CopTasksDetails
+	ExecDetail     *execdetails.ExecDetails
+	MemMax         int64
+	DiskMax        int64
+	StartTime      time.Time
+	IsInternal     bool
+	Succeed        bool
+	PlanInCache    bool
+	PlanInBinding  bool
+	ExecRetryCount uint
+	ExecRetryTime  time.Duration
 	execdetails.StmtExecDetails
 	ResultRows        int64
 	TiKVExecDetails   util.ExecDetails
@@ -660,19 +657,16 @@ var MaxEncodedPlanSizeInBytes = 1024 * 1024
 func newStmtSummaryByDigestElement(sei *StmtExecInfo, beginTime int64, intervalSeconds int64) *stmtSummaryByDigestElement {
 	// sampleSQL / authUsers(sampleUser) / samplePlan / prevSQL / indexNames store the values shown at the first time,
 	// because it compacts performance to update every time.
-	samplePlan, planHint, e := sei.PlanGenerator()
+	samplePlan, planHint, e := sei.LazyInfo.GetEncodedPlan()
 	if e != nil {
 		return nil
 	}
 	if len(samplePlan) > MaxEncodedPlanSizeInBytes {
 		samplePlan = plancodec.PlanDiscardedEncoded
 	}
-	binPlan := ""
-	if sei.BinaryPlanGenerator != nil {
-		binPlan = sei.BinaryPlanGenerator()
-		if len(binPlan) > MaxEncodedPlanSizeInBytes {
-			binPlan = plancodec.BinaryPlanDiscardedEncoded
-		}
+	binPlan := sei.LazyInfo.GetBinaryPlan()
+	if len(binPlan) > MaxEncodedPlanSizeInBytes {
+		binPlan = plancodec.BinaryPlanDiscardedEncoded
 	}
 	ssElement := &stmtSummaryByDigestElement{
 		beginTime: beginTime,
