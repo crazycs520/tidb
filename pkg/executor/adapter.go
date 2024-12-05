@@ -2032,7 +2032,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	stmtExecInfo.ParseLatency = sessVars.DurationParse
 	stmtExecInfo.CompileLatency = sessVars.DurationCompile
 	//stmtExecInfo.StmtCtx = stmtCtx
-	//stmtExecInfo.CopTasks = &copTaskInfo
+	stmtExecInfo.CopTasks = &copTaskInfo
 	//stmtExecInfo.ExecDetail = &execDetail
 	stmtExecInfo.MemMax = memMax
 	stmtExecInfo.DiskMax = diskMax
