@@ -1676,7 +1676,7 @@ func (a *ExecStmt) LogSlowQuery(txnTS uint64, succ bool, hasMoreResults bool) {
 		TimeOptimize:      sessVars.DurationOptimization,
 		TimeWaitTS:        sessVars.DurationWaitTS,
 		IndexNames:        indexNames,
-		CopTasks:          &copTaskInfo,
+		CopTasks:          copTaskInfo,
 		ExecDetail:        execDetail,
 		MemMax:            memMax,
 		DiskMax:           diskMax,
@@ -2032,7 +2032,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	stmtExecInfo.ParseLatency = sessVars.DurationParse
 	stmtExecInfo.CompileLatency = sessVars.DurationCompile
 	//stmtExecInfo.StmtCtx = stmtCtx
-	stmtExecInfo.CopTasks = &copTaskInfo
+	stmtExecInfo.CopTasks = copTaskInfo
 	//stmtExecInfo.ExecDetail = &execDetail
 	stmtExecInfo.MemMax = memMax
 	stmtExecInfo.DiskMax = diskMax
