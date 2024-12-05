@@ -2003,8 +2003,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	stmtExecInfo.CompileLatency = sessVars.DurationCompile
 	stmtExecInfo.StmtCtx = stmtCtx
 	stmtExecInfo.CopTasks = copTaskInfo
-	// todo: avoid allocate object in head by not use pointer here.
-	stmtExecInfo.ExecDetail = &execDetail
+	stmtExecInfo.ExecDetail = execDetail
 	stmtExecInfo.MemMax = memMax
 	stmtExecInfo.DiskMax = diskMax
 	stmtExecInfo.StartTime = sessVars.StartTime

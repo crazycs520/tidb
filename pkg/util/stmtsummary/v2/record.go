@@ -636,7 +636,7 @@ func GenerateStmtExecInfo4Test(digest string) *stmtsummary.StmtExecInfo {
 			MaxWaitAddress:    "128",
 			MaxWaitTime:       1500,
 		},
-		ExecDetail: &execdetails.ExecDetails{
+		ExecDetail: execdetails.ExecDetails{
 			BackoffTime:  80,
 			RequestCount: 10,
 			CommitDetail: &util.CommitDetails{
