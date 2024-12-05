@@ -2015,7 +2015,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		sessVars.CacheStmtExecInfo = &stmtsummary.StmtExecInfo{}
 	}
 	stmtExecInfo := sessVars.CacheStmtExecInfo
-	stmtExecInfo.SchemaName = strings.ToLower(sessVars.CurrentDB)
+	stmtExecInfo.SchemaName = sessVars.CurrentDB
 	stmtExecInfo.OriginalSQL = &sql
 	stmtExecInfo.Charset = charset
 	stmtExecInfo.Collation = collation
