@@ -1985,10 +1985,10 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	if tikvExecDetailRaw != nil {
 		tikvExecDetail = *(tikvExecDetailRaw.(*util.ExecDetails))
 	}
-	//var ruDetail *util.RUDetails
-	//if ruDetailRaw := a.GoCtx.Value(util.RUDetailsCtxKey); ruDetailRaw != nil {
-	//	ruDetail = ruDetailRaw.(*util.RUDetails)
-	//}
+	var ruDetail *util.RUDetails
+	if ruDetailRaw := a.GoCtx.Value(util.RUDetailsCtxKey); ruDetailRaw != nil {
+		ruDetail = ruDetailRaw.(*util.RUDetails)
+	}
 
 	if stmtCtx.WaitLockLeaseTime > 0 {
 		if execDetail.BackoffSleep == nil {
@@ -2000,15 +2000,15 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	}
 
 	//resultRows := GetResultRowsCount(stmtCtx, a.Plan)
-	//
-	//var (
-	//	keyspaceName string
-	//	keyspaceID   uint32
-	//)
-	//keyspaceName = keyspace.GetKeyspaceNameBySettings()
-	//if !keyspace.IsKeyspaceNameEmpty(keyspaceName) {
-	//	keyspaceID = uint32(a.Ctx.GetStore().GetCodec().GetKeyspaceID())
-	//}
+
+	var (
+		keyspaceName string
+		keyspaceID   uint32
+	)
+	keyspaceName = keyspace.GetKeyspaceNameBySettings()
+	if !keyspace.IsKeyspaceNameEmpty(keyspaceName) {
+		keyspaceID = uint32(a.Ctx.GetStore().GetCodec().GetKeyspaceID())
+	}
 
 	_ = sessVars.CurrentDB
 	_ = &sql
@@ -2041,9 +2041,9 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	//_ = resultRows
 	_ = tikvExecDetail
 	_ = a.isPreparedStmt
-	//_ = keyspaceName
-	//_ = keyspaceID
-	//_ = ruDetail
+	_ = keyspaceName
+	_ = keyspaceID
+	_ = ruDetail
 	_ = sessVars.StmtCtx.ResourceGroupName
 	//_ = sessVars.SQLCPUUsages.GetCPUUsages()
 	//_ = sessVars.StmtCtx.PlanCacheUnqualified()
