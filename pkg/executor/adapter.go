@@ -72,7 +72,6 @@ import (
 	"github.com/pingcap/tidb/pkg/util/redact"
 	"github.com/pingcap/tidb/pkg/util/replayer"
 	"github.com/pingcap/tidb/pkg/util/sqlexec"
-	"github.com/pingcap/tidb/pkg/util/stmtsummary"
 	stmtsummaryv2 "github.com/pingcap/tidb/pkg/util/stmtsummary/v2"
 	"github.com/pingcap/tidb/pkg/util/stringutil"
 	"github.com/pingcap/tidb/pkg/util/topsql"
@@ -2011,51 +2010,44 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		keyspaceID = uint32(a.Ctx.GetStore().GetCodec().GetKeyspaceID())
 	}
 
-	if sessVars.CacheStmtExecInfo == nil {
-		sessVars.CacheStmtExecInfo = &stmtsummary.StmtExecInfo{}
-	}
-	stmtExecInfo := sessVars.CacheStmtExecInfo
-	stmtExecInfo.SchemaName = sessVars.CurrentDB
-	stmtExecInfo.OriginalSQL = &sql
-	stmtExecInfo.Charset = charset
-	stmtExecInfo.Collation = collation
-	stmtExecInfo.NormalizedSQL = normalizedSQL
-	stmtExecInfo.Digest = digest.String()
-	stmtExecInfo.PrevSQL = prevSQL
-	stmtExecInfo.PrevSQLDigest = prevSQLDigest
-	stmtExecInfo.PlanGenerator = planGenerator
-	stmtExecInfo.BinaryPlanGenerator = binPlanGen
-	stmtExecInfo.PlanDigest = planDigest
-	stmtExecInfo.PlanDigestGen = planDigestGen
-	stmtExecInfo.User = userString
-	stmtExecInfo.TotalLatency = costTime
-	stmtExecInfo.ParseLatency = sessVars.DurationParse
-	stmtExecInfo.CompileLatency = sessVars.DurationCompile
-	stmtExecInfo.StmtCtx = stmtCtx
-	stmtExecInfo.CopTasks = &copTaskInfo
-	stmtExecInfo.ExecDetail = &execDetail
-	stmtExecInfo.MemMax = memMax
-	stmtExecInfo.DiskMax = diskMax
-	stmtExecInfo.StartTime = sessVars.StartTime
-	stmtExecInfo.IsInternal = sessVars.InRestrictedSQL
-	stmtExecInfo.Succeed = succ
-	stmtExecInfo.PlanInCache = sessVars.FoundInPlanCache
-	stmtExecInfo.PlanInBinding = sessVars.FoundInBinding
-	stmtExecInfo.ExecRetryCount = a.retryCount
-	stmtExecInfo.StmtExecDetails = stmtDetail
-	stmtExecInfo.ResultRows = resultRows
-	stmtExecInfo.TiKVExecDetails = tikvExecDetail
-	stmtExecInfo.Prepared = a.isPreparedStmt
-	stmtExecInfo.KeyspaceName = keyspaceName
-	stmtExecInfo.KeyspaceID = keyspaceID
-	stmtExecInfo.RUDetail = ruDetail
-	stmtExecInfo.ResourceGroupName = sessVars.StmtCtx.ResourceGroupName
-	stmtExecInfo.CPUUsages = sessVars.SQLCPUUsages.GetCPUUsages()
-	stmtExecInfo.PlanCacheUnqualified = sessVars.StmtCtx.PlanCacheUnqualified()
+	_ = sessVars.CurrentDB
+	_ = &sql
+	_ = charset
+	_ = collation
+	_ = normalizedSQL
+	_ = digest.String()
+	_ = prevSQL
+	_ = prevSQLDigest
+	_ = planGenerator
+	_ = binPlanGen
+	_ = planDigest
+	_ = planDigestGen
+	_ = userString
+	_ = costTime
+	_ = sessVars.DurationParse
+	_ = sessVars.DurationCompile
+	_ = stmtCtx
+	_ = &copTaskInfo
+	_ = &execDetail
+	_ = memMax
+	_ = diskMax
+	_ = sessVars.StartTime
+	_ = sessVars.InRestrictedSQL
+	_ = succ
+	_ = sessVars.FoundInPlanCache
+	_ = sessVars.FoundInBinding
+	_ = a.retryCount
+	_ = stmtDetail
+	_ = resultRows
+	_ = tikvExecDetail
+	_ = a.isPreparedStmt
+	_ = keyspaceName
+	_ = keyspaceID
+	_ = ruDetail
+	_ = sessVars.StmtCtx.ResourceGroupName
+	_ = sessVars.SQLCPUUsages.GetCPUUsages()
+	_ = sessVars.StmtCtx.PlanCacheUnqualified()
 
-	if a.retryCount > 0 {
-		stmtExecInfo.ExecRetryTime = costTime - sessVars.DurationParse - sessVars.DurationCompile - time.Since(a.retryStartTime)
-	}
 	//stmtsummaryv2.Add(stmtExecInfo)
 }
 
