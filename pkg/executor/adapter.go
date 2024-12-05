@@ -2003,7 +2003,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	stmtExecInfo.CompileLatency = sessVars.DurationCompile
 	stmtExecInfo.StmtCtx = stmtCtx
 	stmtExecInfo.CopTasks = copTaskInfo
-	//stmtExecInfo.ExecDetail = &execDetail
+	stmtExecInfo.ExecDetail = &execDetail
 	stmtExecInfo.MemMax = memMax
 	stmtExecInfo.DiskMax = diskMax
 	stmtExecInfo.StartTime = sessVars.StartTime
@@ -2028,7 +2028,6 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		stmtExecInfo.ExecRetryTime = costTime - sessVars.DurationParse - sessVars.DurationCompile - time.Since(a.retryStartTime)
 	}
 
-	_ = &execDetail
 	//stmtsummaryv2.Add(stmtExecInfo)
 }
 
