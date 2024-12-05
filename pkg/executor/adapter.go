@@ -1975,16 +1975,16 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	memMax := sessVars.MemTracker.MaxConsumed()
 	diskMax := sessVars.DiskTracker.MaxConsumed()
 	sql := a.getLazyStmtText()
-	//var stmtDetail execdetails.StmtExecDetails
-	//stmtDetailRaw := a.GoCtx.Value(execdetails.StmtExecDetailKey)
-	//if stmtDetailRaw != nil {
-	//	stmtDetail = *(stmtDetailRaw.(*execdetails.StmtExecDetails))
-	//}
-	//var tikvExecDetail util.ExecDetails
-	//tikvExecDetailRaw := a.GoCtx.Value(util.ExecDetailsKey)
-	//if tikvExecDetailRaw != nil {
-	//	tikvExecDetail = *(tikvExecDetailRaw.(*util.ExecDetails))
-	//}
+	var stmtDetail execdetails.StmtExecDetails
+	stmtDetailRaw := a.GoCtx.Value(execdetails.StmtExecDetailKey)
+	if stmtDetailRaw != nil {
+		stmtDetail = *(stmtDetailRaw.(*execdetails.StmtExecDetails))
+	}
+	var tikvExecDetail util.ExecDetails
+	tikvExecDetailRaw := a.GoCtx.Value(util.ExecDetailsKey)
+	if tikvExecDetailRaw != nil {
+		tikvExecDetail = *(tikvExecDetailRaw.(*util.ExecDetails))
+	}
 	//var ruDetail *util.RUDetails
 	//if ruDetailRaw := a.GoCtx.Value(util.RUDetailsCtxKey); ruDetailRaw != nil {
 	//	ruDetail = ruDetailRaw.(*util.RUDetails)
@@ -2037,9 +2037,9 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	_ = sessVars.FoundInPlanCache
 	_ = sessVars.FoundInBinding
 	_ = a.retryCount
-	//_ = stmtDetail
+	_ = stmtDetail
 	//_ = resultRows
-	//_ = tikvExecDetail
+	_ = tikvExecDetail
 	_ = a.isPreparedStmt
 	//_ = keyspaceName
 	//_ = keyspaceID
