@@ -179,9 +179,9 @@ func NewStmtRecord(info *stmtsummary.StmtExecInfo) *StmtRecord {
 	}
 	tableNames := buffer.String()
 	planDigest := info.PlanDigest
-	if info.PlanDigestGen != nil && len(planDigest) == 0 {
-		// It comes here only when the plan is 'Point_Get'.
-		planDigest = info.PlanDigestGen()
+	if len(planDigest) == 0 {
+		//TODO: remove this comment, It comes here only when the plan is 'Point_Get'.
+		planDigest = info.LazyInfo.GetPlanDigest()
 	}
 	// sampleSQL / authUsers(sampleUser) / samplePlan / prevSQL / indexNames store the values shown at the first time,
 	// because it compacts performance to update every time.

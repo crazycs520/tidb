@@ -1936,37 +1936,12 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	}
 	sessVars.SetPrevStmtDigest(digest.String())
 
-	// No need to encode every time, so encode lazily.
-	planGenerator := func() (p string, h string, e any) {
-		defer func() {
-			e = recover()
-			if e != nil {
-				logutil.BgLogger().Warn("fail to generate plan info",
-					zap.Stack("backtrace"),
-					zap.Any("error", e))
-			}
-		}()
-		p, h = getEncodedPlan(stmtCtx, !sessVars.InRestrictedSQL)
-		return
-	}
-	var binPlanGen func() string
-	if variable.GenerateBinaryPlan.Load() {
-		binPlanGen = func() string {
-			binPlan := getBinaryPlan(a.Ctx)
-			return binPlan
-		}
-	}
 	// Generating plan digest is slow, only generate it once if it's 'Point_Get'.
 	// If it's a point get, different SQLs leads to different plans, so SQL digest
 	// is enough to distinguish different plans in this case.
 	var planDigest string
-	var planDigestGen func() string
-	if a.Plan.TP() == plancodec.TypePointGet {
-		planDigestGen = func() string {
-			_, planDigest := GetPlanDigest(stmtCtx)
-			return planDigest.String()
-		}
-	} else {
+	// todo: refactor this.
+	if a.Plan.TP() != plancodec.TypePointGet {
 		_, tmp := GetPlanDigest(stmtCtx)
 		planDigest = tmp.String()
 	}
@@ -1975,7 +1950,6 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	copTaskInfo := stmtCtx.CopTasksDetails()
 	memMax := sessVars.MemTracker.MaxConsumed()
 	diskMax := sessVars.DiskTracker.MaxConsumed()
-	sql := a.getLazyStmtText()
 	var stmtDetail execdetails.StmtExecDetails
 	stmtDetailRaw := a.GoCtx.Value(execdetails.StmtExecDetailKey)
 	if stmtDetailRaw != nil {
@@ -2016,7 +1990,6 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	}
 	stmtExecInfo := sessVars.CacheStmtExecInfo
 	stmtExecInfo.SchemaName = sessVars.CurrentDB
-	//stmtExecInfo.OriginalSQL = &sql
 	stmtExecInfo.Charset = charset
 	stmtExecInfo.Collation = collation
 	stmtExecInfo.NormalizedSQL = normalizedSQL
@@ -2024,7 +1997,6 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	stmtExecInfo.PrevSQL = prevSQL
 	stmtExecInfo.PrevSQLDigest = prevSQLDigest
 	stmtExecInfo.PlanDigest = planDigest
-	//stmtExecInfo.PlanDigestGen = planDigestGen
 	stmtExecInfo.User = userString
 	stmtExecInfo.TotalLatency = costTime
 	stmtExecInfo.ParseLatency = sessVars.DurationParse
@@ -2056,30 +2028,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		stmtExecInfo.ExecRetryTime = costTime - sessVars.DurationParse - sessVars.DurationCompile - time.Since(a.retryStartTime)
 	}
 
-	_ = &sql
-	_ = planGenerator
-	_ = binPlanGen
-	_ = planDigestGen
-	//_ = stmtCtx
 	_ = &execDetail
-	//_ = memMax
-	//_ = diskMax
-	//_ = sessVars.StartTime
-	//_ = sessVars.InRestrictedSQL
-	//_ = succ
-	//_ = sessVars.FoundInPlanCache
-	//_ = sessVars.FoundInBinding
-	//_ = a.retryCount
-	//_ = stmtDetail
-	//_ = resultRows
-	//_ = tikvExecDetail
-	//_ = a.isPreparedStmt
-	//_ = keyspaceName
-	//_ = keyspaceID
-	//_ = ruDetail
-	//_ = sessVars.StmtCtx.ResourceGroupName
-	//_ = sessVars.SQLCPUUsages.GetCPUUsages()
-	//_ = sessVars.StmtCtx.PlanCacheUnqualified()
 	//stmtsummaryv2.Add(stmtExecInfo)
 }
 
@@ -2108,6 +2057,15 @@ func (a *ExecStmt) GetBinaryPlan() string {
 		return getBinaryPlan(a.Ctx)
 	}
 	return ""
+}
+
+func (a *ExecStmt) GetPlanDigest() string {
+	if a.Plan.TP() == plancodec.TypePointGet {
+		_, planDigest := GetPlanDigest(a.Ctx.GetSessionVars().StmtCtx)
+		return planDigest.String()
+	} else {
+		return ""
+	}
 }
 
 // GetTextToLog return the query text to log.

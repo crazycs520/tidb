@@ -235,7 +235,6 @@ type StmtExecInfo struct {
 	PrevSQL        string
 	PrevSQLDigest  string
 	PlanDigest     string
-	PlanDigestGen  func() string
 	User           string
 	TotalLatency   time.Duration
 	ParseLatency   time.Duration
@@ -271,6 +270,7 @@ type StmtExecLazyInfo interface {
 	GetOriginalSQL() string
 	GetEncodedPlan() (string, string, any)
 	GetBinaryPlan() string
+	GetPlanDigest() string
 }
 
 // newStmtSummaryByDigestMap creates an empty stmtSummaryByDigestMap.
@@ -571,9 +571,9 @@ func (ssbd *stmtSummaryByDigest) init(sei *StmtExecInfo, _ int64, _ int64, _ int
 	tableNames := buffer.String()
 
 	planDigest := sei.PlanDigest
-	if sei.PlanDigestGen != nil && len(planDigest) == 0 {
-		// It comes here only when the plan is 'Point_Get'.
-		planDigest = sei.PlanDigestGen()
+	if len(planDigest) == 0 {
+		//TODO: remove this comment, It comes here only when the plan is 'Point_Get'.
+		planDigest = sei.LazyInfo.GetPlanDigest()
 	}
 	ssbd.schemaName = sei.SchemaName
 	ssbd.digest = sei.Digest
