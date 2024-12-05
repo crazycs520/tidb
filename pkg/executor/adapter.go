@@ -2020,13 +2020,26 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		stmtExecInfo.Digest = digest.String()
 		stmtExecInfo.PrevSQL = prevSQL
 		stmtExecInfo.PrevSQLDigest = prevSQLDigest
-		stmtExecInfo.PlanGenerator = planGenerator
-		stmtExecInfo.BinaryPlanGenerator = binPlanGen
+		//stmtExecInfo.PlanGenerator = planGenerator
+		//stmtExecInfo.BinaryPlanGenerator = binPlanGen
 		stmtExecInfo.PlanDigest = planDigest
-		stmtExecInfo.PlanDigestGen = planDigestGen
+		//stmtExecInfo.PlanDigestGen = planDigestGen
 		stmtExecInfo.User = userString
 	}
 
+	_ = sessVars.CurrentDB
+	_ = &sql
+	_ = charset
+	_ = collation
+	_ = normalizedSQL
+	_ = digest.String()
+	_ = prevSQL
+	_ = prevSQLDigest
+	_ = planGenerator
+	_ = binPlanGen
+	_ = planDigest
+	_ = planDigestGen
+	_ = userString
 	_ = costTime
 	_ = sessVars.DurationParse
 	_ = sessVars.DurationCompile
