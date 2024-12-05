@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/pkg/util/plancodec"
 	"github.com/pingcap/tidb/pkg/util/ppcpuusage"
 	"github.com/pingcap/tidb/pkg/util/stmtsummary"
-	"github.com/pingcap/tidb/pkg/util/stringutil"
 	"github.com/tikv/client-go/v2/util"
 )
 
@@ -205,7 +204,7 @@ func NewStmtRecord(info *stmtsummary.StmtExecInfo) *StmtRecord {
 		NormalizedSQL: info.NormalizedSQL,
 		TableNames:    tableNames,
 		IsInternal:    info.IsInternal,
-		SampleSQL:     formatSQL(info.OriginalSQL.String()),
+		SampleSQL:     formatSQL(info.LazyInfo.GetOriginalSQL()),
 		Charset:       info.Charset,
 		Collation:     info.Collation,
 		// PrevSQL is already truncated to cfg.Log.QueryLogMaxLen.
@@ -619,8 +618,8 @@ func GenerateStmtExecInfo4Test(digest string) *stmtsummary.StmtExecInfo {
 	sc.IndexNames = indexes
 
 	stmtExecInfo := &stmtsummary.StmtExecInfo{
-		SchemaName:     "schema_name",
-		OriginalSQL:    stringutil.StringerStr("original_sql1"),
+		SchemaName: "schema_name",
+		//OriginalSQL:    stringutil.StringerStr("original_sql1"),
 		NormalizedSQL:  "normalized_sql",
 		Digest:         digest,
 		PlanDigest:     "plan_digest",

@@ -227,8 +227,8 @@ type stmtSummaryByDigestElement struct {
 
 // StmtExecInfo records execution information of each statement.
 type StmtExecInfo struct {
-	SchemaName          string
-	OriginalSQL         fmt.Stringer
+	SchemaName string
+	//OriginalSQL         fmt.Stringer
 	Charset             string
 	Collation           string
 	NormalizedSQL       string
@@ -266,6 +266,14 @@ type StmtExecInfo struct {
 	CPUUsages         ppcpuusage.CPUUsages
 
 	PlanCacheUnqualified string
+
+	LazyInfo StmtExecLazyInfo
+}
+
+type StmtExecLazyInfo interface {
+	GetOriginalSQL() string
+	GetEncodedPlan() (string, string, any)
+	GetBinaryPlan() string
 }
 
 // newStmtSummaryByDigestMap creates an empty stmtSummaryByDigestMap.
@@ -668,7 +676,7 @@ func newStmtSummaryByDigestElement(sei *StmtExecInfo, beginTime int64, intervalS
 	}
 	ssElement := &stmtSummaryByDigestElement{
 		beginTime: beginTime,
-		sampleSQL: formatSQL(sei.OriginalSQL.String()),
+		sampleSQL: formatSQL(sei.LazyInfo.GetOriginalSQL()),
 		charset:   sei.Charset,
 		collation: sei.Collation,
 		// PrevSQL is already truncated to cfg.Log.QueryLogMaxLen.

@@ -2052,6 +2052,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	stmtExecInfo.ResourceGroupName = sessVars.StmtCtx.ResourceGroupName
 	stmtExecInfo.CPUUsages = sessVars.SQLCPUUsages.GetCPUUsages()
 	stmtExecInfo.PlanCacheUnqualified = sessVars.StmtCtx.PlanCacheUnqualified()
+	stmtExecInfo.LazyInfo = a
 
 	if a.retryCount > 0 {
 		stmtExecInfo.ExecRetryTime = costTime - sessVars.DurationParse - sessVars.DurationCompile - time.Since(a.retryStartTime)
@@ -2082,6 +2083,20 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	//_ = sessVars.SQLCPUUsages.GetCPUUsages()
 	//_ = sessVars.StmtCtx.PlanCacheUnqualified()
 	//stmtsummaryv2.Add(stmtExecInfo)
+}
+
+func (a *ExecStmt) GetOriginalSQL() string {
+	lazy := a.getLazyStmtText()
+	return lazy.String()
+}
+
+func (a *ExecStmt) GetEncodedPlan() (string, string, any) {
+
+	return "", "", nil
+}
+
+func (a *ExecStmt) GetBinaryPlan() string {
+	return ""
 }
 
 // GetTextToLog return the query text to log.
