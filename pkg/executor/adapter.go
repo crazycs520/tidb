@@ -1990,14 +1990,14 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	//	ruDetail = ruDetailRaw.(*util.RUDetails)
 	//}
 
-	//if stmtCtx.WaitLockLeaseTime > 0 {
-	//	if execDetail.BackoffSleep == nil {
-	//		execDetail.BackoffSleep = make(map[string]time.Duration)
-	//	}
-	//	execDetail.BackoffSleep["waitLockLeaseForCacheTable"] = stmtCtx.WaitLockLeaseTime
-	//	execDetail.BackoffTime += stmtCtx.WaitLockLeaseTime
-	//	execDetail.TimeDetail.WaitTime += stmtCtx.WaitLockLeaseTime
-	//}
+	if stmtCtx.WaitLockLeaseTime > 0 {
+		if execDetail.BackoffSleep == nil {
+			execDetail.BackoffSleep = make(map[string]time.Duration)
+		}
+		execDetail.BackoffSleep["waitLockLeaseForCacheTable"] = stmtCtx.WaitLockLeaseTime
+		execDetail.BackoffTime += stmtCtx.WaitLockLeaseTime
+		execDetail.TimeDetail.WaitTime += stmtCtx.WaitLockLeaseTime
+	}
 
 	//resultRows := GetResultRowsCount(stmtCtx, a.Plan)
 	//
