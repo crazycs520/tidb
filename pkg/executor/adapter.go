@@ -2013,7 +2013,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	if sessVars.CacheStmtExecInfo != nil {
 		stmtExecInfo := sessVars.CacheStmtExecInfo
 		stmtExecInfo.SchemaName = sessVars.CurrentDB
-		stmtExecInfo.OriginalSQL = &sql
+		//stmtExecInfo.OriginalSQL = &sql
 		stmtExecInfo.Charset = charset
 		stmtExecInfo.Collation = collation
 		stmtExecInfo.NormalizedSQL = normalizedSQL
