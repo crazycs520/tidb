@@ -1797,12 +1797,7 @@ func GetResultRowsCount(stmtCtx *stmtctx.StatementContext, p base.Plan) int64 {
 	if runtimeStatsColl == nil {
 		return 0
 	}
-	rootPlanID := p.ID()
-	if !runtimeStatsColl.ExistsRootStats(rootPlanID) {
-		return 0
-	}
-	rootStats := runtimeStatsColl.GetRootStats(rootPlanID)
-	return rootStats.GetActRows()
+	return runtimeStatsColl.GetPlanActRows(p.ID())
 }
 
 // getFlatPlan generates a FlatPhysicalPlan from the plan stored in stmtCtx.plan,
@@ -2028,7 +2023,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		stmtExecInfo.ExecRetryTime = costTime - sessVars.DurationParse - sessVars.DurationCompile - time.Since(a.retryStartTime)
 	}
 
-	//stmtsummaryv2.Add(stmtExecInfo)
+	stmtsummaryv2.Add(stmtExecInfo)
 }
 
 func (a *ExecStmt) GetOriginalSQL() string {
