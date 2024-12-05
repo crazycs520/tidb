@@ -1999,7 +1999,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		execDetail.TimeDetail.WaitTime += stmtCtx.WaitLockLeaseTime
 	}
 
-	//resultRows := GetResultRowsCount(stmtCtx, a.Plan)
+	resultRows := GetResultRowsCount(stmtCtx, a.Plan)
 
 	var (
 		keyspaceName string
@@ -2038,7 +2038,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	_ = sessVars.FoundInBinding
 	_ = a.retryCount
 	_ = stmtDetail
-	//_ = resultRows
+	_ = resultRows
 	_ = tikvExecDetail
 	_ = a.isPreparedStmt
 	_ = keyspaceName
