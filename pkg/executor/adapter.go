@@ -2045,8 +2045,8 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	_ = keyspaceID
 	_ = ruDetail
 	_ = sessVars.StmtCtx.ResourceGroupName
-	//_ = sessVars.SQLCPUUsages.GetCPUUsages()
-	//_ = sessVars.StmtCtx.PlanCacheUnqualified()
+	_ = sessVars.SQLCPUUsages.GetCPUUsages()
+	_ = sessVars.StmtCtx.PlanCacheUnqualified()
 
 	//stmtsummaryv2.Add(stmtExecInfo)
 }
