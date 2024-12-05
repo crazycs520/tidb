@@ -2023,7 +2023,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	stmtExecInfo.Digest = digest.String()
 	stmtExecInfo.PrevSQL = prevSQL
 	stmtExecInfo.PrevSQLDigest = prevSQLDigest
-	stmtExecInfo.PlanGenerator = planGenerator
+	//stmtExecInfo.PlanGenerator = planGenerator
 	//stmtExecInfo.BinaryPlanGenerator = binPlanGen
 	stmtExecInfo.PlanDigest = planDigest
 	//stmtExecInfo.PlanDigestGen = planDigestGen
