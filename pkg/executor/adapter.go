@@ -2031,9 +2031,9 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	stmtExecInfo.TotalLatency = costTime
 	stmtExecInfo.ParseLatency = sessVars.DurationParse
 	stmtExecInfo.CompileLatency = sessVars.DurationCompile
-	//stmtExecInfo.StmtCtx = stmtCtx
-	//stmtExecInfo.CopTasks = &copTaskInfo
-	//stmtExecInfo.ExecDetail = &execDetail
+	stmtExecInfo.StmtCtx = stmtCtx
+	stmtExecInfo.CopTasks = &copTaskInfo
+	stmtExecInfo.ExecDetail = &execDetail
 	//stmtExecInfo.MemMax = memMax
 	//stmtExecInfo.DiskMax = diskMax
 	//stmtExecInfo.StartTime = sessVars.StartTime
@@ -2061,9 +2061,9 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	_ = planGenerator
 	_ = binPlanGen
 	_ = planDigestGen
-	_ = stmtCtx
-	_ = &copTaskInfo
-	_ = &execDetail
+	//_ = stmtCtx
+	//_ = &copTaskInfo
+	//_ = &execDetail
 	_ = memMax
 	_ = diskMax
 	_ = sessVars.StartTime
