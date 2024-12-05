@@ -2010,6 +2010,11 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 		keyspaceID = uint32(a.Ctx.GetStore().GetCodec().GetKeyspaceID())
 	}
 
+	if sessVars.CacheStmtExecInfo != nil {
+		stmtExecInfo := sessVars.CacheStmtExecInfo
+		stmtExecInfo.SchemaName = sessVars.CurrentDB
+	}
+
 	_ = sessVars.CurrentDB
 	_ = &sql
 	_ = charset
