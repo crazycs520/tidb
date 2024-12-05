@@ -2056,7 +2056,7 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	if a.retryCount > 0 {
 		stmtExecInfo.ExecRetryTime = costTime - sessVars.DurationParse - sessVars.DurationCompile - time.Since(a.retryStartTime)
 	}
-	stmtsummaryv2.Add(stmtExecInfo)
+	//stmtsummaryv2.Add(stmtExecInfo)
 }
 
 // GetTextToLog return the query text to log.
