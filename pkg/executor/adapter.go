@@ -2031,27 +2031,27 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	stmtExecInfo.TotalLatency = costTime
 	stmtExecInfo.ParseLatency = sessVars.DurationParse
 	stmtExecInfo.CompileLatency = sessVars.DurationCompile
-	stmtExecInfo.StmtCtx = stmtCtx
-	stmtExecInfo.CopTasks = &copTaskInfo
-	stmtExecInfo.ExecDetail = &execDetail
-	stmtExecInfo.MemMax = memMax
-	stmtExecInfo.DiskMax = diskMax
-	stmtExecInfo.StartTime = sessVars.StartTime
-	stmtExecInfo.IsInternal = sessVars.InRestrictedSQL
-	stmtExecInfo.Succeed = succ
-	stmtExecInfo.PlanInCache = sessVars.FoundInPlanCache
-	stmtExecInfo.PlanInBinding = sessVars.FoundInBinding
-	stmtExecInfo.ExecRetryCount = a.retryCount
-	stmtExecInfo.StmtExecDetails = stmtDetail
-	stmtExecInfo.ResultRows = resultRows
-	stmtExecInfo.TiKVExecDetails = tikvExecDetail
-	stmtExecInfo.Prepared = a.isPreparedStmt
-	stmtExecInfo.KeyspaceName = keyspaceName
-	stmtExecInfo.KeyspaceID = keyspaceID
-	stmtExecInfo.RUDetail = ruDetail
-	stmtExecInfo.ResourceGroupName = sessVars.StmtCtx.ResourceGroupName
-	stmtExecInfo.CPUUsages = sessVars.SQLCPUUsages.GetCPUUsages()
-	stmtExecInfo.PlanCacheUnqualified = sessVars.StmtCtx.PlanCacheUnqualified()
+	//stmtExecInfo.StmtCtx = stmtCtx
+	//stmtExecInfo.CopTasks = &copTaskInfo
+	//stmtExecInfo.ExecDetail = &execDetail
+	//stmtExecInfo.MemMax = memMax
+	//stmtExecInfo.DiskMax = diskMax
+	//stmtExecInfo.StartTime = sessVars.StartTime
+	//stmtExecInfo.IsInternal = sessVars.InRestrictedSQL
+	//stmtExecInfo.Succeed = succ
+	//stmtExecInfo.PlanInCache = sessVars.FoundInPlanCache
+	//stmtExecInfo.PlanInBinding = sessVars.FoundInBinding
+	//stmtExecInfo.ExecRetryCount = a.retryCount
+	//stmtExecInfo.StmtExecDetails = stmtDetail
+	//stmtExecInfo.ResultRows = resultRows
+	//stmtExecInfo.TiKVExecDetails = tikvExecDetail
+	//stmtExecInfo.Prepared = a.isPreparedStmt
+	//stmtExecInfo.KeyspaceName = keyspaceName
+	//stmtExecInfo.KeyspaceID = keyspaceID
+	//stmtExecInfo.RUDetail = ruDetail
+	//stmtExecInfo.ResourceGroupName = sessVars.StmtCtx.ResourceGroupName
+	//stmtExecInfo.CPUUsages = sessVars.SQLCPUUsages.GetCPUUsages()
+	//stmtExecInfo.PlanCacheUnqualified = sessVars.StmtCtx.PlanCacheUnqualified()
 
 	if a.retryCount > 0 {
 		stmtExecInfo.ExecRetryTime = costTime - sessVars.DurationParse - sessVars.DurationCompile - time.Since(a.retryStartTime)
@@ -2061,7 +2061,27 @@ func (a *ExecStmt) SummaryStmt(succ bool) {
 	_ = planGenerator
 	_ = binPlanGen
 	_ = planDigestGen
-
+	_ = stmtCtx
+	_ = &copTaskInfo
+	_ = &execDetail
+	_ = memMax
+	_ = diskMax
+	_ = sessVars.StartTime
+	_ = sessVars.InRestrictedSQL
+	_ = succ
+	_ = sessVars.FoundInPlanCache
+	_ = sessVars.FoundInBinding
+	_ = a.retryCount
+	_ = stmtDetail
+	_ = resultRows
+	_ = tikvExecDetail
+	_ = a.isPreparedStmt
+	_ = keyspaceName
+	_ = keyspaceID
+	_ = ruDetail
+	_ = sessVars.StmtCtx.ResourceGroupName
+	_ = sessVars.SQLCPUUsages.GetCPUUsages()
+	_ = sessVars.StmtCtx.PlanCacheUnqualified()
 	//stmtsummaryv2.Add(stmtExecInfo)
 }
 
