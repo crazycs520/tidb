@@ -4276,9 +4276,13 @@ func buildIndexUsageReporter(ctx sessionctx.Context, plan tableStatsPreloader) (
 	sc := ctx.GetSessionVars().StmtCtx
 	if ctx.GetSessionVars().StmtCtx.IndexUsageCollector != nil &&
 		sc.RuntimeStatsColl != nil {
-		// Preload the table stats. If the statement is a point-get or execute, the planner may not have loaded the
-		// stats.
-		plan.LoadTableStats(ctx)
+		switch plan.(type) {
+		case *plannercore.PointGetPlan:
+		default:
+			// Preload the table stats. If the statement is a point-get or execute, the planner may not have loaded the
+			// stats.
+			plan.LoadTableStats(ctx)
+		}
 
 		statsMap := sc.GetUsedStatsInfo(false)
 		indexUsageReporter = exec.NewIndexUsageReporter(
