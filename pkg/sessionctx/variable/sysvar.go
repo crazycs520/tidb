@@ -1807,7 +1807,9 @@ var defaultSysVars = []*SysVar{
 		return checkCollation(vars, normalizedValue, originalValue, scope)
 	}, SetSession: func(s *SessionVars, val string) error {
 		if coll, err := collate.GetCollationByName(val); err == nil {
-			s.systems[CharacterSetConnection] = coll.CharsetName
+			s.ConnectionCharacterSet = coll.CharsetName
+			s.ConnectionCollation = coll.Name
+
 		}
 		return nil
 	}},
@@ -1875,7 +1877,8 @@ var defaultSysVars = []*SysVar{
 		return checkCharacterSet(normalizedValue, CharacterSetConnection)
 	}, SetSession: func(s *SessionVars, val string) error {
 		if cs, err := charset.GetCharsetInfo(val); err == nil {
-			s.systems[CollationConnection] = cs.DefaultCollation
+			s.ConnectionCharacterSet = cs.Name
+			s.ConnectionCollation = cs.DefaultCollation
 		}
 		return nil
 	}},

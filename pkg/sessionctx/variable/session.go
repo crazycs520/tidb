@@ -854,6 +854,10 @@ type SessionVars struct {
 
 	// ConnectionID is the connection id of the current session.
 	ConnectionID uint64
+	// ConnectionCharacterSet is the connection character set.
+	ConnectionCharacterSet string
+	// ConnectionCharacterSet is the connection Collation.
+	ConnectionCollation string
 
 	// SQLCPUUsages records tidb/tikv cpu usages for current sql
 	SQLCPUUsages ppcpuusage.SQLCPUUsages
@@ -2290,7 +2294,7 @@ func NewSessionVars(hctx HookContext) *SessionVars {
 	if EnableRowLevelChecksum.Load() {
 		vars.EnableRowLevelChecksum = true
 	}
-	vars.systems[CharacterSetConnection], vars.systems[CollationConnection] = charset.GetDefaultCharsetAndCollate()
+	vars.ConnectionCharacterSet, vars.ConnectionCollation = charset.GetDefaultCharsetAndCollate()
 	return vars
 }
 
@@ -2412,9 +2416,7 @@ func (s *SessionVars) RegisterScalarSubQ(scalarSubQ any) {
 // have their own collation, which has a higher collation precedence.
 // See https://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
 func (s *SessionVars) GetCharsetInfo() (charset, collation string) {
-	charset = s.systems[CharacterSetConnection]
-	collation = s.systems[CollationConnection]
-	return
+	return s.ConnectionCharacterSet, s.ConnectionCollation
 }
 
 // GetParseParams gets the parse parameters from session variables.

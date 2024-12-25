@@ -1753,9 +1753,8 @@ func (er *expressionRewriter) rewriteSystemVariable(planCtx *exprRewriterPlanCtx
 	e := expression.DatumToConstant(nativeVal, nativeType, nativeFlag)
 	switch nativeType {
 	case mysql.TypeVarString:
-		charset, _ := sessionVars.GetSystemVar(variable.CharacterSetConnection)
+		charset, collate := sessionVars.GetCharsetInfo()
 		e.GetType(er.sctx.GetEvalCtx()).SetCharset(charset)
-		collate, _ := sessionVars.GetSystemVar(variable.CollationConnection)
 		e.GetType(er.sctx.GetEvalCtx()).SetCollate(collate)
 	case mysql.TypeLong, mysql.TypeLonglong:
 		e.GetType(er.sctx.GetEvalCtx()).SetCharset(charset.CharsetBin)

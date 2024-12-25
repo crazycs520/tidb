@@ -1495,15 +1495,7 @@ func (e *executor) CreateView(ctx sessionctx.Context, s *ast.CreateViewStmt) (er
 		})
 	}
 
-	tblCharset := ""
-	tblCollate := ""
-	if v, ok := ctx.GetSessionVars().GetSystemVar(variable.CharacterSetConnection); ok {
-		tblCharset = v
-	}
-	if v, ok := ctx.GetSessionVars().GetSystemVar(variable.CollationConnection); ok {
-		tblCollate = v
-	}
-
+	tblCharset, tblCollate := ctx.GetSessionVars().GetCharsetInfo()
 	tbInfo, err := BuildTableInfo(NewMetaBuildContextWithSctx(ctx), s.ViewName.Name, cols, nil, tblCharset, tblCollate)
 	if err != nil {
 		return err
