@@ -1420,7 +1420,7 @@ func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, err error, hasMoreResults boo
 	}
 	// `LowSlowQuery` and `SummaryStmt` must be called before recording `PrevStmt`.
 	a.LogSlowQuery(txnTS, succ, hasMoreResults)
-	a.SummaryStmt(succ, execDetail)
+	a.SummaryStmt(succ)
 	a.observeStmtFinishedForTopSQL()
 	a.UpdatePlanCacheRuntimeInfo()
 	if sessVars.StmtCtx.IsTiFlash.Load() {
@@ -1895,7 +1895,7 @@ func getEncodedPlan(stmtCtx *stmtctx.StatementContext, genHint bool) (encodedPla
 }
 
 // SummaryStmt collects statements for information_schema.statements_summary
-func (a *ExecStmt) SummaryStmt(succ bool, execDetail execdetails.ExecDetails) {
+func (a *ExecStmt) SummaryStmt(succ bool) {
 	sessVars := a.Ctx.GetSessionVars()
 	var userString string
 	if sessVars.User != nil {
@@ -1916,6 +1916,7 @@ func (a *ExecStmt) SummaryStmt(succ bool, execDetail execdetails.ExecDetails) {
 	if stmtCtx.StmtType == "" {
 		stmtCtx.StmtType = ast.GetStmtLabel(a.StmtNode)
 	}
+
 	normalizedSQL, digest := stmtCtx.SQLDigest()
 	costTime := sessVars.GetTotalCostDuration()
 	charset, collation := sessVars.GetCharsetInfo()
@@ -1940,6 +1941,7 @@ func (a *ExecStmt) SummaryStmt(succ bool, execDetail execdetails.ExecDetails) {
 		planDigest = tmp.String()
 	}
 
+	execDetail := stmtCtx.GetExecDetails()
 	copTaskInfo := stmtCtx.CopTasksDetails()
 	memMax := sessVars.MemTracker.MaxConsumed()
 	diskMax := sessVars.DiskTracker.MaxConsumed()
