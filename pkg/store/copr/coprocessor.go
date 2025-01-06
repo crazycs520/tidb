@@ -1111,27 +1111,26 @@ func (it *copIterator) Next(ctx context.Context) (kv.ResultSubset, error) {
 	if it.liteWorker != nil {
 		var remainTasks []*copTask
 		resp, remainTasks = it.liteWorker.liteHandleTakes(ctx, it)
-		if resp == nil && len(remainTasks) == 0 {
-			it.actionOnExceed.close()
-			return nil, nil
-		}
-		if len(remainTasks) > 0 {
-			taskCh := make(chan *copTask, len(it.tasks))
+		if len(remainTasks) == 0 {
+			if resp == nil {
+				it.actionOnExceed.close()
+				return nil, nil
+			}
+			it.actionOnExceed.destroyTokenIfNeeded(func() {})
+			memTrackerConsumeResp(it.memTracker, resp)
+		} else {
+			taskCh := make(chan *copTask, len(remainTasks))
 			worker := it.liteWorker.worker
 			worker.taskCh = taskCh
+			it.wg.Add(1)
 			go worker.run(it.liteWorker.ctx)
-			for _, task := range it.tasks {
+			for _, task := range remainTasks {
 				taskCh <- task
 			}
 			it.liteWorker = nil
 		}
-		if resp != nil {
-			memTrackerConsumeResp(it.memTracker, resp)
-			it.actionOnExceed.destroyTokenIfNeeded(func() {})
-			return resp, nil
-		}
 	}
-	if it.respChan != nil {
+	if resp == nil && it.respChan != nil {
 		// Get next fetched resp from chan
 		resp, ok, closed = it.recvFromRespCh(ctx, it.respChan)
 		if !ok || closed {
@@ -1144,7 +1143,7 @@ func (it *copIterator) Next(ctx context.Context) (kv.ResultSubset, error) {
 			})
 			return it.Next(ctx)
 		}
-	} else {
+	} else if resp == nil {
 		for {
 			if it.curr >= len(it.tasks) {
 				// Resp will be nil if iterator is finishCh.
