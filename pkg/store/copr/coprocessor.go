@@ -733,7 +733,6 @@ type liteCopIteratorWorker struct {
 	// ctx contains some info(such as rpc interceptor(WithSQLKvExecCounterInterceptor)), it is used for handle cop task later.
 	ctx              context.Context
 	worker           *copIteratorWorker
-	respCh           chan *copResponse
 	batchCopRespList []*copResponse
 	tryCopLiteWorker *atomic2.Uint32
 }
@@ -1110,14 +1109,29 @@ func (it *copIterator) Next(ctx context.Context) (kv.ResultSubset, error) {
 
 	failpoint.InjectCall("CtxCancelBeforeReceive", ctx)
 	if it.liteWorker != nil {
-		var err error
-		resp, err = it.liteWorker.liteHandleTakes(ctx, it)
-		if err != nil || resp == nil {
+		var remainTasks []*copTask
+		resp, remainTasks = it.liteWorker.liteHandleTakes(ctx, it)
+		if resp == nil && len(remainTasks) == 0 {
 			it.actionOnExceed.close()
-			return nil, err
+			return nil, nil
 		}
-		it.actionOnExceed.destroyTokenIfNeeded(func() {})
-	} else if it.respChan != nil {
+		if len(remainTasks) > 0 {
+			taskCh := make(chan *copTask, len(it.tasks))
+			worker := it.liteWorker.worker
+			worker.taskCh = taskCh
+			go worker.run(it.liteWorker.ctx)
+			for _, task := range it.tasks {
+				taskCh <- task
+			}
+			it.liteWorker = nil
+		}
+		if resp != nil {
+			memTrackerConsumeResp(it.memTracker, resp)
+			it.actionOnExceed.destroyTokenIfNeeded(func() {})
+			return resp, nil
+		}
+	}
+	if it.respChan != nil {
 		// Get next fetched resp from chan
 		resp, ok, closed = it.recvFromRespCh(ctx, it.respChan)
 		if !ok || closed {
@@ -1166,7 +1180,7 @@ func (it *copIterator) Next(ctx context.Context) (kv.ResultSubset, error) {
 	return resp, nil
 }
 
-func (w *liteCopIteratorWorker) liteHandleTakes(ctx context.Context, it *copIterator) (resp *copResponse, err error) {
+func (w *liteCopIteratorWorker) liteHandleTakes(ctx context.Context, it *copIterator) (resp *copResponse, remains []*copTask) {
 	defer func() {
 		r := recover()
 		if r != nil {
@@ -1180,42 +1194,25 @@ func (w *liteCopIteratorWorker) liteHandleTakes(ctx context.Context, it *copIter
 	if len(w.batchCopRespList) > 0 {
 		resp = w.batchCopRespList[0]
 		w.batchCopRespList = w.batchCopRespList[1:]
-		memTrackerConsumeResp(it.memTracker, resp)
 		return resp, nil
 	}
 	if len(it.tasks) == 0 {
 		return nil, nil
 	}
-	if w.respCh == nil {
-		resp, err = w.liteSendReq(it)
-		if err != nil {
-			resp = &copResponse{err: errors.Trace(err)}
-			w.worker.checkRespOOM(resp)
-			return resp, nil
-		}
-		if len(it.tasks) > 0 {
-			w.respCh = make(chan *copResponse, 2)
-			go w.sendRemainTasks(it.tasks)
-		}
-		memTrackerConsumeResp(it.memTracker, resp)
-		return resp, nil
-	}
-	resp, ok, closed := it.recvFromRespCh(ctx, w.respCh)
-	if !ok || closed {
-		it.actionOnExceed.close()
-		return nil, errors.Trace(ctx.Err())
-	}
-	return resp, nil
+	resp = w.liteSendReq(it)
+	return resp, it.tasks
 }
 
-func (w *liteCopIteratorWorker) liteSendReq(it *copIterator) (resp *copResponse, err error) {
+func (w *liteCopIteratorWorker) liteSendReq(it *copIterator) (resp *copResponse) {
 	worker := w.worker
 	curTask := it.tasks[0]
 	backoffermap := make(map[uint64]*Backoffer)
 	bo := chooseBackoffer(w.ctx, backoffermap, curTask, worker)
 	result, err := worker.handleTaskOnce(bo, curTask)
 	if err != nil {
-		return nil, err
+		resp = &copResponse{err: errors.Trace(err)}
+		worker.checkRespOOM(resp)
+		return resp
 	}
 
 	if result != nil && len(result.remains) > 0 {
@@ -1230,22 +1227,15 @@ func (w *liteCopIteratorWorker) liteSendReq(it *copIterator) (resp *copResponse,
 	if result != nil {
 		if result.resp != nil {
 			w.batchCopRespList = result.batchRespList
-			return result.resp, nil
+			return result.resp
 		}
 		if len(result.batchRespList) > 0 {
 			resp = result.batchRespList[0]
 			w.batchCopRespList = result.batchRespList[1:]
-			return resp, nil
+			return resp
 		}
 	}
-	return nil, nil
-}
-
-func (w *liteCopIteratorWorker) sendRemainTasks(tasks []*copTask) {
-	for i := range tasks {
-		w.worker.handleTask(w.ctx, tasks[i], w.respCh)
-	}
-	close(w.respCh)
+	return nil
 }
 
 // HasUnconsumedCopRuntimeStats indicate whether has unconsumed CopRuntimeStats.
