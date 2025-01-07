@@ -1109,28 +1109,27 @@ func (it *copIterator) Next(ctx context.Context) (kv.ResultSubset, error) {
 
 	failpoint.InjectCall("CtxCancelBeforeReceive", ctx)
 	if it.liteWorker != nil {
-		var remainTasks []*copTask
-		resp, remainTasks = it.liteWorker.liteHandleTakes(ctx, it)
-		if len(remainTasks) == 0 {
-			if resp == nil {
-				it.actionOnExceed.close()
-				return nil, nil
-			}
-			it.actionOnExceed.destroyTokenIfNeeded(func() {})
-			memTrackerConsumeResp(it.memTracker, resp)
-		} else {
-			taskCh := make(chan *copTask, len(remainTasks))
+		resp = it.liteWorker.liteSendReq(ctx, it)
+		fmt.Printf("recv from liteworker, resp: %v, remains: %v --------------\n\n\n", resp, len(it.tasks))
+		if len(it.tasks) > 0 && len(it.liteWorker.batchCopRespList) == 0 {
+			taskCh := make(chan *copTask, len(it.tasks))
 			worker := it.liteWorker.worker
 			worker.taskCh = taskCh
 			it.wg.Add(1)
 			go worker.run(it.liteWorker.ctx)
-			for _, task := range remainTasks {
+			for _, task := range it.tasks {
 				taskCh <- task
 			}
 			it.liteWorker = nil
 		}
-	}
-	if resp == nil && it.respChan != nil {
+		if resp == nil {
+			it.actionOnExceed.close()
+			return nil, nil
+		}
+		it.actionOnExceed.destroyTokenIfNeeded(func() {})
+		memTrackerConsumeResp(it.memTracker, resp)
+	} else if it.respChan != nil {
+		fmt.Printf("recv from it.respChan, remains: %v --------------\n\n\n", len(it.tasks))
 		// Get next fetched resp from chan
 		resp, ok, closed = it.recvFromRespCh(ctx, it.respChan)
 		if !ok || closed {
@@ -1143,8 +1142,9 @@ func (it *copIterator) Next(ctx context.Context) (kv.ResultSubset, error) {
 			})
 			return it.Next(ctx)
 		}
-	} else if resp == nil {
+	} else {
 		for {
+			fmt.Printf("recv from task respChan, remains: %v, curr: %v --------------\n\n\n", len(it.tasks), it.curr)
 			if it.curr >= len(it.tasks) {
 				// Resp will be nil if iterator is finishCh.
 				it.actionOnExceed.close()
@@ -1179,7 +1179,7 @@ func (it *copIterator) Next(ctx context.Context) (kv.ResultSubset, error) {
 	return resp, nil
 }
 
-func (w *liteCopIteratorWorker) liteHandleTakes(ctx context.Context, it *copIterator) (resp *copResponse, remains []*copTask) {
+func (w *liteCopIteratorWorker) liteSendReq(ctx context.Context, it *copIterator) (resp *copResponse) {
 	defer func() {
 		r := recover()
 		if r != nil {
@@ -1190,48 +1190,42 @@ func (w *liteCopIteratorWorker) liteHandleTakes(ctx context.Context, it *copIter
 		}
 	}()
 
+	worker := w.worker
 	if len(w.batchCopRespList) > 0 {
 		resp = w.batchCopRespList[0]
 		w.batchCopRespList = w.batchCopRespList[1:]
-		return resp, nil
-	}
-	if len(it.tasks) == 0 {
-		return nil, nil
-	}
-	resp = w.liteSendReq(it)
-	return resp, it.tasks
-}
-
-func (w *liteCopIteratorWorker) liteSendReq(it *copIterator) (resp *copResponse) {
-	worker := w.worker
-	curTask := it.tasks[0]
-	backoffermap := make(map[uint64]*Backoffer)
-	bo := chooseBackoffer(w.ctx, backoffermap, curTask, worker)
-	result, err := worker.handleTaskOnce(bo, curTask)
-	if err != nil {
-		resp = &copResponse{err: errors.Trace(err)}
-		worker.checkRespOOM(resp)
 		return resp
 	}
-
-	if result != nil && len(result.remains) > 0 {
-		it.tasks = append(result.remains, it.tasks[1:]...)
-	} else {
-		it.tasks = it.tasks[1:]
-	}
-	if len(it.tasks) == 0 {
-		// if all tasks are finished, reset tryCopLiteWorker to 0 to make future request can reuse copLiteWorker.
-		w.tryCopLiteWorker.Store(0)
-	}
-	if result != nil {
-		if result.resp != nil {
-			w.batchCopRespList = result.batchRespList
-			return result.resp
-		}
-		if len(result.batchRespList) > 0 {
-			resp = result.batchRespList[0]
-			w.batchCopRespList = result.batchRespList[1:]
+	backoffermap := make(map[uint64]*Backoffer)
+	for len(it.tasks) > 0 {
+		curTask := it.tasks[0]
+		bo := chooseBackoffer(w.ctx, backoffermap, curTask, worker)
+		result, err := worker.handleTaskOnce(bo, curTask)
+		if err != nil {
+			resp = &copResponse{err: errors.Trace(err)}
+			worker.checkRespOOM(resp)
 			return resp
+		}
+
+		if result != nil && len(result.remains) > 0 {
+			it.tasks = append(result.remains, it.tasks[1:]...)
+		} else {
+			it.tasks = it.tasks[1:]
+		}
+		if len(it.tasks) == 0 {
+			// if all tasks are finished, reset tryCopLiteWorker to 0 to make future request can reuse copLiteWorker.
+			w.tryCopLiteWorker.Store(0)
+		}
+		if result != nil {
+			if result.resp != nil {
+				w.batchCopRespList = result.batchRespList
+				return result.resp
+			}
+			if len(result.batchRespList) > 0 {
+				resp = result.batchRespList[0]
+				w.batchCopRespList = result.batchRespList[1:]
+				return resp
+			}
 		}
 	}
 	return nil
