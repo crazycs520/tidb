@@ -2566,7 +2566,7 @@ func (s *session) Close() {
 	s.RollbackTxn(ctx)
 	if s.sessionVars != nil {
 		s.sessionVars.WithdrawAllPreparedStmt()
-		if s.sessionVars != nil {
+		if s.sessionVars.BatchGetWorkerPool != nil {
 			s.sessionVars.BatchGetWorkerPool.Close()
 		}
 	}
