@@ -17,6 +17,7 @@ package txn
 import (
 	"bytes"
 	"context"
+	"github.com/panjf2000/ants/v2"
 	"sync/atomic"
 	"time"
 
@@ -311,8 +312,8 @@ func (txn *tikvTxn) SetOption(opt int, val any) {
 		txn.KVTxn.SetSessionID(val.(uint64))
 	case kv.BackgroundGoroutineLifecycleHooks:
 		txn.KVTxn.SetBackgroundGoroutineLifecycleHooks(val.(transaction.LifecycleHooks))
-	case kv.BatchGetWorkerPool:
-		txn.KVTxn.GetSnapshot().SetBatchGetWorkerPool(val.(*txnsnapshot.BatchGetWorkerPool))
+	case kv.WorkerPool:
+		txn.KVTxn.GetSnapshot().SetWorkerPool(val.(*ants.MultiPool))
 	}
 }
 

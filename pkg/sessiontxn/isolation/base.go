@@ -16,7 +16,7 @@ package isolation
 
 import (
 	"context"
-	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
+	"github.com/panjf2000/ants/v2"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -531,10 +531,10 @@ func (p *baseTxnContextProvider) SetOptionsOnTxnActive(txn kv.Transaction) {
 		},
 	}
 	txn.SetOption(kv.BackgroundGoroutineLifecycleHooks, lifecycleHooks)
-	if p.sctx.GetSessionVars().BatchGetWorkerPool == nil {
-		p.sctx.GetSessionVars().BatchGetWorkerPool = txnsnapshot.NewBatchGetWorkerPool(15)
+	if p.sctx.GetSessionVars().WorkerPool == nil {
+		p.sctx.GetSessionVars().WorkerPool, _ = ants.NewMultiPool(1, 5, ants.RoundRobin, ants.WithExpiryDuration(time.Second*3))
 	}
-	txn.SetOption(kv.BatchGetWorkerPool, p.sctx.GetSessionVars().BatchGetWorkerPool)
+	txn.SetOption(kv.WorkerPool, p.sctx.GetSessionVars().WorkerPool)
 }
 
 func (p *baseTxnContextProvider) SetOptionsBeforeCommit(
