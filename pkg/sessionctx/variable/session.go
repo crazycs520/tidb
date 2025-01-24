@@ -21,6 +21,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
 	"maps"
 	"math"
 	"math/rand"
@@ -1689,6 +1690,8 @@ type SessionVars struct {
 
 	// CacheStmtExecInfo is a cache for the statement execution information, used to reduce the overhead of memory allocation.
 	CacheStmtExecInfo *stmtsummary.StmtExecInfo
+
+	BatchGetWorkerPool *txnsnapshot.BatchGetWorkerPool
 }
 
 // GetSessionVars implements the `SessionVarsProvider` interface.

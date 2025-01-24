@@ -116,6 +116,8 @@ const (
 	SessionID
 	// BackgroundGoroutineLifecycleHooks is the hooks to track the start and end of background goroutine
 	BackgroundGoroutineLifecycleHooks
+
+	BatchGetWorkerPool
 )
 
 // TxnSizeLimits is the argument type for `SizeLimits` option

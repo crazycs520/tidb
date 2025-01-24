@@ -16,6 +16,7 @@ package isolation
 
 import (
 	"context"
+	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -530,6 +531,10 @@ func (p *baseTxnContextProvider) SetOptionsOnTxnActive(txn kv.Transaction) {
 		},
 	}
 	txn.SetOption(kv.BackgroundGoroutineLifecycleHooks, lifecycleHooks)
+	if p.sctx.GetSessionVars().BatchGetWorkerPool == nil {
+		p.sctx.GetSessionVars().BatchGetWorkerPool = txnsnapshot.NewBatchGetWorkerPool(15)
+	}
+	txn.SetOption(kv.BatchGetWorkerPool, p.sctx.GetSessionVars().BatchGetWorkerPool)
 }
 
 func (p *baseTxnContextProvider) SetOptionsBeforeCommit(
