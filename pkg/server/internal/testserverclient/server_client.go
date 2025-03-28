@@ -384,6 +384,32 @@ func (cli *TestServerClient) RunTestPreparedTimestamp(t *testing.T) {
 	})
 }
 
+func (cli *TestServerClient) RunTestPreparedPointSelect(t *testing.T) {
+	cli.RunTestsOnNewDB(t, nil, "prepared_timestamp", func(dbt *testkit.DBTestKit) {
+		dbt.MustExec("create table t1 (a int key, b int)")
+		dbt.MustExec("insert into t1 values (1,1)")
+		selectStmt := dbt.MustPrepare("select * from t1 where a = ?")
+		rows := dbt.MustQueryPrepared(selectStmt, 1)
+		require.True(t, rows.Next())
+		var outA, outB int
+		err := rows.Scan(&outA, &outB)
+		require.NoError(t, err)
+		require.Equal(t, 1, outA)
+		require.Equal(t, 1, outB)
+		require.NoError(t, rows.Close())
+
+		rows = dbt.MustQueryPrepared(selectStmt, 1)
+		require.True(t, rows.Next())
+		err = rows.Scan(&outA, &outB)
+		require.NoError(t, err)
+		require.Equal(t, 1, outA)
+		require.Equal(t, 1, outB)
+		require.NoError(t, rows.Close())
+
+		require.NoError(t, selectStmt.Close())
+	})
+}
+
 func (cli *TestServerClient) RunTestLoadDataWithSelectIntoOutfile(t *testing.T) {
 	cli.RunTestsOnNewDB(t, func(config *mysql.Config) {
 		config.AllowAllFiles = true
