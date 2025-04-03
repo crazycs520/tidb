@@ -201,6 +201,23 @@ func (en *tableKVEncoder) fillRow(row []types.Datum, hasValue []bool, rowID int6
 				// already cast before, so no need cast again.
 				needCast = false
 			}
+			col1 := col.ToInfo()
+			logutil.BgLogger().Info("[cs] case column check not equal",
+				zap.String("col.name", col1.Name.L),
+				zap.Int64("col.id", col1.ID),
+				zap.String("col.field_type", col1.FieldType.String()),
+				zap.ByteString("col.field_type.GetType()", []byte{col1.FieldType.GetType()}),
+				zap.String("col.field_type.EvalType()", col1.FieldType.EvalType().String()),
+
+				zap.String("insertCol.name", insertCol.Name.L),
+				zap.Int64("insertCol.id", insertCol.ID),
+				zap.String("insertCol.field_type", insertCol.FieldType.String()),
+				zap.ByteString("insertCol.field_type.GetType()", []byte{insertCol.FieldType.GetType()}),
+				zap.String("col.field_type.EvalType()", insertCol.FieldType.EvalType().String()),
+
+				zap.Bool("equal", col.ToInfo().FieldType.Equal(&insertCol.FieldType)),
+				zap.Bool("need-cast", needCast),
+			)
 		}
 		value, err = en.ProcessColDatum(col, rowID, theDatum, needCast)
 		if err != nil {
