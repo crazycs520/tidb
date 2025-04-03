@@ -197,9 +197,8 @@ func (en *tableKVEncoder) fillRow(row []types.Datum, hasValue []bool, rowID int6
 		needCast := true
 		if i < len(en.insertColumns) {
 			insertCol := en.insertColumns[i].ToInfo()
-			colInfo := col.ToInfo()
-			if colInfo.FieldType.Equal(&insertCol.FieldType) {
-				// already cast before, so skip cast.
+			if col.ToInfo().FieldType.Equal(&insertCol.FieldType) {
+				// already cast before, so no need cast again.
 				needCast = false
 			}
 		}
