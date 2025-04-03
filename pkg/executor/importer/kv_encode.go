@@ -194,7 +194,16 @@ func (en *tableKVEncoder) fillRow(row []types.Datum, hasValue []bool, rowID int6
 		if hasValue[i] {
 			theDatum = &row[i]
 		}
-		value, err = en.ProcessColDatum(col, rowID, theDatum)
+		needCast := true
+		if i < len(en.insertColumns) {
+			insertCol := en.insertColumns[i].ToInfo()
+			colInfo := col.ToInfo()
+			if colInfo.FieldType.Equal(&insertCol.FieldType) {
+				// already cast before, so skip cast.
+				needCast = false
+			}
+		}
+		value, err = en.ProcessColDatum(col, rowID, theDatum, needCast)
 		if err != nil {
 			return nil, en.LogKVConvertFailed(row, i, col.ToInfo(), err)
 		}
