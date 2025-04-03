@@ -16,8 +16,6 @@ package importer
 
 import (
 	"context"
-	"github.com/pingcap/tidb/pkg/util/logutil"
-	"go.uber.org/zap"
 	"io"
 	"strings"
 
@@ -162,19 +160,8 @@ func (en *tableKVEncoder) getRow(vals []types.Datum, rowID int64) ([]types.Datum
 	hasValue := make([]bool, len(en.Columns))
 	needCast := make([]bool, len(en.Columns))
 	for i := 0; i < len(en.insertColumns); i++ {
-		val := vals[i]
 		insertCol := en.insertColumns[i].ToInfo()
-		logutil.BgLogger().Info("[cs] case column value 1",
-			zap.String("col.name", insertCol.Name.L),
-			zap.Int64("col.id", insertCol.ID),
-			zap.String("col.field_type", insertCol.FieldType.String()),
-			zap.ByteString("col.field_type.GetType()", []byte{insertCol.FieldType.GetType()}),
-			zap.ByteString("val.kind", []byte{val.Kind()}),
-			zap.String("val.collation", val.Collation()),
-			zap.Int("i", i),
-			zap.Int("offset", en.insertColumns[i].Offset),
-		)
-		casted, err := table.CastColumnValue(en.SessionCtx.GetExprCtx(), vals[i], en.insertColumns[i].ToInfo(), false, false)
+		casted, err := table.CastColumnValue(en.SessionCtx.GetExprCtx(), vals[i], insertCol, false, false)
 		if err != nil {
 			return nil, err
 		}
@@ -183,22 +170,6 @@ func (en *tableKVEncoder) getRow(vals []types.Datum, rowID int64) ([]types.Datum
 		row[offset] = casted
 		hasValue[offset] = true
 		needCast[offset] = !(en.Columns[offset].ToInfo().FieldType.Equal(&insertCol.FieldType))
-		logutil.BgLogger().Info("[cs] case column check not equal",
-			zap.String("col.name", en.Columns[offset].ToInfo().Name.L),
-			zap.Int64("col.id", en.Columns[offset].ToInfo().ID),
-			zap.String("col.field_type", en.Columns[offset].ToInfo().FieldType.String()),
-			zap.ByteString("col.field_type.GetType()", []byte{en.Columns[offset].ToInfo().FieldType.GetType()}),
-			zap.String("col.field_type.EvalType()", en.Columns[offset].ToInfo().FieldType.EvalType().String()),
-
-			zap.String("insertCol.name", insertCol.Name.L),
-			zap.Int64("insertCol.id", insertCol.ID),
-			zap.String("insertCol.field_type", insertCol.FieldType.String()),
-			zap.ByteString("insertCol.field_type.GetType()", []byte{insertCol.FieldType.GetType()}),
-			zap.String("col.field_type.EvalType()", insertCol.FieldType.EvalType().String()),
-
-			zap.Bool("equal", en.Columns[offset].ToInfo().FieldType.Equal(&insertCol.FieldType)),
-			zap.Bool("need-cast", needCast[offset]),
-		)
 	}
 
 	return en.fillRow(row, hasValue, needCast, rowID)
