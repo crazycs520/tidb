@@ -57,11 +57,11 @@ type rowToEncode struct {
 	resetFn   func()
 }
 
-type encodeReaderFn func(ctx context.Context) (data rowToEncode, closed bool, err error)
+type encodeReaderFn func(ctx context.Context, row []types.Datum) (data rowToEncode, closed bool, err error)
 
 // parserEncodeReader wraps a mydump.Parser as a encodeReaderFn.
 func parserEncodeReader(parser mydump.Parser, endOffset int64, filename string) encodeReaderFn {
-	return func(context.Context) (data rowToEncode, closed bool, err error) {
+	return func(context.Context, []types.Datum) (data rowToEncode, closed bool, err error) {
 		readPos, _ := parser.Pos()
 		if readPos >= endOffset {
 			closed = true
@@ -99,7 +99,7 @@ type queryChunkEncodeReader struct {
 	numRows  int
 }
 
-func (r *queryChunkEncodeReader) readRow(ctx context.Context) (data rowToEncode, closed bool, err error) {
+func (r *queryChunkEncodeReader) readRow(ctx context.Context, row []types.Datum) (data rowToEncode, closed bool, err error) {
 	if r.queryChk.Chk == nil || r.cursor >= r.numRows {
 		select {
 		case <-ctx.Done():
@@ -116,10 +116,22 @@ func (r *queryChunkEncodeReader) readRow(ctx context.Context) (data rowToEncode,
 		}
 	}
 
-	row := r.queryChk.Chk.GetRow(r.cursor)
+	chkRow := r.queryChk.Chk.GetRow(r.cursor)
+	chkRow.Len()
+	rowLen := chkRow.Len()
+	if len(row) < rowLen {
+		row = make([]types.Datum, rowLen)
+	} else {
+		row = row[:rowLen]
+		for i := range row {
+			row[i] = types.Datum{}
+		}
+	}
+	row = chkRow.GetDatumRowWithBuffer(r.queryChk.Fields, row)
+
 	r.cursor++
 	data = rowToEncode{
-		row:       row.GetDatumRow(r.queryChk.Fields),
+		row:       row,
 		rowID:     r.queryChk.Offset + int64(r.cursor),
 		endOffset: -1,
 		resetFn:   func() {},
@@ -130,8 +142,8 @@ func (r *queryChunkEncodeReader) readRow(ctx context.Context) (data rowToEncode,
 // queryRowEncodeReader wraps a queryChunkEncodeReader as a encodeReaderFn.
 func queryRowEncodeReader(chunkCh <-chan QueryChunk) encodeReaderFn {
 	reader := queryChunkEncodeReader{chunkCh: chunkCh}
-	return func(ctx context.Context) (data rowToEncode, closed bool, err error) {
-		return reader.readRow(ctx)
+	return func(ctx context.Context, row []types.Datum) (data rowToEncode, closed bool, err error) {
+		return reader.readRow(ctx, row)
 	}
 }
 
@@ -287,9 +299,10 @@ func (p *chunkEncoder) encodeLoop(ctx context.Context) error {
 		return nil
 	}
 
+	var readRowCache []types.Datum
 	for {
 		readDurStart := time.Now()
-		data, closed, err := p.readFn(ctx)
+		data, closed, err := p.readFn(ctx, readRowCache)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -319,6 +332,7 @@ func (p *chunkEncoder) encodeLoop(ctx context.Context) error {
 				return err
 			}
 		}
+		readRowCache = data.row
 	}
 
 	return recordSendReset()
