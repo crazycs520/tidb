@@ -160,14 +160,15 @@ func (en *tableKVEncoder) parserData2TableData(parserData []types.Datum, rowID i
 func (en *tableKVEncoder) getRow(vals []types.Datum, rowID int64) ([]types.Datum, error) {
 	row := make([]types.Datum, len(en.Columns))
 	hasValue := make([]bool, len(en.Columns))
+	needCast := make([]bool, len(en.Columns))
 	for i := 0; i < len(en.insertColumns); i++ {
 		val := vals[i]
-		col := en.insertColumns[i].ToInfo()
+		insertCol := en.insertColumns[i].ToInfo()
 		logutil.BgLogger().Info("[cs] case column value 1",
-			zap.String("col.name", col.Name.L),
-			zap.Int64("col.id", col.ID),
-			zap.String("col.field_type", col.FieldType.String()),
-			zap.ByteString("col.field_type.GetType()", []byte{col.FieldType.GetType()}),
+			zap.String("col.name", insertCol.Name.L),
+			zap.Int64("col.id", insertCol.ID),
+			zap.String("col.field_type", insertCol.FieldType.String()),
+			zap.ByteString("col.field_type.GetType()", []byte{insertCol.FieldType.GetType()}),
 			zap.ByteString("val.kind", []byte{val.Kind()}),
 			zap.String("val.collation", val.Collation()),
 			zap.Int("i", i),
@@ -181,47 +182,41 @@ func (en *tableKVEncoder) getRow(vals []types.Datum, rowID int64) ([]types.Datum
 		offset := en.insertColumns[i].Offset
 		row[offset] = casted
 		hasValue[offset] = true
+		needCast[offset] = !(en.Columns[offset].ToInfo().FieldType.Equal(&insertCol.FieldType))
+		logutil.BgLogger().Info("[cs] case column check not equal",
+			zap.String("col.name", en.Columns[offset].ToInfo().Name.L),
+			zap.Int64("col.id", en.Columns[offset].ToInfo().ID),
+			zap.String("col.field_type", en.Columns[offset].ToInfo().FieldType.String()),
+			zap.ByteString("col.field_type.GetType()", []byte{en.Columns[offset].ToInfo().FieldType.GetType()}),
+			zap.String("col.field_type.EvalType()", en.Columns[offset].ToInfo().FieldType.EvalType().String()),
+
+			zap.String("insertCol.name", insertCol.Name.L),
+			zap.Int64("insertCol.id", insertCol.ID),
+			zap.String("insertCol.field_type", insertCol.FieldType.String()),
+			zap.ByteString("insertCol.field_type.GetType()", []byte{insertCol.FieldType.GetType()}),
+			zap.String("col.field_type.EvalType()", insertCol.FieldType.EvalType().String()),
+
+			zap.Bool("equal", en.Columns[offset].ToInfo().FieldType.Equal(&insertCol.FieldType)),
+			zap.Bool("need-cast", needCast[offset]),
+		)
 	}
 
-	return en.fillRow(row, hasValue, rowID)
+	return en.fillRow(row, hasValue, needCast, rowID)
 }
 
-func (en *tableKVEncoder) fillRow(row []types.Datum, hasValue []bool, rowID int64) ([]types.Datum, error) {
+func (en *tableKVEncoder) fillRow(row []types.Datum, hasValue, needCast []bool, rowID int64) ([]types.Datum, error) {
 	var value types.Datum
 	var err error
 
 	record := en.GetOrCreateRecord()
 	for i, col := range en.Columns {
 		var theDatum *types.Datum
+		doCast := true
 		if hasValue[i] {
 			theDatum = &row[i]
+			doCast = needCast[i]
 		}
-		needCast := true
-		if i < len(en.insertColumns) {
-			insertCol := en.insertColumns[i].ToInfo()
-			if col.ToInfo().FieldType.Equal(&insertCol.FieldType) {
-				// already cast before, so no need cast again.
-				needCast = false
-			}
-			col1 := col.ToInfo()
-			logutil.BgLogger().Info("[cs] case column check not equal",
-				zap.String("col.name", col1.Name.L),
-				zap.Int64("col.id", col1.ID),
-				zap.String("col.field_type", col1.FieldType.String()),
-				zap.ByteString("col.field_type.GetType()", []byte{col1.FieldType.GetType()}),
-				zap.String("col.field_type.EvalType()", col1.FieldType.EvalType().String()),
-
-				zap.String("insertCol.name", insertCol.Name.L),
-				zap.Int64("insertCol.id", insertCol.ID),
-				zap.String("insertCol.field_type", insertCol.FieldType.String()),
-				zap.ByteString("insertCol.field_type.GetType()", []byte{insertCol.FieldType.GetType()}),
-				zap.String("col.field_type.EvalType()", insertCol.FieldType.EvalType().String()),
-
-				zap.Bool("equal", col.ToInfo().FieldType.Equal(&insertCol.FieldType)),
-				zap.Bool("need-cast", needCast),
-			)
-		}
-		value, err = en.ProcessColDatum(col, rowID, theDatum, needCast)
+		value, err = en.ProcessColDatum(col, rowID, theDatum, doCast)
 		if err != nil {
 			return nil, en.LogKVConvertFailed(row, i, col.ToInfo(), err)
 		}
