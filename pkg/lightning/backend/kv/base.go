@@ -225,7 +225,7 @@ func (e *BaseKVEncoder) TableMeta() *model.TableInfo {
 
 // ProcessColDatum processes the datum of a column.
 func (e *BaseKVEncoder) ProcessColDatum(col *table.Column, rowID int64, inputDatum *types.Datum, needCast bool) (types.Datum, error) {
-	value, err := e.getActualDatum(col, rowID, inputDatum, true)
+	value, err := e.getActualDatum(col, rowID, inputDatum, needCast)
 	if err != nil {
 		return value, err
 	}
