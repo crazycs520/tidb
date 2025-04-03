@@ -261,7 +261,7 @@ func (e *BaseKVEncoder) getActualDatum(col *table.Column, rowID int64, inputDatu
 	if inputDatum != nil {
 		val := inputDatum
 		colInfo := col.ToInfo()
-		logutil2.BgLogger().Info("[cs] case column value 1",
+		logutil2.BgLogger().Info("[cs] case column value 2",
 			zap.String("col.name", colInfo.Name.L),
 			zap.Int64("col.id", colInfo.ID),
 			zap.String("col.field_type", colInfo.FieldType.String()),
