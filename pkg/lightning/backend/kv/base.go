@@ -16,6 +16,7 @@ package kv
 
 import (
 	"context"
+	logutil2 "github.com/pingcap/tidb/pkg/util/logutil"
 	"math/rand"
 
 	"github.com/pingcap/errors"
@@ -258,6 +259,17 @@ func (e *BaseKVEncoder) getActualDatum(col *table.Column, rowID int64, inputDatu
 	exprCtx := e.SessionCtx.GetExprCtx()
 	errCtx := exprCtx.GetEvalCtx().ErrCtx()
 	if inputDatum != nil {
+		val := inputDatum
+		colInfo := col.ToInfo()
+		logutil2.BgLogger().Info("[cs] case column value 1",
+			zap.String("col.name", colInfo.Name.L),
+			zap.Int64("col.id", colInfo.ID),
+			zap.String("col.field_type", colInfo.FieldType.String()),
+			zap.ByteString("col.field_type.GetType()", []byte{colInfo.FieldType.GetType()}),
+			zap.ByteString("val.kind", []byte{val.Kind()}),
+			zap.String("val.collation", val.Collation()),
+		)
+
 		value, err = table.CastColumnValue(exprCtx, *inputDatum, col.ToInfo(), false, false)
 		if err != nil {
 			return value, err

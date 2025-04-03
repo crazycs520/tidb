@@ -16,6 +16,8 @@ package importer
 
 import (
 	"context"
+	"github.com/pingcap/tidb/pkg/util/logutil"
+	"go.uber.org/zap"
 	"io"
 	"strings"
 
@@ -159,6 +161,16 @@ func (en *tableKVEncoder) getRow(vals []types.Datum, rowID int64) ([]types.Datum
 	row := make([]types.Datum, len(en.Columns))
 	hasValue := make([]bool, len(en.Columns))
 	for i := 0; i < len(en.insertColumns); i++ {
+		val := vals[i]
+		col := en.insertColumns[i].ToInfo()
+		logutil.BgLogger().Info("[cs] case column value 1",
+			zap.String("col.name", col.Name.L),
+			zap.Int64("col.id", col.ID),
+			zap.String("col.field_type", col.FieldType.String()),
+			zap.ByteString("col.field_type.GetType()", []byte{col.FieldType.GetType()}),
+			zap.ByteString("val.kind", []byte{val.Kind()}),
+			zap.String("val.collation", val.Collation()),
+		)
 		casted, err := table.CastColumnValue(en.SessionCtx.GetExprCtx(), vals[i], en.insertColumns[i].ToInfo(), false, false)
 		if err != nil {
 			return nil, err
