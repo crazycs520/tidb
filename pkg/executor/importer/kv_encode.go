@@ -170,6 +170,8 @@ func (en *tableKVEncoder) getRow(vals []types.Datum, rowID int64) ([]types.Datum
 			zap.ByteString("col.field_type.GetType()", []byte{col.FieldType.GetType()}),
 			zap.ByteString("val.kind", []byte{val.Kind()}),
 			zap.String("val.collation", val.Collation()),
+			zap.Int("i", i),
+			zap.Int("offset", en.insertColumns[i].Offset),
 		)
 		casted, err := table.CastColumnValue(en.SessionCtx.GetExprCtx(), vals[i], en.insertColumns[i].ToInfo(), false, false)
 		if err != nil {
