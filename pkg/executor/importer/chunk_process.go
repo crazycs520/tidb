@@ -291,7 +291,7 @@ func (p *chunkEncoder) encodeLoop(ctx context.Context) error {
 
 		// the ownership of rowBatch is transferred to the receiver of sendFn, we should
 		// not touch it anymore.
-		rowBatch = make([]*kv.Pairs, 0, MinDeliverRowCnt)
+		rowBatch = make([]*kv.Pairs, 0, max(MinDeliverRowCnt, len(rowBatch)))
 		rowBatchByteSize = 0
 		rowCount = 0
 		readDur = 0
