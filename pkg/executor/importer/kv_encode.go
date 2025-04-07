@@ -48,6 +48,11 @@ type tableKVEncoder struct {
 	columnsAndUserVars []*ast.ColumnNameOrUserVar
 	fieldMappings      []*FieldMapping
 	insertColumns      []*table.Column
+	// Following cache use to avoid `runtime.makeslice`.
+	insertColumnRowCache []types.Datum
+	rowCache             []types.Datum
+	hasValueCache        []bool
+	needCastCache        []bool
 }
 
 var _ KVEncoder = &tableKVEncoder{}
@@ -97,7 +102,10 @@ func (en *tableKVEncoder) GetColumnSize() map[int64]int64 {
 
 // todo merge with code in load_data.go
 func (en *tableKVEncoder) parserData2TableData(parserData []types.Datum, rowID int64) ([]types.Datum, error) {
-	row := make([]types.Datum, 0, len(en.insertColumns))
+	if cap(en.insertColumnRowCache) < len(en.insertColumns) {
+		en.insertColumnRowCache = make([]types.Datum, 0, len(en.insertColumns))
+	}
+	row := en.insertColumnRowCache[:0]
 	setVar := func(name string, col *types.Datum) {
 		// User variable names are not case-sensitive
 		// https://dev.mysql.com/doc/refman/8.0/en/user-variables.html
@@ -156,9 +164,25 @@ func (en *tableKVEncoder) parserData2TableData(parserData []types.Datum, rowID i
 // expressions which are used in `insert into set x=y`.
 // copied from InsertValues
 func (en *tableKVEncoder) getRow(vals []types.Datum, rowID int64) ([]types.Datum, error) {
-	row := make([]types.Datum, len(en.Columns))
-	hasValue := make([]bool, len(en.Columns))
-	needCast := make([]bool, len(en.Columns))
+	rowLen := len(en.Columns)
+	if len(en.rowCache) < rowLen || len(en.hasValueCache) < rowLen || len(en.needCastCache) < rowLen {
+		en.rowCache = make([]types.Datum, rowLen)
+		en.hasValueCache = make([]bool, rowLen)
+		en.needCastCache = make([]bool, rowLen)
+	}
+	row := en.rowCache[:rowLen]
+	hasValue := en.hasValueCache[:rowLen]
+	needCast := en.needCastCache[:rowLen]
+	for i := range row {
+		row[i] = types.Datum{}
+	}
+	for i := range hasValue {
+		hasValue[i] = false
+	}
+	for i := range needCast {
+		needCast[i] = false
+	}
+
 	for i := 0; i < len(en.insertColumns); i++ {
 		insertCol := en.insertColumns[i].ToInfo()
 		casted, err := table.CastColumnValue(en.SessionCtx.GetExprCtx(), vals[i], insertCol, false, false)
