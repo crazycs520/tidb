@@ -148,6 +148,7 @@ func queryRowEncodeReader(chunkCh <-chan QueryChunk) encodeReaderFn {
 }
 
 type encodedKVGroupBatch struct {
+	count    int
 	dataKVs  []common.KvPair
 	indexKVs map[int64][]common.KvPair // indexID -> pairs
 
@@ -167,8 +168,10 @@ func (b *encodedKVGroupBatch) reset() {
 	b.memBuf = nil
 }
 
-func newEncodedKVGroupBatch(keyspace []byte) *encodedKVGroupBatch {
+func newEncodedKVGroupBatch(keyspace []byte, count int) *encodedKVGroupBatch {
 	return &encodedKVGroupBatch{
+		count:         count,
+		dataKVs:       make([]common.KvPair, 0, count),
 		indexKVs:      make(map[int64][]common.KvPair, 8),
 		groupChecksum: verify.NewKVGroupChecksumWithKeyspace(keyspace),
 	}
@@ -184,6 +187,9 @@ func (b *encodedKVGroupBatch) add(kvs *kv.Pairs) error {
 			indexID, err := tablecodec.DecodeIndexID(pair.Key)
 			if err != nil {
 				return errors.Trace(err)
+			}
+			if len(b.indexKVs[indexID]) == 0 {
+				b.indexKVs[indexID] = make([]common.KvPair, 0, b.count)
 			}
 			b.indexKVs[indexID] = append(b.indexKVs[indexID], pair)
 			b.groupChecksum.UpdateOneIndexKV(indexID, pair)
@@ -275,7 +281,16 @@ func (p *chunkEncoder) encodeLoop(ctx context.Context) error {
 		p.encodeTotalDur += encodeDur
 		p.readTotalDur += readDur
 
-		kvGroupBatch := newEncodedKVGroupBatch(p.keyspace)
+		recordCount := 0
+		for _, kvs := range rowBatch {
+			for _, pair := range kvs.Pairs {
+				if tablecodec.IsRecordKey(pair.Key) {
+					recordCount++
+					break
+				}
+			}
+		}
+		kvGroupBatch := newEncodedKVGroupBatch(p.keyspace, recordCount)
 
 		for _, kvs := range rowBatch {
 			if err := kvGroupBatch.add(kvs); err != nil {
