@@ -48,6 +48,8 @@ type tableKVEncoder struct {
 	columnsAndUserVars []*ast.ColumnNameOrUserVar
 	fieldMappings      []*FieldMapping
 	insertColumns      []*table.Column
+	// insertColumnRowsCache is a cache to avoid allocate.
+	insertColumnRowsCache []types.Datum
 }
 
 var _ KVEncoder = &tableKVEncoder{}
@@ -97,7 +99,10 @@ func (en *tableKVEncoder) GetColumnSize() map[int64]int64 {
 
 // todo merge with code in load_data.go
 func (en *tableKVEncoder) parserData2TableData(parserData []types.Datum, rowID int64) ([]types.Datum, error) {
-	row := make([]types.Datum, 0, len(en.insertColumns))
+	if cap(en.insertColumnRowsCache) < len(en.insertColumns) {
+		en.insertColumnRowsCache = make([]types.Datum, 0, len(en.insertColumns))
+	}
+	row := en.insertColumnRowsCache[:0]
 	setVar := func(name string, col *types.Datum) {
 		// User variable names are not case-sensitive
 		// https://dev.mysql.com/doc/refman/8.0/en/user-variables.html
