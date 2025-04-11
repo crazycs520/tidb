@@ -10,14 +10,15 @@ import (
 
 func TestQueryCache(t *testing.T) {
 	q1 := &QueryCacheKey{
-		schemaName: "test1",
-		sql:        "select * from t",
-		args:       nil,
-		vars: QueryVars{
+		SchemaName: "test1",
+		Sql:        "select * from t where a = ?",
+		Args:       "1,2,3",
+		Vars: QueryVars{
 			TimeZone: time.Local,
 			SQLMode:  mysql.SetSQLMode(mysql.SQLMode(0), mysql.ModeMsSQL),
 		},
 	}
+	assert.Equal(t, q1.hashSize(), len(q1.Hash()))
 	value := GlobalQueryCache.GetQueryCache(q1)
 	assert.Nil(t, value)
 
@@ -27,5 +28,5 @@ func TestQueryCache(t *testing.T) {
 
 	value = GlobalQueryCache.GetQueryCache(q1)
 	assert.NotNil(t, value)
-	assert.Equal(t, value.ReadTs, int64(1))
+	assert.Equal(t, value.ReadTs, uint64(1))
 }

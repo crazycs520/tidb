@@ -69,6 +69,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/hint"
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/plancodec"
+	"github.com/pingcap/tidb/pkg/util/querycache"
 	"github.com/pingcap/tidb/pkg/util/redact"
 	"github.com/pingcap/tidb/pkg/util/replayer"
 	"github.com/pingcap/tidb/pkg/util/sqlexec"
@@ -286,6 +287,10 @@ type ExecStmt struct {
 	// OutputNames will be set if using cached plan
 	OutputNames []*types.FieldName
 	PsStmt      *plannercore.PlanCacheStmt
+
+	cacheable    bool
+	cacheResults []*chunk.Chunk
+	cacheSize    uint64
 }
 
 // GetStmtNode returns the stmtNode inside Statement
@@ -366,6 +371,11 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 		if sctx.GetSessionVars().StmtCtx.StmtType == "" {
 			sctx.GetSessionVars().StmtCtx.StmtType = ast.GetStmtLabel(a.StmtNode)
 		}
+	}
+
+	txn, _ := sctx.Txn(false)
+	if err == nil {
+		a.cacheable = stmtQueryCacheable(a.Ctx, txn, a.StmtNode)
 	}
 
 	return &recordSet{
@@ -622,12 +632,24 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		txnStartTS = txn.StartTS()
 	}
 
+	a.cacheable = stmtQueryCacheable(a.Ctx, txn, a.StmtNode)
+
 	return &recordSet{
 		executor:   e,
 		schema:     e.Schema(),
 		stmt:       a,
 		txnStartTS: txnStartTS,
 	}, nil
+}
+
+func stmtQueryCacheable(ctx sessionctx.Context, txn kv.Transaction, stmt ast.StmtNode) bool {
+	if config.GetGlobalConfig().Performance.QueryCache.Enabled &&
+		ast.IsReadOnlySelect(stmt) &&
+		txn.IsReadOnly() &&
+		!staleread.IsStmtStaleness(ctx) {
+		return true
+	}
+	return false
 }
 
 func (a *ExecStmt) inheritContextFromExecuteStmt() {
@@ -1265,6 +1287,17 @@ func (a *ExecStmt) next(ctx context.Context, e exec.Executor, req *chunk.Chunk) 
 	start := time.Now()
 	err := exec.Next(ctx, e, req)
 	a.phaseNextDurations[0] += time.Since(start)
+
+	if a.cacheable && err == nil && req.NumRows() > 0 {
+		size := uint64(req.MemoryUsage())
+		if a.cacheSize+size > config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize {
+			a.cacheable = false
+			a.cacheResults = nil
+		}
+		chk := req.CopyConstruct()
+		a.cacheResults = append(a.cacheResults, chk)
+		a.cacheSize += size
+	}
 	return err
 }
 
@@ -1388,6 +1421,10 @@ func (a *ExecStmt) observePhaseDurations(internal bool, commitDetails *util.Comm
 func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, err error, hasMoreResults bool) {
 	a.checkPlanReplayerCapture(txnTS)
 
+	if err == nil && hasMoreResults == false && config.GetGlobalConfig().Performance.QueryCache.Enabled {
+		a.AddQueryCache(txnTS)
+	}
+
 	sessVars := a.Ctx.GetSessionVars()
 	execDetail := sessVars.StmtCtx.GetExecDetails()
 	// Attach commit/lockKeys runtime stats to executor runtime stats.
@@ -1473,6 +1510,28 @@ func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, err error, hasMoreResults boo
 	}
 
 	a.Ctx.ReportUsageStats()
+}
+
+func (a *ExecStmt) AddQueryCache(txnTS uint64) {
+	if !a.cacheable {
+		return
+	}
+	sessVars := a.Ctx.GetSessionVars()
+	params := sessVars.PlanCacheParams.AllParamValues()
+	key := querycache.QueryCacheKey{
+		SchemaName: strings.ToLower(sessVars.CurrentDB),
+		Sql:        sessVars.StmtCtx.OriginalSQL,
+		Args:       types.DatumsToStrNoErr(params),
+		Vars: querycache.QueryVars{
+			TimeZone: sessVars.TimeZone,
+			SQLMode:  sessVars.SQLMode,
+		},
+	}
+	value := querycache.QueryCacheValue{
+		ReadTs: txnTS,
+		Chunks: a.cacheResults,
+	}
+	querycache.GlobalQueryCache.AddQueryCache(&key, &value)
 }
 
 func (a *ExecStmt) recordAffectedRows2Metrics() {
