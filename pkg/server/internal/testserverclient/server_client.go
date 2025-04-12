@@ -388,6 +388,7 @@ func (cli *TestServerClient) RunTestPreparedPointSelect(t *testing.T) {
 	cli.RunTestsOnNewDB(t, nil, "query_cache_db", func(dbt *testkit.DBTestKit) {
 		dbt.MustExec("create table t1 (a int key, b int)")
 		dbt.MustExec("insert into t1 values (1,1), (2,2)")
+		dbt.GetDB().SetMaxOpenConns(1)
 		selectStmt := dbt.MustPrepare("select * from t1 where a = ?")
 		rows := dbt.MustQueryPrepared(selectStmt, 1)
 		require.True(t, rows.Next())
@@ -413,6 +414,18 @@ func (cli *TestServerClient) RunTestPreparedPointSelect(t *testing.T) {
 		require.Equal(t, 2, outA)
 		require.Equal(t, 2, outB)
 		require.NoError(t, rows.Close())
+
+		// Test read in txn.
+		dbt.MustExec("begin")
+		dbt.MustExec("update t1 set b=2 where a=1")
+		rows = dbt.MustQueryPrepared(selectStmt, 1)
+		require.True(t, rows.Next())
+		err = rows.Scan(&outA, &outB)
+		require.NoError(t, err)
+		require.Equal(t, 1, outA)
+		require.Equal(t, 2, outB)
+		require.NoError(t, rows.Close())
+		dbt.MustExec("rollback")
 		require.NoError(t, selectStmt.Close())
 
 		selectStmt = dbt.MustPrepare("select * from t1 where b = ?")

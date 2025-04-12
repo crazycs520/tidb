@@ -450,7 +450,7 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 	cacheable := false
 	txn, _ := sctx.Txn(false)
 	if err == nil {
-		cacheable = stmtQueryCacheable(a.Ctx, txn, a.StmtNode)
+		cacheable = StmtQueryCacheable(a.Ctx, txn, a.StmtNode)
 	}
 
 	return &recordSet{
@@ -713,11 +713,11 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		schema:     e.Schema(),
 		stmt:       a,
 		txnStartTS: txnStartTS,
-		cacheable:  stmtQueryCacheable(a.Ctx, txn, a.StmtNode),
+		cacheable:  StmtQueryCacheable(a.Ctx, txn, a.StmtNode),
 	}, nil
 }
 
-func stmtQueryCacheable(ctx sessionctx.Context, txn kv.Transaction, stmt ast.StmtNode) bool {
+func StmtQueryCacheable(ctx sessionctx.Context, txn kv.Transaction, stmt ast.StmtNode) bool {
 	if !config.GetGlobalConfig().Performance.QueryCache.Enabled {
 		return false
 	}
