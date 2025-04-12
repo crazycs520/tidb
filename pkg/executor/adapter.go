@@ -104,6 +104,10 @@ type recordSet struct {
 	lastErrs   []error
 	txnStartTS uint64
 	once       sync.Once
+
+	cacheable   bool
+	cacheResult *querycache.QueryCacheValue
+	cacheSize   uint64
 }
 
 func (a *recordSet) Fields() []*resolve.ResultField {
@@ -185,6 +189,26 @@ func (a *recordSet) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 	if a.stmt != nil {
 		a.stmt.Ctx.GetSessionVars().StmtCtx.AddFoundRows(uint64(numRows))
 	}
+
+	if a.cacheable {
+		size := uint64(req.MemoryUsage())
+		if a.cacheSize+size > config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize {
+			a.cacheable = false
+			a.cacheResult = nil
+		} else {
+			if a.cacheResult == nil {
+				a.cacheResult = &querycache.QueryCacheValue{
+					ReadTs:       a.txnStartTS,
+					ResultFields: a.Fields(),
+					FieldTypes:   a.executor.RetFieldTypes(),
+				}
+			}
+			chk := req.CopyConstructSel()
+			a.cacheResult.Chunks = append(a.cacheResult.Chunks, chk)
+			a.cacheSize += size
+		}
+	}
+
 	return nil
 }
 
@@ -228,8 +252,35 @@ func (a *recordSet) Close() error {
 	if err != nil {
 		logutil.BgLogger().Error("close recordSet error", zap.Error(err))
 	}
-	a.stmt.CloseRecordSet(a.txnStartTS, errors.Join(a.lastErrs...))
+	lastErr := errors.Join(a.lastErrs...)
+	a.stmt.CloseRecordSet(a.txnStartTS, lastErr)
+
+	if lastErr == nil && config.GetGlobalConfig().Performance.QueryCache.Enabled {
+		a.AddQueryCache()
+	}
+
 	return err
+}
+
+func (a *recordSet) AddQueryCache() {
+	if !a.cacheable || a.cacheResult == nil || len(a.Fields()) == 0 {
+		return
+	}
+	sessVars := a.stmt.Ctx.GetSessionVars()
+	key := querycache.QueryCacheKey{
+		SchemaName: sessVars.CurrentDB,
+		Sql:        sessVars.StmtCtx.OriginalSQL,
+		Args:       sessVars.PreparedStmtParams,
+		Vars: querycache.QueryVars{
+			TimeZone: sessVars.TimeZone,
+			SQLMode:  sessVars.SQLMode,
+		},
+	}
+	cacheResult := a.cacheResult
+	cacheResult.ReadTs = a.txnStartTS
+	cacheResult.ResultFields = a.Fields()
+	cacheResult.FieldTypes = a.executor.RetFieldTypes()
+	querycache.GlobalQueryCache.AddQueryCache(&key, cacheResult)
 }
 
 // OnFetchReturned implements commandLifeCycle#OnFetchReturned
@@ -249,6 +300,34 @@ func (a *recordSet) TryDetach() (sqlexec.RecordSet, bool, error) {
 // GetExecutor4Test exports the internal executor for test purpose.
 func (a *recordSet) GetExecutor4Test() any {
 	return a.executor
+}
+
+type CachedRecordSet struct {
+	*querycache.QueryCacheValue
+	idx int
+}
+
+func (c *CachedRecordSet) Fields() []*resolve.ResultField {
+	return c.ResultFields
+}
+
+func (c *CachedRecordSet) Next(ctx context.Context, req *chunk.Chunk) error {
+	chk := c.Chunks[c.idx]
+	req.Append(chk, 0, chk.NumRows())
+	c.idx++
+	return nil
+}
+
+func (c *CachedRecordSet) NewChunk(alloc chunk.Allocator) *chunk.Chunk {
+	if alloc == nil {
+		return chunk.New(c.FieldTypes, 32, 1024)
+	}
+
+	return alloc.Alloc(c.FieldTypes, 32, 1024)
+}
+
+func (c CachedRecordSet) Close() error {
+	return nil
 }
 
 // ExecStmt implements the sqlexec.Statement interface, it builds a planner.Plan to an sqlexec.Statement.
@@ -287,10 +366,6 @@ type ExecStmt struct {
 	// OutputNames will be set if using cached plan
 	OutputNames []*types.FieldName
 	PsStmt      *plannercore.PlanCacheStmt
-
-	cacheable    bool
-	cacheResults []*chunk.Chunk
-	cacheSize    uint64
 }
 
 // GetStmtNode returns the stmtNode inside Statement
@@ -373,9 +448,10 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 		}
 	}
 
+	cacheable := false
 	txn, _ := sctx.Txn(false)
 	if err == nil {
-		a.cacheable = stmtQueryCacheable(a.Ctx, txn, a.StmtNode)
+		cacheable = stmtQueryCacheable(a.Ctx, txn, a.StmtNode)
 	}
 
 	return &recordSet{
@@ -383,6 +459,7 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 		schema:     executor.Schema(),
 		stmt:       a,
 		txnStartTS: startTs,
+		cacheable:  cacheable,
 	}, nil
 }
 
@@ -632,13 +709,12 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		txnStartTS = txn.StartTS()
 	}
 
-	a.cacheable = stmtQueryCacheable(a.Ctx, txn, a.StmtNode)
-
 	return &recordSet{
 		executor:   e,
 		schema:     e.Schema(),
 		stmt:       a,
 		txnStartTS: txnStartTS,
+		cacheable:  stmtQueryCacheable(a.Ctx, txn, a.StmtNode),
 	}, nil
 }
 
@@ -1287,17 +1363,6 @@ func (a *ExecStmt) next(ctx context.Context, e exec.Executor, req *chunk.Chunk) 
 	start := time.Now()
 	err := exec.Next(ctx, e, req)
 	a.phaseNextDurations[0] += time.Since(start)
-
-	if a.cacheable && err == nil && req.NumRows() > 0 {
-		size := uint64(req.MemoryUsage())
-		if a.cacheSize+size > config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize {
-			a.cacheable = false
-			a.cacheResults = nil
-		}
-		chk := req.CopyConstruct()
-		a.cacheResults = append(a.cacheResults, chk)
-		a.cacheSize += size
-	}
 	return err
 }
 
@@ -1421,10 +1486,6 @@ func (a *ExecStmt) observePhaseDurations(internal bool, commitDetails *util.Comm
 func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, err error, hasMoreResults bool) {
 	a.checkPlanReplayerCapture(txnTS)
 
-	if err == nil && hasMoreResults == false && config.GetGlobalConfig().Performance.QueryCache.Enabled {
-		a.AddQueryCache(txnTS)
-	}
-
 	sessVars := a.Ctx.GetSessionVars()
 	execDetail := sessVars.StmtCtx.GetExecDetails()
 	// Attach commit/lockKeys runtime stats to executor runtime stats.
@@ -1510,28 +1571,6 @@ func (a *ExecStmt) FinishExecuteStmt(txnTS uint64, err error, hasMoreResults boo
 	}
 
 	a.Ctx.ReportUsageStats()
-}
-
-func (a *ExecStmt) AddQueryCache(txnTS uint64) {
-	if !a.cacheable {
-		return
-	}
-	sessVars := a.Ctx.GetSessionVars()
-	params := sessVars.PlanCacheParams.AllParamValues()
-	key := querycache.QueryCacheKey{
-		SchemaName: strings.ToLower(sessVars.CurrentDB),
-		Sql:        sessVars.StmtCtx.OriginalSQL,
-		Args:       types.DatumsToStrNoErr(params),
-		Vars: querycache.QueryVars{
-			TimeZone: sessVars.TimeZone,
-			SQLMode:  sessVars.SQLMode,
-		},
-	}
-	value := querycache.QueryCacheValue{
-		ReadTs: txnTS,
-		Chunks: a.cacheResults,
-	}
-	querycache.GlobalQueryCache.AddQueryCache(&key, &value)
 }
 
 func (a *ExecStmt) recordAffectedRows2Metrics() {

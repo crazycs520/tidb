@@ -2,6 +2,9 @@ package querycache
 
 import (
 	"encoding/binary"
+	"github.com/pingcap/tidb/pkg/param"
+	"github.com/pingcap/tidb/pkg/planner/core/resolve"
+	"github.com/pingcap/tidb/pkg/types"
 	"sync"
 	"time"
 
@@ -48,7 +51,7 @@ func (qc *QueryCache) DeleteQueryCache() {
 type QueryCacheKey struct {
 	SchemaName string
 	Sql        string
-	Args       string
+	Args       []param.BinaryParam
 	Vars       QueryVars
 
 	hash []byte
@@ -66,7 +69,9 @@ func (k *QueryCacheKey) Hash() []byte {
 	k.hash = make([]byte, 0, k.hashSize())
 	k.hash = append(k.hash, hack.Slice(k.SchemaName)...)
 	k.hash = append(k.hash, hack.Slice(k.Sql)...)
-	k.hash = append(k.hash, hack.Slice(k.Args)...)
+	for _, arg := range k.Args {
+		k.hash = append(k.hash, paramToBytes(arg)...)
+	}
 	timezone := k.Vars.TimeZone.String()
 	k.hash = append(k.hash, hack.Slice(timezone)...)
 	items := [8]byte{}
@@ -76,13 +81,38 @@ func (k *QueryCacheKey) Hash() []byte {
 }
 
 func (k *QueryCacheKey) hashSize() int {
-	length := len(k.Sql) + len(k.SchemaName) + len(k.Args)
+	length := len(k.Sql) + len(k.SchemaName)
+	for _, arg := range k.Args {
+		length += paramSize(arg)
+	}
 	length += len(k.Vars.TimeZone.String())
 	length += 8
 	return length
 }
 
+func paramToBytes(arg param.BinaryParam) []byte {
+	flag := byte(0)
+	if arg.IsUnsigned {
+		flag |= 0x01
+	}
+	if arg.IsNull {
+		flag |= 0x02
+	}
+	buf := make([]byte, 0, paramSize(arg))
+	buf = append(buf, arg.Tp)
+	buf = append(buf, flag)
+	buf = append(buf, arg.Val...)
+	return buf
+}
+
+func paramSize(arg param.BinaryParam) int {
+	return 2 + len(arg.Val)
+}
+
 type QueryCacheValue struct {
 	ReadTs uint64
-	Chunks []*chunk.Chunk
+
+	ResultFields []*resolve.ResultField
+	FieldTypes   []*types.FieldType
+	Chunks       []*chunk.Chunk
 }

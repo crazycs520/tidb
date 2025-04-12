@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	stderrs "errors"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/util/querycache"
 	"iter"
 	"math"
 	"math/rand"
@@ -2022,11 +2023,25 @@ func (s *session) ExecuteStmt(ctx context.Context, stmtNode ast.StmtNode) (sqlex
 	}
 	if execStmt, ok := stmtNode.(*ast.ExecuteStmt); ok {
 		if binParam, ok := execStmt.BinaryArgs.([]param.BinaryParam); ok {
+			result := querycache.GlobalQueryCache.GetQueryCache(&querycache.QueryCacheKey{
+				SchemaName: sessVars.CurrentDB,
+				Sql:        sessVars.StmtCtx.OriginalSQL,
+				Args:       binParam,
+				Vars: querycache.QueryVars{
+					TimeZone: sessVars.TimeZone,
+					SQLMode:  sessVars.SQLMode,
+				},
+			})
+			if result != nil {
+				return &executor.CachedRecordSet{QueryCacheValue: result}, nil
+			}
+
 			args, err := expression.ExecBinaryParam(s.GetSessionVars().StmtCtx.TypeCtx(), binParam)
 			if err != nil {
 				return nil, err
 			}
 			execStmt.BinaryArgs = args
+			sessVars.PreparedStmtParams = binParam
 		}
 	}
 
