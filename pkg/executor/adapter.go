@@ -248,22 +248,22 @@ func (a *recordSet) Finish() error {
 }
 
 func (a *recordSet) Close() error {
+	lastErr := errors.Join(a.lastErrs...)
+	if lastErr == nil && config.GetGlobalConfig().Performance.QueryCache.Enabled {
+		a.AddQueryCache()
+	}
+
 	err := a.Finish()
 	if err != nil {
 		logutil.BgLogger().Error("close recordSet error", zap.Error(err))
 	}
-	lastErr := errors.Join(a.lastErrs...)
 	a.stmt.CloseRecordSet(a.txnStartTS, lastErr)
-
-	if lastErr == nil && config.GetGlobalConfig().Performance.QueryCache.Enabled {
-		a.AddQueryCache()
-	}
 
 	return err
 }
 
 func (a *recordSet) AddQueryCache() {
-	if !a.cacheable || a.cacheResult == nil || len(a.Fields()) == 0 {
+	if !a.cacheable || a.cacheResult == nil {
 		return
 	}
 	sessVars := a.stmt.Ctx.GetSessionVars()
@@ -276,11 +276,7 @@ func (a *recordSet) AddQueryCache() {
 			SQLMode:  sessVars.SQLMode,
 		},
 	}
-	cacheResult := a.cacheResult
-	cacheResult.ReadTs = a.txnStartTS
-	cacheResult.ResultFields = a.Fields()
-	cacheResult.FieldTypes = a.executor.RetFieldTypes()
-	querycache.GlobalQueryCache.AddQueryCache(&key, cacheResult)
+	querycache.GlobalQueryCache.AddQueryCache(&key, a.cacheResult)
 }
 
 // OnFetchReturned implements commandLifeCycle#OnFetchReturned
@@ -312,9 +308,12 @@ func (c *CachedRecordSet) Fields() []*resolve.ResultField {
 }
 
 func (c *CachedRecordSet) Next(ctx context.Context, req *chunk.Chunk) error {
-	chk := c.Chunks[c.idx]
-	req.Append(chk, 0, chk.NumRows())
-	c.idx++
+	req.Reset()
+	if c.idx < len(c.Chunks) {
+		chk := c.Chunks[c.idx]
+		req.Append(chk, 0, chk.NumRows())
+		c.idx++
+	}
 	return nil
 }
 
@@ -719,13 +718,26 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 }
 
 func stmtQueryCacheable(ctx sessionctx.Context, txn kv.Transaction, stmt ast.StmtNode) bool {
-	if config.GetGlobalConfig().Performance.QueryCache.Enabled &&
-		ast.IsReadOnlySelect(stmt) &&
-		txn.IsReadOnly() &&
-		!staleread.IsStmtStaleness(ctx) {
-		return true
+	if !config.GetGlobalConfig().Performance.QueryCache.Enabled {
+		return false
 	}
-	return false
+	if txn.Valid() && !txn.IsReadOnly() {
+		return false
+	}
+	if staleread.IsStmtStaleness(ctx) {
+		return false
+	}
+
+	if execStmt, ok := stmt.(*ast.ExecuteStmt); ok {
+		prepareStmt, err := plannercore.GetPreparedStmt(execStmt, ctx.GetSessionVars())
+		if err == nil && prepareStmt.PreparedAst != nil {
+			stmt = prepareStmt.PreparedAst.Stmt
+		}
+	}
+	if !ast.IsReadOnlySelect(stmt) {
+		return false
+	}
+	return true
 }
 
 func (a *ExecStmt) inheritContextFromExecuteStmt() {
