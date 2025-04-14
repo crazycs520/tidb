@@ -2,6 +2,7 @@ package querycache
 
 import (
 	"encoding/binary"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/param"
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/types"
@@ -21,26 +22,40 @@ type QueryCache struct {
 	queryMap *kvcache.SimpleLRUCache
 }
 
+type QueryCacheHook interface {
+	AfterGetQueryCache(key *QueryCacheKey, value *QueryCacheValue)
+	AfterAddQueryCache(key *QueryCacheKey, value *QueryCacheValue)
+	AfterDeleteQueryCache(key *QueryCacheKey, value *QueryCacheValue)
+}
+
 func NewQueryCache() *QueryCache {
 	return &QueryCache{
 		queryMap: kvcache.NewSimpleLRUCache(10000, 0, 0),
 	}
 }
 
-func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) *QueryCacheValue {
+func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue) {
 	qc.RLock()
-	defer qc.RUnlock()
+	defer func() {
+		qc.RUnlock()
+		failpoint.InjectCall("AfterGetQueryCache", key, value)
+	}()
 
-	value, _ := qc.queryMap.Get(key)
-	if value == nil {
+	v, _ := qc.queryMap.Get(key)
+	if v == nil {
 		return nil
 	}
-	return value.(*QueryCacheValue)
+	value = v.(*QueryCacheValue)
+	return value
 }
 
 func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
 	qc.Lock()
-	defer qc.Unlock()
+	defer func() {
+		qc.Unlock()
+		failpoint.InjectCall("AfterAddQueryCache", key, value)
+	}()
+
 	qc.queryMap.Put(key, value)
 }
 

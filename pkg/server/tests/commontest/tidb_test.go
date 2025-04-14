@@ -279,10 +279,10 @@ func TestPreparedTimestamp(t *testing.T) {
 	ts.RunTestPreparedTimestamp(t)
 }
 
-func TestPreparedPointSelect(t *testing.T) {
+func TestPreparedStmtQueryCache(t *testing.T) {
 	ts := servertestkit.CreateTidbTestSuite(t)
 
-	ts.RunTestPreparedPointSelect(t)
+	ts.RunTestPreparedStmtQueryCache(t)
 }
 
 func TestErrorCode(t *testing.T) {

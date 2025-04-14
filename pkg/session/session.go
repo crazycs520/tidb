@@ -2022,23 +2022,14 @@ func (s *session) ExecuteStmt(ctx context.Context, stmtNode ast.StmtNode) (sqlex
 	if err := executor.ResetContextOfStmt(s, stmtNode); err != nil {
 		return nil, err
 	}
+
+	rs := s.GetResultFromQueryCache(stmtNode)
+	if rs != nil {
+		return rs, nil
+	}
+
 	if execStmt, ok := stmtNode.(*ast.ExecuteStmt); ok {
 		if binParam, ok := execStmt.BinaryArgs.([]param.BinaryParam); ok {
-			if StmtQueryCacheable(s, execStmt) {
-				result := querycache.GlobalQueryCache.GetQueryCache(&querycache.QueryCacheKey{
-					SchemaName: sessVars.CurrentDB,
-					Sql:        sessVars.StmtCtx.OriginalSQL,
-					Args:       binParam,
-					Vars: querycache.QueryVars{
-						TimeZone: sessVars.TimeZone,
-						SQLMode:  sessVars.SQLMode,
-					},
-				})
-				if result != nil {
-					return &executor.CachedRecordSet{QueryCacheValue: result}, nil
-				}
-			}
-
 			args, err := expression.ExecBinaryParam(s.GetSessionVars().StmtCtx.TypeCtx(), binParam)
 			if err != nil {
 				return nil, err
@@ -2185,6 +2176,29 @@ func (s *session) ExecuteStmt(ctx context.Context, stmtNode ast.StmtNode) (sqlex
 		return recordSet, err
 	}
 	return recordSet, nil
+}
+
+func (s *session) GetResultFromQueryCache(stmtNode ast.StmtNode) sqlexec.RecordSet {
+	if execStmt, ok := stmtNode.(*ast.ExecuteStmt); ok {
+		if binParam, ok := execStmt.BinaryArgs.([]param.BinaryParam); ok {
+			if StmtQueryCacheable(s, execStmt) {
+				sessVars := s.sessionVars
+				result := querycache.GlobalQueryCache.GetQueryCache(&querycache.QueryCacheKey{
+					SchemaName: sessVars.CurrentDB,
+					Sql:        sessVars.StmtCtx.OriginalSQL,
+					Args:       binParam,
+					Vars: querycache.QueryVars{
+						TimeZone: sessVars.TimeZone,
+						SQLMode:  sessVars.SQLMode,
+					},
+				})
+				if result != nil {
+					return &executor.CachedRecordSet{QueryCacheValue: result}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func StmtQueryCacheable(ctx sessionctx.Context, stmt ast.StmtNode) bool {
