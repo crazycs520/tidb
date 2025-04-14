@@ -22,12 +22,6 @@ type QueryCache struct {
 	queryMap *kvcache.SimpleLRUCache
 }
 
-type QueryCacheHook interface {
-	AfterGetQueryCache(key *QueryCacheKey, value *QueryCacheValue)
-	AfterAddQueryCache(key *QueryCacheKey, value *QueryCacheValue)
-	AfterDeleteQueryCache(key *QueryCacheKey, value *QueryCacheValue)
-}
-
 func NewQueryCache() *QueryCache {
 	return &QueryCache{
 		queryMap: kvcache.NewSimpleLRUCache(10000, 0, 0),
