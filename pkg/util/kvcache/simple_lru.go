@@ -123,7 +123,9 @@ func (l *SimpleLRUCache) Put(key Key, value Value) {
 				l.onEvict(lru.Value.(*cacheEntry).key, lru.Value.(*cacheEntry).value)
 			}
 			if _, ok := lru.Value.(*cacheEntry); !ok {
-				logutil.BgLogger().Warn("value is not cache", zap.Any("value", lru.Value), zap.Bool("is-nil", lru.Value == nil))
+				logutil.BgLogger().Warn("value is not cache", zap.Any("value", lru.Value), zap.Bool("is-nil", lru.Value == nil), zap.Any("k", lru),
+					zap.Int("map-len", len(l.elements)),
+					zap.Int("list-len", l.cache.Len()))
 			}
 			delete(l.elements, string(lru.Value.(*cacheEntry).key.Hash()))
 			l.size--
