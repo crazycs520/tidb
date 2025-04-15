@@ -44,13 +44,18 @@ func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue)
 }
 
 func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
+	if key == nil || value == nil {
+		return
+	}
 	qc.Lock()
 	defer func() {
 		qc.Unlock()
 		failpoint.InjectCall("AfterAddQueryCache", key, value)
 	}()
 
-	qc.queryMap.Put(key, value)
+	k := *key
+	v := *value
+	qc.queryMap.Put(&k, &v)
 }
 
 func (qc *QueryCache) DeleteQueryCache() {

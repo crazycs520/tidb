@@ -727,7 +727,9 @@ func StmtQueryCacheable(ctx sessionctx.Context, txn kv.Transaction, stmt ast.Stm
 	if staleread.IsStmtStaleness(ctx) {
 		return false
 	}
-
+	if ctx.GetSessionVars().InRestrictedSQL {
+		return false
+	}
 	if execStmt, ok := stmt.(*ast.ExecuteStmt); ok {
 		prepareStmt, err := plannercore.GetPreparedStmt(execStmt, ctx.GetSessionVars())
 		if err == nil && prepareStmt.PreparedAst != nil {
