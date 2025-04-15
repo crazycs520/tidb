@@ -29,10 +29,11 @@ func NewQueryCache() *QueryCache {
 }
 
 func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue) {
+	return nil
 	qc.RLock()
 	defer func() {
 		qc.RUnlock()
-		//failpoint.InjectCall("AfterGetQueryCache", key, value)
+		failpoint.InjectCall("AfterGetQueryCache", key, value)
 	}()
 
 	v, _ := qc.queryMap.Get(key)
