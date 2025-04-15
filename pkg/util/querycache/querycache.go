@@ -40,7 +40,13 @@ func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue)
 		return nil
 	}
 	value = v.(*QueryCacheValue)
-	return value
+	result := &QueryCacheValue{
+		ReadTs:       value.ReadTs,
+		ResultFields: value.ResultFields,
+		FieldTypes:   value.FieldTypes,
+		Chunks:       value.Chunks,
+	}
+	return result
 }
 
 func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
