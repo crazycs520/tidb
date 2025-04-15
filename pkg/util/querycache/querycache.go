@@ -38,18 +38,18 @@ func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue)
 
 	v, ok := qc.queryMap.Get(key)
 	if !ok || v == nil {
-		metrics.QueryCacheCounter.WithLabelValues("miss")
+		metrics.QueryCacheCounter.WithLabelValues("miss").Inc()
 		return nil
 	}
 	if cv, ok := v.(*QueryCacheValue); ok {
 		value = cv.Clone()
-		metrics.QueryCacheCounter.WithLabelValues("hit")
+		metrics.QueryCacheCounter.WithLabelValues("hit").Inc()
 	}
 	return value
 }
 
 func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
-	metrics.QueryCacheCounter.WithLabelValues("add")
+	metrics.QueryCacheCounter.WithLabelValues("add").Inc()
 	if key == nil || value == nil {
 		return
 	}
