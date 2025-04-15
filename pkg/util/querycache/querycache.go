@@ -29,25 +29,20 @@ func NewQueryCache() *QueryCache {
 }
 
 func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue) {
-	return nil
 	qc.RLock()
 	defer func() {
 		qc.RUnlock()
 		failpoint.InjectCall("AfterGetQueryCache", key, value)
 	}()
 
-	v, _ := qc.queryMap.Get(key)
-	if v == nil {
+	v, ok := qc.queryMap.Get(key)
+	if !ok || v == nil {
 		return nil
 	}
-	value = v.(*QueryCacheValue)
-	result := &QueryCacheValue{
-		ReadTs:       value.ReadTs,
-		ResultFields: value.ResultFields,
-		FieldTypes:   value.FieldTypes,
-		Chunks:       value.Chunks,
+	if cv, ok := v.(*QueryCacheValue); ok {
+		value = cv.Clone()
 	}
-	return result
+	return value
 }
 
 func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
@@ -147,4 +142,17 @@ type QueryCacheValue struct {
 	ResultFields []*resolve.ResultField
 	FieldTypes   []*types.FieldType
 	Chunks       []*chunk.Chunk
+}
+
+func (v *QueryCacheValue) Clone() *QueryCacheValue {
+	result := &QueryCacheValue{
+		ReadTs:       v.ReadTs,
+		ResultFields: make([]*resolve.ResultField, 0, len(v.ResultFields)),
+		FieldTypes:   make([]*types.FieldType, 0, len(v.FieldTypes)),
+		Chunks:       make([]*chunk.Chunk, 0, len(v.Chunks)),
+	}
+	result.ResultFields = append(result.ResultFields, v.ResultFields...)
+	result.FieldTypes = append(result.FieldTypes, v.FieldTypes...)
+	result.Chunks = append(result.Chunks, v.Chunks...)
+	return result
 }
