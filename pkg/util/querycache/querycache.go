@@ -29,6 +29,7 @@ func NewQueryCache() *QueryCache {
 }
 
 func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue) {
+	return nil
 	qc.RLock()
 	defer func() {
 		qc.RUnlock()

@@ -510,6 +510,87 @@ func (cli *TestServerClient) RunTestPreparedStmtQueryCache(t *testing.T) {
 	})
 }
 
+func (cli *TestServerClient) RunTestPreparedStmtQueryCache2(t *testing.T) {
+	cli.RunTestsOnNewDB(t, nil, "query_cache_db", func(dbt *testkit.DBTestKit) {
+		dbt.MustExec("create table t1 (a int key, b int)")
+		dbt.GetDB().SetMaxOpenConns(1)
+
+		dbt.MustExec("begin")
+		for i := 0; i < 10010; i++ {
+			dbt.MustExec(fmt.Sprintf("insert into t1 values (%v,%v)", i, i))
+		}
+		dbt.MustExec("commit")
+
+		selectStmt1 := dbt.MustPrepare("select * from t1 where a = ?")
+		selectStmt2 := dbt.MustPrepare("select * from t1 where b = ?")
+		for i := 0; i < 10000; i++ {
+			if i%100 == 0 {
+				fmt.Printf("---------------%v---------\n", i)
+			}
+			rows := dbt.MustQueryPrepared(selectStmt1, i)
+			require.True(t, rows.Next())
+			var outA, outB int
+			err := rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i, outA)
+			require.Equal(t, i, outB)
+			require.NoError(t, rows.Close())
+
+			rows = dbt.MustQueryPrepared(selectStmt1, i)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i, outA)
+			require.Equal(t, i, outB)
+			require.NoError(t, rows.Close())
+
+			rows = dbt.MustQueryPrepared(selectStmt1, i+1)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i+1, outA)
+			require.Equal(t, i+1, outB)
+			require.NoError(t, rows.Close())
+
+			// Test read in txn.
+			dbt.MustExec("begin")
+			dbt.MustExec("update t1 set b=2 where a=1")
+			rows = dbt.MustQueryPrepared(selectStmt1, 1)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, 1, outA)
+			require.Equal(t, 2, outB)
+			require.NoError(t, rows.Close())
+			dbt.MustExec("rollback")
+
+			rows = dbt.MustQueryPrepared(selectStmt2, i)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i, outA)
+			require.Equal(t, i, outB)
+			require.NoError(t, rows.Close())
+
+			rows = dbt.MustQueryPrepared(selectStmt2, i)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i, outA)
+			require.Equal(t, i, outB)
+			require.NoError(t, rows.Close())
+
+			rows = dbt.MustQueryPrepared(selectStmt2, i+1)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i+1, outA)
+			require.Equal(t, i+1, outB)
+			require.NoError(t, rows.Close())
+		}
+	})
+}
+
 func (cli *TestServerClient) RunTestLoadDataWithSelectIntoOutfile(t *testing.T) {
 	cli.RunTestsOnNewDB(t, func(config *mysql.Config) {
 		config.AllowAllFiles = true
