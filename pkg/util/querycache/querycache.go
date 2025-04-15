@@ -3,6 +3,7 @@ package querycache
 import (
 	"encoding/binary"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/param"
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/types"
@@ -37,15 +38,18 @@ func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue)
 
 	v, ok := qc.queryMap.Get(key)
 	if !ok || v == nil {
+		metrics.QueryCacheCounter.WithLabelValues("miss")
 		return nil
 	}
 	if cv, ok := v.(*QueryCacheValue); ok {
 		value = cv.Clone()
+		metrics.QueryCacheCounter.WithLabelValues("hit")
 	}
 	return value
 }
 
 func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
+	metrics.QueryCacheCounter.WithLabelValues("add")
 	if key == nil || value == nil {
 		return
 	}
