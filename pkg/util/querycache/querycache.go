@@ -47,15 +47,26 @@ func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) 
 	if key == nil || value == nil {
 		return
 	}
+	k := &QueryCacheKey{
+		SchemaName: key.SchemaName,
+		Sql:        key.Sql,
+		Args:       key.Args,
+		Vars:       key.Vars,
+	}
+	k.Hash()
+	v := new(QueryCacheValue)
+	v.ReadTs = value.ReadTs
+	v.FieldTypes = value.FieldTypes
+	v.ResultFields = value.ResultFields
+	v.Chunks = value.Chunks
+
 	qc.Lock()
 	defer func() {
 		qc.Unlock()
 		failpoint.InjectCall("AfterAddQueryCache", key, value)
 	}()
 
-	k := *key
-	v := *value
-	qc.queryMap.Put(&k, &v)
+	qc.queryMap.Put(k, v)
 }
 
 func (qc *QueryCache) DeleteQueryCache() {
