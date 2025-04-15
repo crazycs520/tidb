@@ -32,7 +32,7 @@ func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue)
 	qc.RLock()
 	defer func() {
 		qc.RUnlock()
-		failpoint.InjectCall("AfterGetQueryCache", key, value)
+		//failpoint.InjectCall("AfterGetQueryCache", key, value)
 	}()
 
 	v, ok := qc.queryMap.Get(key)
