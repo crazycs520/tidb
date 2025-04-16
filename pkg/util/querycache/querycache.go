@@ -29,7 +29,7 @@ type ThreadSafeLRUCache struct {
 }
 
 func NewQueryCache() *QueryCache {
-	slots := make([]*ThreadSafeLRUCache, 500)
+	slots := make([]*ThreadSafeLRUCache, 100)
 	for i := range slots {
 		slots[i] = &ThreadSafeLRUCache{
 			queryMap: kvcache.NewSimpleLRUCache(1000, 0, 0),
