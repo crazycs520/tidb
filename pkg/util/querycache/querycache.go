@@ -85,8 +85,21 @@ func (c *ThreadSafeLRUCache) Get(k []byte) *QueryCacheValue {
 }
 
 func (c *ThreadSafeLRUCache) ReSize(capacity int) {
+	cache := make(map[string]*QueryCacheValue, capacity)
+	c.RLock()
+	for k, v := range c.cache {
+		if v.hit == 0 {
+			continue
+		}
+		cache[k] = v
+		if len(cache) >= capacity {
+			break
+		}
+	}
+	c.RUnlock()
+
 	c.Lock()
-	c.cache = make(map[string]*QueryCacheValue, capacity)
+	c.cache = cache
 	c.capacity = capacity
 	c.Unlock()
 }
