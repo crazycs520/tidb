@@ -2193,6 +2193,7 @@ func (s *session) GetResultFromQueryCache(stmtNode ast.StmtNode) sqlexec.RecordS
 					},
 				})
 				if result != nil {
+					sessVars.StmtCtx.DetachMemDiskTracker()
 					return &executor.CachedRecordSet{QueryCacheValue: result}
 				}
 			}
