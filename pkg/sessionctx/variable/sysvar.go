@@ -451,6 +451,11 @@ var defaultSysVars = []*SysVar{
 			oldConfig := config.GetGlobalConfig()
 			newConfig := *oldConfig
 			newConfig.Performance.QueryCache.Enabled = TiDBOptOn(val)
+			if newConfig.Performance.QueryCache.Enabled {
+				querycache.GlobalQueryCache.SetCapacity(newConfig.Performance.QueryCache.Capacity)
+			} else {
+				querycache.GlobalQueryCache.SetCapacity(0)
+			}
 			config.StoreGlobalConfig(&newConfig)
 			return nil
 		},
