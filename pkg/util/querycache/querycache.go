@@ -20,7 +20,7 @@ import (
 var GlobalQueryCache = NewQueryCache()
 
 type QueryCache struct {
-	slots []ThreadSafeLRUCache
+	slots []*ThreadSafeLRUCache
 }
 
 type ThreadSafeLRUCache struct {
@@ -29,9 +29,9 @@ type ThreadSafeLRUCache struct {
 }
 
 func NewQueryCache() *QueryCache {
-	slots := make([]ThreadSafeLRUCache, 500)
+	slots := make([]*ThreadSafeLRUCache, 500)
 	for i := range slots {
-		slots[i] = ThreadSafeLRUCache{
+		slots[i] = &ThreadSafeLRUCache{
 			queryMap: kvcache.NewSimpleLRUCache(1000, 0, 0),
 		}
 	}
@@ -44,15 +44,14 @@ func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue)
 	hasher := fnv.New64()
 	hasher.Write(key.Hash())
 	idx := int(hasher.Sum64() % uint64(len(qc.slots)))
-	cache := qc.slots[idx]
 
-	cache.Lock()
+	qc.slots[idx].Lock()
 	defer func() {
-		cache.Unlock()
-		//failpoint.InjectCall("AfterGetQueryCache", key, value)
+		qc.slots[idx].Unlock()
+		failpoint.InjectCall("AfterGetQueryCache", key, value)
 	}()
 
-	v, ok := cache.queryMap.Get(key)
+	v, ok := qc.slots[idx].queryMap.Get(key)
 	if !ok || v == nil {
 		metrics.QueryCacheCounter.WithLabelValues("miss").Inc()
 		return nil
@@ -67,14 +66,13 @@ func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) 
 	hasher := fnv.New64()
 	hasher.Write(key.Hash())
 	idx := int(hasher.Sum64() % uint64(len(qc.slots)))
-	cache := qc.slots[idx]
 
-	cache.Lock()
+	qc.slots[idx].Lock()
 	defer func() {
-		cache.Unlock()
+		qc.slots[idx].Unlock()
 		failpoint.InjectCall("AfterAddQueryCache", key, value)
 	}()
-	cache.queryMap.Put(key, value)
+	qc.slots[idx].queryMap.Put(key, value)
 }
 
 func (qc *QueryCache) Len() int {
