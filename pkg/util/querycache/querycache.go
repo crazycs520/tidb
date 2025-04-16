@@ -60,6 +60,7 @@ func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) bool {
 
 func (c *ThreadSafeLRUCache) removeUseless() int {
 	deleted := 0
+	metrics.QueryCacheCounter.WithLabelValues("delete").Inc()
 	c.Lock()
 	for k, v := range c.cache {
 		if v.hit == 0 {
