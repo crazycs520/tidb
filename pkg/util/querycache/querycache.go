@@ -7,6 +7,7 @@ import (
 	"github.com/pingcap/tidb/pkg/param"
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/types"
+	"hash/fnv"
 	"sync"
 	"time"
 
@@ -19,25 +20,39 @@ import (
 var GlobalQueryCache = NewQueryCache()
 
 type QueryCache struct {
+	slots []ThreadSafeLRUCache
+}
+
+type ThreadSafeLRUCache struct {
 	sync.Mutex
 	queryMap *kvcache.SimpleLRUCache
 }
 
 func NewQueryCache() *QueryCache {
+	slots := make([]ThreadSafeLRUCache, 500)
+	for i := range slots {
+		slots[i] = ThreadSafeLRUCache{
+			queryMap: kvcache.NewSimpleLRUCache(1000, 0, 0),
+		}
+	}
 	return &QueryCache{
-		queryMap: kvcache.NewSimpleLRUCache(10000, 0, 0),
+		slots: slots,
 	}
 }
 
 func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue) {
-	key.Hash()
-	qc.Lock()
+	hasher := fnv.New64()
+	hasher.Write(key.Hash())
+	idx := int(hasher.Sum64() % uint64(len(qc.slots)))
+	cache := qc.slots[idx]
+
+	cache.Lock()
 	defer func() {
-		qc.Unlock()
+		cache.Unlock()
 		//failpoint.InjectCall("AfterGetQueryCache", key, value)
 	}()
 
-	v, ok := qc.queryMap.Get(key)
+	v, ok := cache.queryMap.Get(key)
 	if !ok || v == nil {
 		metrics.QueryCacheCounter.WithLabelValues("miss").Inc()
 		return nil
@@ -49,19 +64,26 @@ func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue)
 
 func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
 	metrics.QueryCacheCounter.WithLabelValues("add").Inc()
-	key.Hash()
-	qc.Lock()
+	hasher := fnv.New64()
+	hasher.Write(key.Hash())
+	idx := int(hasher.Sum64() % uint64(len(qc.slots)))
+	cache := qc.slots[idx]
+
+	cache.Lock()
 	defer func() {
-		qc.Unlock()
+		cache.Unlock()
 		failpoint.InjectCall("AfterAddQueryCache", key, value)
 	}()
-	qc.queryMap.Put(key, value)
+	cache.queryMap.Put(key, value)
 }
 
 func (qc *QueryCache) Len() int {
-	qc.Lock()
-	size := qc.queryMap.Size()
-	qc.Unlock()
+	size := 0
+	for i := range qc.slots {
+		qc.slots[i].Lock()
+		size += qc.slots[i].queryMap.Size()
+		qc.slots[i].Unlock()
+	}
 	return size
 }
 
