@@ -42,42 +42,18 @@ func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue)
 		metrics.QueryCacheCounter.WithLabelValues("miss").Inc()
 		return nil
 	}
-	if cv, ok := v.(*QueryCacheValue); ok {
-		value = cv.Clone()
-		metrics.QueryCacheCounter.WithLabelValues("hit").Inc()
-	}
+	value = v.(*QueryCacheValue).Clone()
 	return value
 }
 
 func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
-	metrics.QueryCacheCounter.WithLabelValues("add").Inc()
-	if key == nil || value == nil {
-		return
-	}
-	k := &QueryCacheKey{
-		SchemaName: key.SchemaName,
-		Sql:        key.Sql,
-		Args:       key.Args,
-		Vars:       key.Vars,
-	}
-	k.Hash()
-	v := new(QueryCacheValue)
-	v.ReadTs = value.ReadTs
-	v.FieldTypes = value.FieldTypes
-	v.ResultFields = value.ResultFields
-	v.Chunks = value.Chunks
-
+	key.Hash()
 	qc.Lock()
 	defer func() {
 		qc.Unlock()
 		failpoint.InjectCall("AfterAddQueryCache", key, value)
 	}()
-
-	_, ok := qc.queryMap.Get(k)
-	if ok {
-		return
-	}
-	qc.queryMap.Put(k, v)
+	qc.queryMap.Put(key, value)
 }
 
 func (qc *QueryCache) Len() int {

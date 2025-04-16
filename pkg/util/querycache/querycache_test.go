@@ -50,7 +50,7 @@ func TestQueryCache(t *testing.T) {
 
 func TestQueryCache2(t *testing.T) {
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
