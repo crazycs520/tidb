@@ -764,7 +764,7 @@ type Performance struct {
 type QueryCache struct {
 	Enabled      bool   `toml:"enabled" json:"enabled"`
 	Capacity     uint   `toml:"capacity" json:"capacity"`
-	MaxQuerySize uint64 `toml:"max-query-size" json:"capacity"`
+	MaxQuerySize uint64 `toml:"max-query-size" json:"max-query-size"`
 }
 
 // PlanCache is the PlanCache section of the config.

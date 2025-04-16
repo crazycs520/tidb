@@ -3,6 +3,7 @@ package querycache
 import (
 	"encoding/binary"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/param"
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
@@ -20,7 +21,8 @@ import (
 var GlobalQueryCache = NewQueryCache()
 
 type QueryCache struct {
-	slots []*ThreadSafeLRUCache
+	slots    []*ThreadSafeLRUCache
+	capacity uint
 }
 
 type ThreadSafeLRUCache struct {
@@ -29,14 +31,27 @@ type ThreadSafeLRUCache struct {
 }
 
 func NewQueryCache() *QueryCache {
+	capacity := config.GetGlobalConfig().Performance.QueryCache.Capacity
 	slots := make([]*ThreadSafeLRUCache, 100)
+	size := (capacity / 100) + 1
 	for i := range slots {
 		slots[i] = &ThreadSafeLRUCache{
-			queryMap: kvcache.NewSimpleLRUCache(1000, 0, 0),
+			queryMap: kvcache.NewSimpleLRUCache(size, 0, 0),
 		}
 	}
 	return &QueryCache{
-		slots: slots,
+		slots:    slots,
+		capacity: capacity,
+	}
+}
+
+func (qc *QueryCache) SetCapacity(capacity uint) {
+	qc.capacity = capacity
+	size := (capacity / uint(len(qc.slots))) + 1
+	for i := range qc.slots {
+		qc.slots[i].Lock()
+		qc.slots[i].queryMap = kvcache.NewSimpleLRUCache(size, 0, 0)
+		qc.slots[i].Unlock()
 	}
 }
 

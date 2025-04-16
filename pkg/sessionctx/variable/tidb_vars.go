@@ -284,6 +284,9 @@ const (
 	// TiDBExplicitRequestSourceType indicates the source of the request, it's a complement of RequestSourceType.
 	// The value maybe "lightning", "br", "dumpling" etc.
 	TiDBExplicitRequestSourceType = "tidb_request_source_type"
+
+	TiDBEnableQueryCache = "tidb_enable_query_cache"
+	TiDBQueryCacheCount  = "tidb_query_cache_count"
 )
 
 // TiDB system variable names that both in session and global scope.
