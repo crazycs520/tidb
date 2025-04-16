@@ -75,7 +75,9 @@ func (c *ThreadSafeLRUCache) Get(k []byte) *QueryCacheValue {
 	c.RLock()
 	v := c.cache[string(k)]
 	c.RUnlock()
-	atomic.AddInt64(&v.hit, 1)
+	if v != nil {
+		atomic.AddInt64(&v.hit, 1)
+	}
 	return v
 }
 
