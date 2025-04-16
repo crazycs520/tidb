@@ -11,6 +11,7 @@ import (
 	"hash/fnv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -29,11 +30,23 @@ type ThreadSafeLRUCache struct {
 	sync.RWMutex
 	cache    map[string]*QueryCacheValue
 	capacity int
+
+	miss int64
+	full bool
 }
 
 func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) bool {
 	if len(c.cache) >= c.capacity {
-		return false
+		atomic.AddInt64(&c.miss, 1)
+		if atomic.LoadInt64(&c.miss)%10000 == 0 && !c.full {
+			deleted := c.removeUseless()
+			if deleted == 0 {
+				c.full = true
+				return false
+			}
+		} else {
+			return false
+		}
 	}
 	succ := false
 	c.Lock()
@@ -45,10 +58,24 @@ func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) bool {
 	return succ
 }
 
+func (c *ThreadSafeLRUCache) removeUseless() int {
+	deleted := 0
+	c.Lock()
+	for k, v := range c.cache {
+		if v.hit == 0 {
+			deleted++
+			delete(c.cache, k)
+		}
+	}
+	c.Unlock()
+	return deleted
+}
+
 func (c *ThreadSafeLRUCache) Get(k []byte) *QueryCacheValue {
 	c.RLock()
 	v := c.cache[string(k)]
 	c.RUnlock()
+	atomic.AddInt64(&v.hit, 1)
 	return v
 }
 
@@ -205,6 +232,8 @@ type QueryCacheValue struct {
 	ResultFields []*resolve.ResultField
 	FieldTypes   []*types.FieldType
 	Chunks       []*chunk.Chunk
+
+	hit int64
 }
 
 func (v *QueryCacheValue) Clone() *QueryCacheValue {
