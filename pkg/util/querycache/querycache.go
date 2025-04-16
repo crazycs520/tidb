@@ -42,11 +42,13 @@ func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue)
 		metrics.QueryCacheCounter.WithLabelValues("miss").Inc()
 		return nil
 	}
+	metrics.QueryCacheCounter.WithLabelValues("hit").Inc()
 	value = v.(*QueryCacheValue).Clone()
 	return value
 }
 
 func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
+	metrics.QueryCacheCounter.WithLabelValues("add").Inc()
 	key.Hash()
 	qc.Lock()
 	defer func() {
