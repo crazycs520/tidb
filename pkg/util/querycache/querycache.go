@@ -31,15 +31,18 @@ type ThreadSafeLRUCache struct {
 	capacity int
 }
 
-func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) {
+func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) bool {
 	if len(c.cache) >= c.capacity {
-		return
+		return false
 	}
+	succ := false
 	c.Lock()
 	if len(c.cache) < c.capacity {
 		c.cache[string(k)] = v
+		succ = true
 	}
 	c.Unlock()
+	return succ
 }
 
 func (c *ThreadSafeLRUCache) Get(k []byte) *QueryCacheValue {
@@ -110,15 +113,17 @@ func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) 
 	if !strings.Contains(key.Sql, "sbtest") {
 		return
 	}
-	metrics.QueryCacheCounter.WithLabelValues("add").Inc()
 	hasher := fnv.New64()
 	hasher.Write(key.Hash())
 	idx := int(hasher.Sum64() % uint64(len(qc.slots)))
 
 	defer func() {
-		failpoint.InjectCall("AfterAddQueryCache", key, value)
 	}()
-	qc.slots[idx].Add(key.Hash(), value)
+	succ := qc.slots[idx].Add(key.Hash(), value)
+	if succ {
+		metrics.QueryCacheCounter.WithLabelValues("add").Inc()
+		failpoint.InjectCall("AfterAddQueryCache", key, value)
+	}
 }
 
 func (qc *QueryCache) Len() int {
