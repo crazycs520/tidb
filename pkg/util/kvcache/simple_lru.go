@@ -126,6 +126,8 @@ func (l *SimpleLRUCache) Put(key Key, value Value) {
 				}
 				if _, ok := lru.Value.(*cacheEntry); !ok {
 					logutil.BgLogger().Warn("value is not cache", zap.Any("value", lru.Value), zap.Bool("is-nil", lru.Value == nil), zap.Any("k", lru),
+						zap.Any("prev-node", lru.Prev()),
+						zap.Any("next-node", lru.Next()),
 						zap.Int("map-len", len(l.elements)),
 						zap.Int("list-len", l.cache.Len()),
 						zap.Int("before-remove-list-len", beforeRemoveLen),

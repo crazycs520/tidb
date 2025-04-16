@@ -19,7 +19,7 @@ import (
 var GlobalQueryCache = NewQueryCache()
 
 type QueryCache struct {
-	sync.RWMutex
+	sync.Mutex
 	queryMap *kvcache.SimpleLRUCache
 }
 
@@ -30,9 +30,10 @@ func NewQueryCache() *QueryCache {
 }
 
 func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue) {
-	qc.RLock()
+	key.Hash()
+	qc.Lock()
 	defer func() {
-		qc.RUnlock()
+		qc.Unlock()
 		//failpoint.InjectCall("AfterGetQueryCache", key, value)
 	}()
 
@@ -72,7 +73,18 @@ func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) 
 		failpoint.InjectCall("AfterAddQueryCache", key, value)
 	}()
 
+	_, ok := qc.queryMap.Get(k)
+	if ok {
+		return
+	}
 	qc.queryMap.Put(k, v)
+}
+
+func (qc *QueryCache) Len() int {
+	qc.Lock()
+	size := qc.queryMap.Size()
+	qc.Unlock()
+	return size
 }
 
 func (qc *QueryCache) DeleteQueryCache() {

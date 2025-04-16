@@ -1,6 +1,10 @@
 package querycache
 
 import (
+	"fmt"
+	"github.com/stretchr/testify/require"
+	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,4 +46,32 @@ func TestQueryCache(t *testing.T) {
 	q1.hash = nil
 	value = GlobalQueryCache.GetQueryCache(q1)
 	assert.Nil(t, value)
+}
+
+func TestQueryCache2(t *testing.T) {
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 1000000; j++ {
+				k := &QueryCacheKey{
+					Sql: fmt.Sprintf("id_%v", rand.Intn(100000)),
+				}
+
+				v := GlobalQueryCache.GetQueryCache(k)
+				if v != nil {
+					continue
+				}
+
+				v = &QueryCacheValue{
+					ReadTs: 2,
+				}
+				GlobalQueryCache.AddQueryCache(k, v)
+				require.Less(t, GlobalQueryCache.Len(), 10000+1)
+			}
+		}(i)
+	}
+
+	wg.Wait()
 }
