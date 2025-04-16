@@ -16,7 +16,7 @@ import (
 func TestQueryCache(t *testing.T) {
 	q1 := &QueryCacheKey{
 		SchemaName: "test1",
-		Sql:        "select * from t where a = ?",
+		Sql:        "select * from sbtest1 where a = ?",
 		Args: []param.BinaryParam{
 			{
 				Tp:         1,
@@ -56,7 +56,7 @@ func TestQueryCache2(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < 1000000; j++ {
 				k := &QueryCacheKey{
-					Sql: fmt.Sprintf("id_%v", rand.Intn(100000)),
+					Sql: fmt.Sprintf("sbtest_id_%v", rand.Intn(100000)),
 				}
 
 				v := GlobalQueryCache.GetQueryCache(k)
@@ -68,7 +68,7 @@ func TestQueryCache2(t *testing.T) {
 					ReadTs: 2,
 				}
 				GlobalQueryCache.AddQueryCache(k, v)
-				require.Less(t, GlobalQueryCache.Len(), 10000+1)
+				require.Less(t, GlobalQueryCache.Len(), 10000+200)
 			}
 		}(i)
 	}

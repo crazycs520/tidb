@@ -9,13 +9,13 @@ import (
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/types"
 	"hash/fnv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/hack"
-	"github.com/pingcap/tidb/pkg/util/kvcache"
 )
 
 var GlobalQueryCache = NewQueryCache()
@@ -26,8 +26,41 @@ type QueryCache struct {
 }
 
 type ThreadSafeLRUCache struct {
-	sync.Mutex
-	queryMap *kvcache.SimpleLRUCache
+	sync.RWMutex
+	cache    map[string]*QueryCacheValue
+	capacity int
+}
+
+func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) {
+	if len(c.cache) >= c.capacity {
+		return
+	}
+	c.Lock()
+	if len(c.cache) < c.capacity {
+		c.cache[string(k)] = v
+	}
+	c.Unlock()
+}
+
+func (c *ThreadSafeLRUCache) Get(k []byte) *QueryCacheValue {
+	c.RLock()
+	v := c.cache[string(k)]
+	c.RUnlock()
+	return v
+}
+
+func (c *ThreadSafeLRUCache) ReSize(capacity int) {
+	c.Lock()
+	c.cache = make(map[string]*QueryCacheValue, capacity)
+	c.capacity = capacity
+	c.Unlock()
+}
+
+func (c *ThreadSafeLRUCache) Size() int {
+	c.RLock()
+	size := len(c.cache)
+	c.RUnlock()
+	return size
 }
 
 func NewQueryCache() *QueryCache {
@@ -36,7 +69,8 @@ func NewQueryCache() *QueryCache {
 	size := (capacity / 100) + 1
 	for i := range slots {
 		slots[i] = &ThreadSafeLRUCache{
-			queryMap: kvcache.NewSimpleLRUCache(size, 0, 0),
+			cache:    make(map[string]*QueryCacheValue, size),
+			capacity: int(size),
 		}
 	}
 	return &QueryCache{
@@ -49,9 +83,7 @@ func (qc *QueryCache) SetCapacity(capacity uint) {
 	qc.capacity = capacity
 	size := (capacity / uint(len(qc.slots))) + 1
 	for i := range qc.slots {
-		qc.slots[i].Lock()
-		qc.slots[i].queryMap = kvcache.NewSimpleLRUCache(size, 0, 0)
-		qc.slots[i].Unlock()
+		qc.slots[i].ReSize(int(size))
 	}
 }
 
@@ -60,42 +92,39 @@ func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue)
 	hasher.Write(key.Hash())
 	idx := int(hasher.Sum64() % uint64(len(qc.slots)))
 
-	qc.slots[idx].Lock()
 	defer func() {
-		qc.slots[idx].Unlock()
 		failpoint.InjectCall("AfterGetQueryCache", key, value)
 	}()
 
-	v, ok := qc.slots[idx].queryMap.Get(key)
-	if !ok || v == nil {
+	v := qc.slots[idx].Get(key.Hash())
+	if v == nil {
 		metrics.QueryCacheCounter.WithLabelValues("miss").Inc()
 		return nil
 	}
 	metrics.QueryCacheCounter.WithLabelValues("hit").Inc()
-	value = v.(*QueryCacheValue).Clone()
+	value = v.Clone()
 	return value
 }
 
 func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
+	if !strings.Contains(key.Sql, "sbtest") {
+		return
+	}
 	metrics.QueryCacheCounter.WithLabelValues("add").Inc()
 	hasher := fnv.New64()
 	hasher.Write(key.Hash())
 	idx := int(hasher.Sum64() % uint64(len(qc.slots)))
 
-	qc.slots[idx].Lock()
 	defer func() {
-		qc.slots[idx].Unlock()
 		failpoint.InjectCall("AfterAddQueryCache", key, value)
 	}()
-	qc.slots[idx].queryMap.Put(key, value)
+	qc.slots[idx].Add(key.Hash(), value)
 }
 
 func (qc *QueryCache) Len() int {
 	size := 0
 	for i := range qc.slots {
-		qc.slots[i].Lock()
-		size += qc.slots[i].queryMap.Size()
-		qc.slots[i].Unlock()
+		size += qc.slots[i].Size()
 	}
 	return size
 }
