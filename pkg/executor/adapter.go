@@ -69,6 +69,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/hint"
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/plancodec"
+	"github.com/pingcap/tidb/pkg/util/querycache"
 	"github.com/pingcap/tidb/pkg/util/redact"
 	"github.com/pingcap/tidb/pkg/util/replayer"
 	"github.com/pingcap/tidb/pkg/util/sqlexec"
@@ -103,6 +104,10 @@ type recordSet struct {
 	lastErrs   []error
 	txnStartTS uint64
 	once       sync.Once
+
+	cacheable   bool
+	cacheResult *querycache.QueryCacheValue
+	cacheSize   uint64
 }
 
 func (a *recordSet) Fields() []*resolve.ResultField {
@@ -184,6 +189,26 @@ func (a *recordSet) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 	if a.stmt != nil {
 		a.stmt.Ctx.GetSessionVars().StmtCtx.AddFoundRows(uint64(numRows))
 	}
+
+	if a.cacheable {
+		size := uint64(req.MemoryUsage())
+		if a.cacheSize+size > config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize {
+			a.cacheable = false
+			a.cacheResult = nil
+		} else {
+			if a.cacheResult == nil {
+				a.cacheResult = &querycache.QueryCacheValue{
+					ReadTs:       a.txnStartTS,
+					ResultFields: a.Fields(),
+					FieldTypes:   a.executor.RetFieldTypes(),
+				}
+			}
+			chk := req.CopyConstructSel()
+			a.cacheResult.Chunks = append(a.cacheResult.Chunks, chk)
+			a.cacheSize += size
+		}
+	}
+
 	return nil
 }
 
@@ -223,12 +248,35 @@ func (a *recordSet) Finish() error {
 }
 
 func (a *recordSet) Close() error {
+	lastErr := errors.Join(a.lastErrs...)
+	if lastErr == nil && config.GetGlobalConfig().Performance.QueryCache.Enabled {
+		a.AddQueryCache()
+	}
+
 	err := a.Finish()
 	if err != nil {
 		logutil.BgLogger().Error("close recordSet error", zap.Error(err))
 	}
-	a.stmt.CloseRecordSet(a.txnStartTS, errors.Join(a.lastErrs...))
+	a.stmt.CloseRecordSet(a.txnStartTS, lastErr)
+
 	return err
+}
+
+func (a *recordSet) AddQueryCache() {
+	if !a.cacheable || a.cacheResult == nil {
+		return
+	}
+	sessVars := a.stmt.Ctx.GetSessionVars()
+	key := querycache.QueryCacheKey{
+		SchemaName: sessVars.CurrentDB,
+		Sql:        sessVars.StmtCtx.OriginalSQL,
+		Args:       sessVars.PreparedStmtParams,
+		Vars: querycache.QueryVars{
+			TimeZone: sessVars.TimeZone,
+			SQLMode:  sessVars.SQLMode,
+		},
+	}
+	querycache.GlobalQueryCache.AddQueryCache(&key, a.cacheResult)
 }
 
 // OnFetchReturned implements commandLifeCycle#OnFetchReturned
@@ -248,6 +296,37 @@ func (a *recordSet) TryDetach() (sqlexec.RecordSet, bool, error) {
 // GetExecutor4Test exports the internal executor for test purpose.
 func (a *recordSet) GetExecutor4Test() any {
 	return a.executor
+}
+
+type CachedRecordSet struct {
+	*querycache.QueryCacheValue
+	idx int
+}
+
+func (c *CachedRecordSet) Fields() []*resolve.ResultField {
+	return c.ResultFields
+}
+
+func (c *CachedRecordSet) Next(ctx context.Context, req *chunk.Chunk) error {
+	req.Reset()
+	if c.idx < len(c.Chunks) {
+		chk := c.Chunks[c.idx]
+		req.Append(chk, 0, chk.NumRows())
+		c.idx++
+	}
+	return nil
+}
+
+func (c *CachedRecordSet) NewChunk(alloc chunk.Allocator) *chunk.Chunk {
+	if alloc == nil {
+		return chunk.New(c.FieldTypes, 32, 1024)
+	}
+
+	return alloc.Alloc(c.FieldTypes, 32, 1024)
+}
+
+func (c CachedRecordSet) Close() error {
+	return nil
 }
 
 // ExecStmt implements the sqlexec.Statement interface, it builds a planner.Plan to an sqlexec.Statement.
@@ -368,11 +447,18 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 		}
 	}
 
+	cacheable := false
+	txn, _ := sctx.Txn(false)
+	if err == nil {
+		cacheable = StmtQueryCacheable(a.Ctx, txn, a.StmtNode)
+	}
+
 	return &recordSet{
 		executor:   executor,
 		schema:     executor.Schema(),
 		stmt:       a,
 		txnStartTS: startTs,
+		cacheable:  cacheable,
 	}, nil
 }
 
@@ -627,7 +713,33 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		schema:     e.Schema(),
 		stmt:       a,
 		txnStartTS: txnStartTS,
+		cacheable:  StmtQueryCacheable(a.Ctx, txn, a.StmtNode),
 	}, nil
+}
+
+func StmtQueryCacheable(ctx sessionctx.Context, txn kv.Transaction, stmt ast.StmtNode) bool {
+	if !config.GetGlobalConfig().Performance.QueryCache.Enabled {
+		return false
+	}
+	if txn.Valid() && !txn.IsReadOnly() {
+		return false
+	}
+	if staleread.IsStmtStaleness(ctx) {
+		return false
+	}
+	if ctx.GetSessionVars().InRestrictedSQL {
+		return false
+	}
+	if execStmt, ok := stmt.(*ast.ExecuteStmt); ok {
+		prepareStmt, err := plannercore.GetPreparedStmt(execStmt, ctx.GetSessionVars())
+		if err == nil && prepareStmt.PreparedAst != nil {
+			stmt = prepareStmt.PreparedAst.Stmt
+		}
+	}
+	if !ast.IsReadOnlySelect(stmt) {
+		return false
+	}
+	return true
 }
 
 func (a *ExecStmt) inheritContextFromExecuteStmt() {

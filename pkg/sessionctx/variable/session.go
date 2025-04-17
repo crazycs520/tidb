@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/metrics"
+	"github.com/pingcap/tidb/pkg/param"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/auth"
@@ -809,8 +810,9 @@ type SessionVars struct {
 	// preparedStmtID is id of prepared statement.
 	preparedStmtID uint32
 	// Parameter values for plan cache.
-	PlanCacheParams   *PlanCacheParamList
-	LastUpdateTime4PC types.Time
+	PlanCacheParams    *PlanCacheParamList
+	PreparedStmtParams []param.BinaryParam
+	LastUpdateTime4PC  types.Time
 
 	// ActiveRoles stores active roles for current user
 	ActiveRoles []*auth.RoleIdentity

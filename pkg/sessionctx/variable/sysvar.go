@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	goerr "errors"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/util/querycache"
 	"math"
 	"runtime"
 	"strconv"
@@ -445,6 +446,39 @@ var defaultSysVars = []*SysVar{
 	}, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
 		return strconv.FormatInt(int64(GlobalLogMaxDays.Load()), 10), nil
 	}},
+	{Scope: ScopeInstance, Name: TiDBEnableQueryCache, Value: BoolToOnOff(config.GetGlobalConfig().Performance.QueryCache.Enabled),
+		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+			oldConfig := config.GetGlobalConfig()
+			newConfig := *oldConfig
+			newConfig.Performance.QueryCache.Enabled = TiDBOptOn(val)
+			if newConfig.Performance.QueryCache.Enabled {
+				querycache.GlobalQueryCache.SetCapacity(newConfig.Performance.QueryCache.Capacity)
+			} else {
+				querycache.GlobalQueryCache.SetCapacity(0)
+			}
+			config.StoreGlobalConfig(&newConfig)
+			return nil
+		},
+		GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
+			return BoolToOnOff(config.GetGlobalConfig().Performance.QueryCache.Enabled), nil
+		}},
+	{Scope: ScopeInstance, Name: TiDBQueryCacheCount, Value: strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.Capacity)),
+		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+			v, err := strconv.Atoi(val)
+			if err != nil {
+				return err
+			}
+			oldConfig := config.GetGlobalConfig()
+			newConfig := *oldConfig
+			newConfig.Performance.QueryCache.Capacity = uint(v)
+			config.StoreGlobalConfig(&newConfig)
+			querycache.GlobalQueryCache.SetCapacity(uint(v))
+			return nil
+		},
+		GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
+			return strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.Capacity)), nil
+		}},
+
 	{Scope: ScopeInstance, Name: TiDBConfig, Value: "", ReadOnly: true, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
 		return config.GetJSONConfig()
 	}},

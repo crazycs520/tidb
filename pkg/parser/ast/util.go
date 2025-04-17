@@ -70,6 +70,22 @@ func IsReadOnly(node Node) bool {
 	}
 }
 
+func IsReadOnlySelect(node Node) bool {
+	switch st := node.(type) {
+	case *SelectStmt:
+		if st.LockInfo != nil {
+			return false
+		}
+		checker := readOnlyChecker{
+			readOnly: true,
+		}
+		node.Accept(&checker)
+		return checker.readOnly
+	default:
+		return false
+	}
+}
+
 // readOnlyChecker checks whether a query's ast is readonly, if it satisfied
 // 1. selectstmt;
 // 2. need not to set var;

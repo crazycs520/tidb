@@ -93,6 +93,7 @@ import (
 	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/sessiontxn"
+	"github.com/pingcap/tidb/pkg/sessiontxn/staleread"
 	"github.com/pingcap/tidb/pkg/statistics/handle/syncload"
 	"github.com/pingcap/tidb/pkg/statistics/handle/usage"
 	"github.com/pingcap/tidb/pkg/statistics/handle/usage/indexusage"
@@ -114,6 +115,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/logutil/consistency"
 	"github.com/pingcap/tidb/pkg/util/memory"
+	"github.com/pingcap/tidb/pkg/util/querycache"
 	rangerctx "github.com/pingcap/tidb/pkg/util/ranger/context"
 	"github.com/pingcap/tidb/pkg/util/redact"
 	"github.com/pingcap/tidb/pkg/util/sem"
@@ -2020,6 +2022,12 @@ func (s *session) ExecuteStmt(ctx context.Context, stmtNode ast.StmtNode) (sqlex
 	if err := executor.ResetContextOfStmt(s, stmtNode); err != nil {
 		return nil, err
 	}
+
+	rs := s.GetResultFromQueryCache(stmtNode)
+	if rs != nil {
+		return rs, nil
+	}
+
 	if execStmt, ok := stmtNode.(*ast.ExecuteStmt); ok {
 		if binParam, ok := execStmt.BinaryArgs.([]param.BinaryParam); ok {
 			args, err := expression.ExecBinaryParam(s.GetSessionVars().StmtCtx.TypeCtx(), binParam)
@@ -2027,6 +2035,7 @@ func (s *session) ExecuteStmt(ctx context.Context, stmtNode ast.StmtNode) (sqlex
 				return nil, err
 			}
 			execStmt.BinaryArgs = args
+			sessVars.PreparedStmtParams = binParam
 		}
 	}
 
@@ -2167,6 +2176,57 @@ func (s *session) ExecuteStmt(ctx context.Context, stmtNode ast.StmtNode) (sqlex
 		return recordSet, err
 	}
 	return recordSet, nil
+}
+
+func (s *session) GetResultFromQueryCache(stmtNode ast.StmtNode) sqlexec.RecordSet {
+	if execStmt, ok := stmtNode.(*ast.ExecuteStmt); ok {
+		if binParam, ok := execStmt.BinaryArgs.([]param.BinaryParam); ok {
+			if StmtQueryCacheable(s, execStmt) {
+				sessVars := s.sessionVars
+				result := querycache.GlobalQueryCache.GetQueryCache(&querycache.QueryCacheKey{
+					SchemaName: sessVars.CurrentDB,
+					Sql:        sessVars.StmtCtx.OriginalSQL,
+					Args:       binParam,
+					Vars: querycache.QueryVars{
+						TimeZone: sessVars.TimeZone,
+						SQLMode:  sessVars.SQLMode,
+					},
+				})
+				if result != nil {
+					sessVars.StmtCtx.DetachMemDiskTracker()
+					return &executor.CachedRecordSet{QueryCacheValue: result}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func StmtQueryCacheable(ctx sessionctx.Context, stmt ast.StmtNode) bool {
+	if !config.GetGlobalConfig().Performance.QueryCache.Enabled {
+		return false
+	}
+	if staleread.IsStmtStaleness(ctx) {
+		return false
+	}
+	txn, err := ctx.Txn(false)
+	if err != nil {
+		return false
+	}
+	if txn.Valid() && !txn.IsReadOnly() {
+		return false
+	}
+
+	if execStmt, ok := stmt.(*ast.ExecuteStmt); ok {
+		prepareStmt, err := plannercore.GetPreparedStmt(execStmt, ctx.GetSessionVars())
+		if err == nil && prepareStmt.PreparedAst != nil {
+			stmt = prepareStmt.PreparedAst.Stmt
+		}
+	}
+	if !ast.IsReadOnlySelect(stmt) {
+		return false
+	}
+	return true
 }
 
 func (s *session) GetSQLExecutor() sqlexec.SQLExecutor {

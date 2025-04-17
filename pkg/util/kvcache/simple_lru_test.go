@@ -16,7 +16,9 @@ package kvcache
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/util/memory"
@@ -43,6 +45,37 @@ func newMockHashKey(key int64) *mockCacheKey {
 	return &mockCacheKey{
 		key: key,
 	}
+}
+
+func TestSimpleLRUCache2(t *testing.T) {
+	var wg sync.WaitGroup
+	var rw sync.RWMutex
+	lru := NewSimpleLRUCache(10000, 0, 0)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 1000000; j++ {
+				k := newMockHashKey(int64(rand.Intn(100000)))
+				v := k.key
+
+				rw.Lock()
+				_, ok := lru.Get(k)
+				rw.Unlock()
+				if ok {
+					continue
+				}
+
+				rw.Lock()
+				lru.Put(k, v)
+				size := lru.Size()
+				rw.Unlock()
+				require.Less(t, size, 10000+1)
+			}
+		}(i)
+	}
+
+	wg.Wait()
 }
 
 func TestPut(t *testing.T) {

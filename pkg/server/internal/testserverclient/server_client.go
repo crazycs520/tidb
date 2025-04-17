@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -50,6 +51,7 @@ import (
 	"github.com/pingcap/tidb/pkg/testkit/testenv"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 	"github.com/pingcap/tidb/pkg/util"
+	"github.com/pingcap/tidb/pkg/util/querycache"
 	"github.com/pingcap/tidb/pkg/util/versioninfo"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
@@ -381,6 +383,211 @@ func (cli *TestServerClient) RunTestPreparedTimestamp(t *testing.T) {
 		require.Equal(t, "23:59:59", outB)
 		require.NoError(t, rows.Close())
 		require.NoError(t, selectStmt.Close())
+	})
+}
+
+func (cli *TestServerClient) RunTestPreparedStmtQueryCache(t *testing.T) {
+	cli.RunTestsOnNewDB(t, nil, "query_cache_db", func(dbt *testkit.DBTestKit) {
+		dbt.MustExec("create table t1 (a int key, b int)")
+		dbt.MustExec("insert into t1 values (1,1), (2,2)")
+		dbt.GetDB().SetMaxOpenConns(1)
+
+		getCacheCnt := atomic.Int64{}
+		hitCacheCnt := atomic.Int64{}
+		addCacheCnt := atomic.Int64{}
+		testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/util/querycache/AfterGetQueryCache", func(key *querycache.QueryCacheKey, value *querycache.QueryCacheValue) {
+			if strings.Contains(key.Sql, "select * from t1 where") {
+				getCacheCnt.Add(1)
+				if value != nil {
+					hitCacheCnt.Add(1)
+				}
+			}
+		})
+		testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/util/querycache/AfterAddQueryCache", func(key *querycache.QueryCacheKey, value *querycache.QueryCacheValue) {
+			if strings.Contains(key.Sql, "select * from t1 where") {
+				addCacheCnt.Add(1)
+			}
+		})
+
+		resetCounterFn := func() {
+			getCacheCnt.Store(0)
+			hitCacheCnt.Store(0)
+			addCacheCnt.Store(0)
+		}
+
+		selectStmt := dbt.MustPrepare("select * from t1 where a = ?")
+		rows := dbt.MustQueryPrepared(selectStmt, 1)
+		require.True(t, rows.Next())
+		var outA, outB int
+		err := rows.Scan(&outA, &outB)
+		require.NoError(t, err)
+		require.Equal(t, 1, outA)
+		require.Equal(t, 1, outB)
+		require.NoError(t, rows.Close())
+		require.Equal(t, int64(1), getCacheCnt.Load())
+		require.Equal(t, int64(0), hitCacheCnt.Load())
+		require.Equal(t, int64(1), addCacheCnt.Load())
+
+		resetCounterFn()
+		rows = dbt.MustQueryPrepared(selectStmt, 1)
+		require.True(t, rows.Next())
+		err = rows.Scan(&outA, &outB)
+		require.NoError(t, err)
+		require.Equal(t, 1, outA)
+		require.Equal(t, 1, outB)
+		require.NoError(t, rows.Close())
+		require.Equal(t, int64(1), getCacheCnt.Load())
+		require.Equal(t, int64(1), hitCacheCnt.Load())
+		require.Equal(t, int64(0), addCacheCnt.Load())
+
+		resetCounterFn()
+		rows = dbt.MustQueryPrepared(selectStmt, 2)
+		require.True(t, rows.Next())
+		err = rows.Scan(&outA, &outB)
+		require.NoError(t, err)
+		require.Equal(t, 2, outA)
+		require.Equal(t, 2, outB)
+		require.NoError(t, rows.Close())
+		require.Equal(t, int64(1), getCacheCnt.Load())
+		require.Equal(t, int64(0), hitCacheCnt.Load())
+		require.Equal(t, int64(1), addCacheCnt.Load())
+
+		// Test read in txn.
+		resetCounterFn()
+		dbt.MustExec("begin")
+		dbt.MustExec("update t1 set b=2 where a=1")
+		rows = dbt.MustQueryPrepared(selectStmt, 1)
+		require.True(t, rows.Next())
+		err = rows.Scan(&outA, &outB)
+		require.NoError(t, err)
+		require.Equal(t, 1, outA)
+		require.Equal(t, 2, outB)
+		require.NoError(t, rows.Close())
+		dbt.MustExec("rollback")
+		require.NoError(t, selectStmt.Close())
+		require.Equal(t, int64(0), getCacheCnt.Load())
+		require.Equal(t, int64(0), hitCacheCnt.Load())
+		require.Equal(t, int64(0), addCacheCnt.Load())
+
+		resetCounterFn()
+		selectStmt = dbt.MustPrepare("select * from t1 where b = ?")
+		rows = dbt.MustQueryPrepared(selectStmt, 1)
+		require.True(t, rows.Next())
+		err = rows.Scan(&outA, &outB)
+		require.NoError(t, err)
+		require.Equal(t, 1, outA)
+		require.Equal(t, 1, outB)
+		require.NoError(t, rows.Close())
+		require.Equal(t, int64(1), getCacheCnt.Load())
+		require.Equal(t, int64(0), hitCacheCnt.Load())
+		require.Equal(t, int64(1), addCacheCnt.Load())
+
+		resetCounterFn()
+		rows = dbt.MustQueryPrepared(selectStmt, 1)
+		require.True(t, rows.Next())
+		err = rows.Scan(&outA, &outB)
+		require.NoError(t, err)
+		require.Equal(t, 1, outA)
+		require.Equal(t, 1, outB)
+		require.NoError(t, rows.Close())
+		require.Equal(t, int64(1), getCacheCnt.Load())
+		require.Equal(t, int64(1), hitCacheCnt.Load())
+		require.Equal(t, int64(0), addCacheCnt.Load())
+
+		resetCounterFn()
+		rows = dbt.MustQueryPrepared(selectStmt, 2)
+		require.True(t, rows.Next())
+		err = rows.Scan(&outA, &outB)
+		require.NoError(t, err)
+		require.Equal(t, 2, outA)
+		require.Equal(t, 2, outB)
+		require.NoError(t, rows.Close())
+		require.Equal(t, int64(1), getCacheCnt.Load())
+		require.Equal(t, int64(0), hitCacheCnt.Load())
+		require.Equal(t, int64(1), addCacheCnt.Load())
+		testfailpoint.Disable(t, "github.com/pingcap/tidb/pkg/util/querycache/AfterGetQueryCache")
+		testfailpoint.Disable(t, "github.com/pingcap/tidb/pkg/util/querycache/AfterAddQueryCache")
+	})
+}
+
+func (cli *TestServerClient) RunTestPreparedStmtQueryCache2(t *testing.T) {
+	cli.RunTestsOnNewDB(t, nil, "query_cache_db", func(dbt *testkit.DBTestKit) {
+		dbt.MustExec("create table t1 (a int key, b int)")
+		dbt.GetDB().SetMaxOpenConns(1)
+
+		dbt.MustExec("begin")
+		for i := 0; i < 10010; i++ {
+			dbt.MustExec(fmt.Sprintf("insert into t1 values (%v,%v)", i, i))
+		}
+		dbt.MustExec("commit")
+
+		selectStmt1 := dbt.MustPrepare("select * from t1 where a = ?")
+		selectStmt2 := dbt.MustPrepare("select * from t1 where b = ?")
+		for i := 0; i < 10000; i++ {
+			if i%100 == 0 {
+				fmt.Printf("---------------%v---------\n", i)
+			}
+			rows := dbt.MustQueryPrepared(selectStmt1, i)
+			require.True(t, rows.Next())
+			var outA, outB int
+			err := rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i, outA)
+			require.Equal(t, i, outB)
+			require.NoError(t, rows.Close())
+
+			rows = dbt.MustQueryPrepared(selectStmt1, i)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i, outA)
+			require.Equal(t, i, outB)
+			require.NoError(t, rows.Close())
+
+			rows = dbt.MustQueryPrepared(selectStmt1, i+1)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i+1, outA)
+			require.Equal(t, i+1, outB)
+			require.NoError(t, rows.Close())
+
+			// Test read in txn.
+			dbt.MustExec("begin")
+			dbt.MustExec("update t1 set b=2 where a=1")
+			rows = dbt.MustQueryPrepared(selectStmt1, 1)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, 1, outA)
+			require.Equal(t, 2, outB)
+			require.NoError(t, rows.Close())
+			dbt.MustExec("rollback")
+
+			rows = dbt.MustQueryPrepared(selectStmt2, i)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i, outA)
+			require.Equal(t, i, outB)
+			require.NoError(t, rows.Close())
+
+			rows = dbt.MustQueryPrepared(selectStmt2, i)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i, outA)
+			require.Equal(t, i, outB)
+			require.NoError(t, rows.Close())
+
+			rows = dbt.MustQueryPrepared(selectStmt2, i+1)
+			require.True(t, rows.Next())
+			err = rows.Scan(&outA, &outB)
+			require.NoError(t, err)
+			require.Equal(t, i+1, outA)
+			require.Equal(t, i+1, outB)
+			require.NoError(t, rows.Close())
+		}
 	})
 }
 

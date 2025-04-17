@@ -16,6 +16,8 @@ package kvcache
 
 import (
 	"container/list"
+	"github.com/pingcap/tidb/pkg/util/logutil"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/util/memory"
@@ -114,14 +116,30 @@ func (l *SimpleLRUCache) Put(key Key, value Value) {
 	l.size++
 	// Getting used memory is expensive and can be avoided by setting quota to 0.
 	if l.quota == 0 {
-		if l.size > l.capacity {
-			lru := l.cache.Back()
-			l.cache.Remove(lru)
-			if l.onEvict != nil {
-				l.onEvict(lru.Value.(*cacheEntry).key, lru.Value.(*cacheEntry).value)
+		for i := 0; i < 10; i++ {
+			if l.size > l.capacity {
+				lru := l.cache.Back()
+				beforeRemoveLen := l.cache.Len()
+				l.cache.Remove(lru)
+				if l.onEvict != nil {
+					l.onEvict(lru.Value.(*cacheEntry).key, lru.Value.(*cacheEntry).value)
+				}
+				if _, ok := lru.Value.(*cacheEntry); !ok {
+					logutil.BgLogger().Warn("value is not cache", zap.Any("value", lru.Value), zap.Bool("is-nil", lru.Value == nil), zap.Any("k", lru),
+						zap.Any("prev-node", lru.Prev()),
+						zap.Any("next-node", lru.Next()),
+						zap.Int("map-len", len(l.elements)),
+						zap.Int("list-len", l.cache.Len()),
+						zap.Int("before-remove-list-len", beforeRemoveLen),
+						zap.Uint("l.size", l.size),
+					)
+				} else {
+					delete(l.elements, string(lru.Value.(*cacheEntry).key.Hash()))
+					l.size--
+				}
+			} else {
+				break
 			}
-			delete(l.elements, string(lru.Value.(*cacheEntry).key.Hash()))
-			l.size--
 		}
 		return
 	}
