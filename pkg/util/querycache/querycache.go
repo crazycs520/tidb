@@ -39,7 +39,7 @@ type ThreadSafeLRUCache struct {
 func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) bool {
 	if len(c.cache) >= c.capacity {
 		miss := atomic.AddInt64(&c.miss, 1)
-		if miss%10000 == 0 && !c.full && time.Now().Unix()-c.lastRemove > 10 {
+		if miss%10000 == 0 && !c.full && time.Now().Unix()-c.lastRemove > 60 {
 			c.lastRemove = time.Now().Unix()
 			deleted := c.removeUseless()
 			if deleted == 0 {
