@@ -105,9 +105,7 @@ type recordSet struct {
 	txnStartTS uint64
 	once       sync.Once
 
-	cacheable   bool
-	cacheResult *querycache.QueryCacheValue
-	cacheSize   uint64
+	cacheSize uint64
 }
 
 func (a *recordSet) Fields() []*resolve.ResultField {
@@ -179,33 +177,32 @@ func (a *recordSet) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 		a.lastErrs = append(a.lastErrs, err)
 		return err
 	}
+	stmtCtx := a.stmt.Ctx.GetSessionVars().StmtCtx
 	numRows := req.NumRows()
 	if numRows == 0 {
 		if a.stmt != nil {
-			a.stmt.Ctx.GetSessionVars().LastFoundRows = a.stmt.Ctx.GetSessionVars().StmtCtx.FoundRows()
+			a.stmt.Ctx.GetSessionVars().LastFoundRows = stmtCtx.FoundRows()
 		}
 		return nil
 	}
-	if a.stmt != nil {
-		a.stmt.Ctx.GetSessionVars().StmtCtx.AddFoundRows(uint64(numRows))
-	}
+	stmtCtx.AddFoundRows(uint64(numRows))
 
-	if a.cacheable {
+	if stmtCtx.QueryCacheHandler.Key != nil {
 		size := uint64(req.MemoryUsage())
 		if a.cacheSize+size > config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize {
-			a.cacheable = false
-			a.cacheResult = nil
+			stmtCtx.QueryCacheHandler.Key = nil
+			stmtCtx.QueryCacheHandler.Value = nil
 			metrics.QueryCacheCounter.WithLabelValues("big-result-add-fail").Inc()
 		} else {
-			if a.cacheResult == nil {
-				a.cacheResult = &querycache.QueryCacheValue{
+			if stmtCtx.QueryCacheHandler.Value == nil {
+				stmtCtx.QueryCacheHandler.Value = &querycache.QueryCacheValue{
 					ReadTs:       a.txnStartTS,
 					ResultFields: a.Fields(),
 					FieldTypes:   a.executor.RetFieldTypes(),
 				}
 			}
 			chk := req.CopyConstructSel()
-			a.cacheResult.Chunks = append(a.cacheResult.Chunks, chk)
+			stmtCtx.QueryCacheHandler.Value.Chunks = append(stmtCtx.QueryCacheHandler.Value.Chunks, chk)
 			a.cacheSize += size
 		}
 	}
@@ -264,20 +261,12 @@ func (a *recordSet) Close() error {
 }
 
 func (a *recordSet) AddQueryCache() {
-	if !a.cacheable || a.cacheResult == nil {
-		return
+	stmtCtx := a.stmt.Ctx.GetSessionVars().StmtCtx
+	if stmtCtx.QueryCacheHandler.Key != nil && stmtCtx.QueryCacheHandler.Value != nil {
+		querycache.GlobalQueryCache.AddQueryCache(stmtCtx.QueryCacheHandler.Key, stmtCtx.QueryCacheHandler.Value)
+		stmtCtx.QueryCacheHandler.Key = nil
+		stmtCtx.QueryCacheHandler.Value = nil
 	}
-	sessVars := a.stmt.Ctx.GetSessionVars()
-	key := querycache.QueryCacheKey{
-		SchemaName: sessVars.CurrentDB,
-		Sql:        sessVars.StmtCtx.OriginalSQL,
-		Args:       sessVars.PreparedStmtParams,
-		Vars: querycache.QueryVars{
-			TimeZone: sessVars.TimeZone,
-			SQLMode:  sessVars.SQLMode,
-		},
-	}
-	querycache.GlobalQueryCache.AddQueryCache(&key, a.cacheResult)
 }
 
 // OnFetchReturned implements commandLifeCycle#OnFetchReturned
@@ -448,18 +437,11 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 		}
 	}
 
-	cacheable := false
-	txn, _ := sctx.Txn(false)
-	if err == nil {
-		cacheable = StmtQueryCacheable(a.Ctx, txn, a.StmtNode)
-	}
-
 	return &recordSet{
 		executor:   executor,
 		schema:     executor.Schema(),
 		stmt:       a,
 		txnStartTS: startTs,
-		cacheable:  cacheable,
 	}, nil
 }
 
@@ -714,33 +696,7 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 		schema:     e.Schema(),
 		stmt:       a,
 		txnStartTS: txnStartTS,
-		cacheable:  StmtQueryCacheable(a.Ctx, txn, a.StmtNode),
 	}, nil
-}
-
-func StmtQueryCacheable(ctx sessionctx.Context, txn kv.Transaction, stmt ast.StmtNode) bool {
-	if !config.GetGlobalConfig().Performance.QueryCache.Enabled {
-		return false
-	}
-	if txn.Valid() && !txn.IsReadOnly() {
-		return false
-	}
-	if staleread.IsStmtStaleness(ctx) {
-		return false
-	}
-	if ctx.GetSessionVars().InRestrictedSQL {
-		return false
-	}
-	if execStmt, ok := stmt.(*ast.ExecuteStmt); ok {
-		prepareStmt, err := plannercore.GetPreparedStmt(execStmt, ctx.GetSessionVars())
-		if err == nil && prepareStmt.PreparedAst != nil {
-			stmt = prepareStmt.PreparedAst.Stmt
-		}
-	}
-	if !ast.IsReadOnlySelect(stmt) {
-		return false
-	}
-	return true
 }
 
 func (a *ExecStmt) inheritContextFromExecuteStmt() {

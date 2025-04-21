@@ -37,26 +37,10 @@ type ThreadSafeLRUCache struct {
 	cache    map[string]*QueryCacheValue
 	capacity int
 
-	miss       int64
-	full       bool
 	lastRemove int64
 }
 
 func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) bool {
-	if len(c.cache) >= c.capacity {
-		miss := atomic.AddInt64(&c.miss, 1)
-		if miss%10000 == 0 && !c.full && time.Now().Unix()-c.lastRemove > 60 {
-			ts := time.Now().Unix()
-			c.lastRemove = ts
-			deleted := c.removeUseless(ts)
-			if deleted == 0 {
-				c.full = true
-				return false
-			}
-		} else {
-			return false
-		}
-	}
 	succ := false
 	c.Lock()
 	if len(c.cache) < c.capacity {
@@ -73,7 +57,7 @@ func (c *ThreadSafeLRUCache) removeUseless(ts int64) int {
 	ttl := atomic.LoadInt64(&InactiveCacheTTL)
 	c.Lock()
 	for k, v := range c.cache {
-		if v.hit == 0 && (ts-v.ts) > ttl {
+		if (ts - v.ts) > ttl {
 			deleted++
 			memoryUsage += int64(len(k))
 			memoryUsage += v.MemoryUsage()
@@ -86,21 +70,38 @@ func (c *ThreadSafeLRUCache) removeUseless(ts int64) int {
 	return deleted
 }
 
-func (c *ThreadSafeLRUCache) Get(k []byte) *QueryCacheValue {
+func (c *ThreadSafeLRUCache) Get(k []byte) (*QueryCacheValue, bool) {
 	c.RLock()
 	v := c.cache[string(k)]
 	c.RUnlock()
 	if v != nil {
-		atomic.AddInt64(&v.hit, 1)
+		atomic.StoreInt64(&v.ts, time.Now().Unix())
+		return v, false
 	}
-	return v
+
+	// evict old entry if needed.
+	if len(c.cache) >= c.capacity {
+		if time.Now().Unix()-c.lastRemove > 60 {
+			ts := time.Now().Unix()
+			c.lastRemove = ts
+			deleted := c.removeUseless(ts)
+			return nil, deleted > 0
+		}
+		return nil, false
+	}
+	return nil, true
 }
 
 func (c *ThreadSafeLRUCache) ReSize(capacity int) {
 	cache := make(map[string]*QueryCacheValue, capacity)
+	ttl := atomic.LoadInt64(&InactiveCacheTTL)
+	ts := time.Now().Unix()
+	memSize := int64(0)
 	c.RLock()
 	for k, v := range c.cache {
-		if v.hit == 0 {
+		if (ts - v.ts) > ttl {
+			memSize += int64(len(k))
+			memSize += v.MemoryUsage()
 			continue
 		}
 		cache[k] = v
@@ -109,6 +110,8 @@ func (c *ThreadSafeLRUCache) ReSize(capacity int) {
 		}
 	}
 	c.RUnlock()
+
+	metrics.QueryCacheMemUsage.Add(-float64(memSize))
 
 	c.Lock()
 	c.cache = cache
@@ -147,7 +150,7 @@ func (qc *QueryCache) SetCapacity(capacity uint) {
 	}
 }
 
-func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue) {
+func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue, _ bool) {
 	hasher := fnv.New64()
 	hasher.Write(key.Hash())
 	idx := int(hasher.Sum64() % uint64(len(qc.slots)))
@@ -156,14 +159,14 @@ func (qc *QueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue)
 		failpoint.InjectCall("AfterGetQueryCache", key, value)
 	}()
 
-	v := qc.slots[idx].Get(key.Hash())
+	v, canCached := qc.slots[idx].Get(key.Hash())
 	if v == nil {
 		metrics.QueryCacheCounter.WithLabelValues("miss").Inc()
-		return nil
+		return nil, canCached
 	}
 	metrics.QueryCacheCounter.WithLabelValues("hit").Inc()
 	value = v.Clone()
-	return value
+	return value, canCached
 }
 
 func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
@@ -269,8 +272,7 @@ type QueryCacheValue struct {
 	FieldTypes   []*types.FieldType
 	Chunks       []*chunk.Chunk
 
-	hit int64
-	ts  int64
+	ts int64
 }
 
 func (v *QueryCacheValue) MemoryUsage() int64 {

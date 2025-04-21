@@ -2183,7 +2183,7 @@ func (s *session) GetResultFromQueryCache(stmtNode ast.StmtNode) sqlexec.RecordS
 		if binParam, ok := execStmt.BinaryArgs.([]param.BinaryParam); ok {
 			if StmtQueryCacheable(s, execStmt) {
 				sessVars := s.sessionVars
-				result := querycache.GlobalQueryCache.GetQueryCache(&querycache.QueryCacheKey{
+				qcKey := &querycache.QueryCacheKey{
 					SchemaName: sessVars.CurrentDB,
 					Sql:        sessVars.StmtCtx.OriginalSQL,
 					Args:       binParam,
@@ -2191,10 +2191,17 @@ func (s *session) GetResultFromQueryCache(stmtNode ast.StmtNode) sqlexec.RecordS
 						TimeZone: sessVars.TimeZone,
 						SQLMode:  sessVars.SQLMode,
 					},
-				})
+				}
+				result, canCached := querycache.GlobalQueryCache.GetQueryCache(qcKey)
 				if result != nil {
 					sessVars.StmtCtx.DetachMemDiskTracker()
 					return &executor.CachedRecordSet{QueryCacheValue: result}
+				}
+				sessVars.StmtCtx.QueryCacheHandler.Value = nil
+				if canCached {
+					sessVars.StmtCtx.QueryCacheHandler.Key = qcKey
+				} else {
+					sessVars.StmtCtx.QueryCacheHandler.Key = nil
 				}
 			}
 		}
@@ -2214,6 +2221,9 @@ func StmtQueryCacheable(ctx sessionctx.Context, stmt ast.StmtNode) bool {
 		return false
 	}
 	if txn.Valid() && !txn.IsReadOnly() {
+		return false
+	}
+	if ctx.GetSessionVars().InRestrictedSQL {
 		return false
 	}
 

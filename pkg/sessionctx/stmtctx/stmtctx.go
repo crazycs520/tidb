@@ -45,6 +45,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/linter/constructor"
 	"github.com/pingcap/tidb/pkg/util/memory"
 	"github.com/pingcap/tidb/pkg/util/nocopy"
+	"github.com/pingcap/tidb/pkg/util/querycache"
 	"github.com/pingcap/tidb/pkg/util/topsql/stmtstats"
 	"github.com/pingcap/tidb/pkg/util/tracing"
 	atomic2 "go.uber.org/atomic"
@@ -434,6 +435,13 @@ type StatementContext struct {
 	// and the `for share` execution is enabled by `tidb_enable_noop_functions`, no locks should be
 	// acquired in this case.
 	ForShareLockEnabledByNoop bool
+
+	QueryCacheHandler QueryCacheHandler
+}
+
+type QueryCacheHandler struct {
+	Key   *querycache.QueryCacheKey
+	Value *querycache.QueryCacheValue
 }
 
 // DefaultStmtErrLevels is the default error levels for statement
@@ -489,6 +497,8 @@ func (sc *StatementContext) Reset() {
 	} else {
 		sc.ExtraWarnHandler = contextutil.NewStaticWarnHandler(0)
 	}
+	sc.QueryCacheHandler.Key = nil
+	sc.QueryCacheHandler.Value = nil
 }
 
 // CtxID returns the context id of the statement
