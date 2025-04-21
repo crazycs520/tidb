@@ -308,11 +308,15 @@ func (c *CachedRecordSet) Next(ctx context.Context, req *chunk.Chunk) error {
 }
 
 func (c *CachedRecordSet) NewChunk(alloc chunk.Allocator) *chunk.Chunk {
+	capacity := 32
+	if len(c.Chunks) == 1 {
+		capacity = c.Chunks[0].NumRows()
+	}
 	if alloc == nil {
-		return chunk.New(c.FieldTypes, 32, 1024)
+		return chunk.New(c.FieldTypes, capacity, 1024)
 	}
 
-	return alloc.Alloc(c.FieldTypes, 32, 1024)
+	return alloc.Alloc(c.FieldTypes, capacity, 1024)
 }
 
 func (c CachedRecordSet) Close() error {
