@@ -481,13 +481,13 @@ var defaultSysVars = []*SysVar{
 
 	{Scope: ScopeGlobal, Name: TiDBQueryCacheMaxEntrySize, Value: strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize)),
 		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
-			v, err := strconv.Atoi(val)
+			v, err := strconv.ParseUint(val, 10, 64)
 			if err != nil {
 				return err
 			}
 			oldConfig := config.GetGlobalConfig()
 			newConfig := *oldConfig
-			newConfig.Performance.QueryCache.MaxQuerySize = uint64(v)
+			newConfig.Performance.QueryCache.MaxQuerySize = v
 			config.StoreGlobalConfig(&newConfig)
 			return nil
 		},
@@ -495,6 +495,21 @@ var defaultSysVars = []*SysVar{
 			return strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize)), nil
 		}},
 
+	{Scope: ScopeGlobal, Name: TiDBQueryCacheInactiveTTL, Value: strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.InactiveTTL)), Type: TypeUnsigned, MinValue: 0, MaxValue: math.MaxInt64,
+		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
+			v, err := strconv.ParseUint(val, 10, 64)
+			if err != nil {
+				return err
+			}
+			oldConfig := config.GetGlobalConfig()
+			newConfig := *oldConfig
+			newConfig.Performance.QueryCache.InactiveTTL = v
+			config.StoreGlobalConfig(&newConfig)
+			return nil
+		},
+		GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
+			return strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.InactiveTTL)), nil
+		}},
 	{Scope: ScopeInstance, Name: TiDBConfig, Value: "", ReadOnly: true, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
 		return config.GetJSONConfig()
 	}},

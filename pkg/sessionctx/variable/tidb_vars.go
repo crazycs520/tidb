@@ -288,6 +288,7 @@ const (
 	TiDBEnableQueryCache       = "tidb_enable_query_cache"
 	TiDBQueryCacheCount        = "tidb_query_cache_count"
 	TiDBQueryCacheMaxEntrySize = "tidb_query_cache_max_entry_size"
+	TiDBQueryCacheInactiveTTL  = "tidb_query_cache_inactive_ttl"
 )
 
 // TiDB system variable names that both in session and global scope.

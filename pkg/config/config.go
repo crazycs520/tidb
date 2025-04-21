@@ -765,6 +765,7 @@ type QueryCache struct {
 	Enabled      bool   `toml:"enabled" json:"enabled"`
 	Capacity     uint   `toml:"capacity" json:"capacity"`
 	MaxQuerySize uint64 `toml:"max-query-size" json:"max-query-size"`
+	InactiveTTL  uint64 `toml:"inactive-ttl" json:"inactive-ttl"`
 }
 
 // PlanCache is the PlanCache section of the config.
@@ -1025,6 +1026,7 @@ var defaultConf = Config{
 			Enabled:      true,
 			Capacity:     2000000,
 			MaxQuerySize: 1024 * 1024,
+			InactiveTTL:  60,
 		},
 	},
 	ProxyProtocol: ProxyProtocol{

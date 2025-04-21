@@ -21,7 +21,6 @@ import (
 )
 
 var GlobalQueryCache *QueryCache
-var InactiveCacheTTL = int64(60)
 
 func init() {
 	GlobalQueryCache = NewQueryCache()
@@ -54,7 +53,7 @@ func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) bool {
 func (c *ThreadSafeLRUCache) removeUseless(ts int64) int {
 	deleted := 0
 	memoryUsage := int64(0)
-	ttl := atomic.LoadInt64(&InactiveCacheTTL)
+	ttl := int64(config.GetGlobalConfig().Performance.QueryCache.InactiveTTL)
 	c.Lock()
 	for k, v := range c.cache {
 		if (ts - v.ts) > ttl {
@@ -94,7 +93,7 @@ func (c *ThreadSafeLRUCache) Get(k []byte) (*QueryCacheValue, bool) {
 
 func (c *ThreadSafeLRUCache) ReSize(capacity int) {
 	cache := make(map[string]*QueryCacheValue, capacity)
-	ttl := atomic.LoadInt64(&InactiveCacheTTL)
+	ttl := int64(config.GetGlobalConfig().Performance.QueryCache.InactiveTTL)
 	ts := time.Now().Unix()
 	memSize := int64(0)
 	c.RLock()
@@ -128,8 +127,8 @@ func (c *ThreadSafeLRUCache) Size() int {
 
 func NewQueryCache() *QueryCache {
 	capacity := config.GetGlobalConfig().Performance.QueryCache.Capacity
-	slots := make([]*ThreadSafeLRUCache, 100)
-	size := (capacity / 100) + 1
+	slots := make([]*ThreadSafeLRUCache, 256)
+	size := (capacity / 256) + 1
 	for i := range slots {
 		slots[i] = &ThreadSafeLRUCache{
 			cache:    make(map[string]*QueryCacheValue, size),
