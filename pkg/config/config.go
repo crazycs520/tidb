@@ -1026,7 +1026,7 @@ var defaultConf = Config{
 			Enabled:      true,
 			Capacity:     2000000,
 			MaxQuerySize: 1024 * 1024,
-			InactiveTTL:  60,
+			InactiveTTL:  300,
 		},
 	},
 	ProxyProtocol: ProxyProtocol{
