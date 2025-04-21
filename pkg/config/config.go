@@ -1024,7 +1024,7 @@ var defaultConf = Config{
 		QueryCache: QueryCache{
 			Enabled:      true,
 			Capacity:     2000000,
-			MaxQuerySize: 1024 * 10,
+			MaxQuerySize: 1024 * 1024,
 		},
 	},
 	ProxyProtocol: ProxyProtocol{

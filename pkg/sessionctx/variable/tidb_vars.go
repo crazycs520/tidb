@@ -285,8 +285,9 @@ const (
 	// The value maybe "lightning", "br", "dumpling" etc.
 	TiDBExplicitRequestSourceType = "tidb_request_source_type"
 
-	TiDBEnableQueryCache = "tidb_enable_query_cache"
-	TiDBQueryCacheCount  = "tidb_query_cache_count"
+	TiDBEnableQueryCache       = "tidb_enable_query_cache"
+	TiDBQueryCacheCount        = "tidb_query_cache_count"
+	TiDBQueryCacheMaxEntrySize = "tidb_query_cache_max_entry_size"
 )
 
 // TiDB system variable names that both in session and global scope.
