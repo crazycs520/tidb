@@ -195,7 +195,6 @@ func (a *recordSet) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 		if a.cacheSize+size > config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize {
 			a.cacheable = false
 			a.cacheResult = nil
-			metrics.QueryCacheCounter.WithLabelValues("big-result-add-fail").Inc()
 		} else {
 			if a.cacheResult == nil {
 				a.cacheResult = &querycache.QueryCacheValue{

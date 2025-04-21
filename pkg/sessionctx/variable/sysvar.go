@@ -446,7 +446,7 @@ var defaultSysVars = []*SysVar{
 	}, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
 		return strconv.FormatInt(int64(GlobalLogMaxDays.Load()), 10), nil
 	}},
-	{Scope: ScopeGlobal, Name: TiDBEnableQueryCache, Value: BoolToOnOff(config.GetGlobalConfig().Performance.QueryCache.Enabled),
+	{Scope: ScopeInstance, Name: TiDBEnableQueryCache, Value: BoolToOnOff(config.GetGlobalConfig().Performance.QueryCache.Enabled),
 		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
 			oldConfig := config.GetGlobalConfig()
 			newConfig := *oldConfig
@@ -462,7 +462,7 @@ var defaultSysVars = []*SysVar{
 		GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
 			return BoolToOnOff(config.GetGlobalConfig().Performance.QueryCache.Enabled), nil
 		}},
-	{Scope: ScopeGlobal, Name: TiDBQueryCacheCount, Value: strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.Capacity)),
+	{Scope: ScopeInstance, Name: TiDBQueryCacheCount, Value: strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.Capacity)),
 		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
 			v, err := strconv.Atoi(val)
 			if err != nil {
@@ -477,22 +477,6 @@ var defaultSysVars = []*SysVar{
 		},
 		GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
 			return strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.Capacity)), nil
-		}},
-
-	{Scope: ScopeGlobal, Name: TiDBQueryCacheMaxEntrySize, Value: strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize)),
-		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
-			v, err := strconv.Atoi(val)
-			if err != nil {
-				return err
-			}
-			oldConfig := config.GetGlobalConfig()
-			newConfig := *oldConfig
-			newConfig.Performance.QueryCache.MaxQuerySize = uint64(v)
-			config.StoreGlobalConfig(&newConfig)
-			return nil
-		},
-		GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
-			return strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize)), nil
 		}},
 
 	{Scope: ScopeInstance, Name: TiDBConfig, Value: "", ReadOnly: true, GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {

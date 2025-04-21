@@ -22,9 +22,7 @@ var (
 	// InfoSchemaV2CacheCounter records the counter of infoschema v2 cache hit/miss/evict.
 	InfoSchemaV2CacheCounter *prometheus.CounterVec
 
-	QueryCacheCounter  *prometheus.CounterVec
-	QueryCacheMemUsage prometheus.Gauge
-
+	QueryCacheCounter *prometheus.CounterVec
 	// InfoSchemaV2CacheMemUsage records the memory size of infoschema v2 cache.
 	InfoSchemaV2CacheMemUsage prometheus.Gauge
 	// InfoSchemaV2CacheMemLimit records the memory limit of infoschema v2 cache.
@@ -54,14 +52,6 @@ func InitInfoSchemaV2Metrics() {
 			Name:      "query_cache",
 			Help:      "query cache hit, evict and miss number",
 		}, []string{LblType})
-
-	QueryCacheMemUsage = NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: "tidb",
-			Subsystem: "server",
-			Name:      "query_cache_mem_size",
-			Help:      "query cache memory usage size",
-		})
 
 	InfoSchemaV2CacheMemUsage = NewGauge(
 		prometheus.GaugeOpts{

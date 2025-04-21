@@ -13,7 +13,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/chunk"
@@ -63,19 +62,15 @@ func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) bool {
 
 func (c *ThreadSafeLRUCache) removeUseless() int {
 	deleted := 0
-	memoryUsage := int64(0)
+	metrics.QueryCacheCounter.WithLabelValues("delete").Inc()
 	c.Lock()
 	for k, v := range c.cache {
 		if v.hit == 0 {
 			deleted++
-			memoryUsage += int64(len(k))
-			memoryUsage += v.MemoryUsage()
 			delete(c.cache, k)
 		}
 	}
 	c.Unlock()
-	metrics.QueryCacheCounter.WithLabelValues("delete").Add(float64(deleted))
-	metrics.QueryCacheMemUsage.Add(-float64(memoryUsage))
 	return deleted
 }
 
@@ -172,7 +167,6 @@ func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) 
 	succ := qc.slots[idx].Add(key.Hash(), value)
 	if succ {
 		metrics.QueryCacheCounter.WithLabelValues("add").Inc()
-		metrics.QueryCacheMemUsage.Add(float64(key.MemoryUsage() + value.MemoryUsage()))
 		failpoint.InjectCall("AfterAddQueryCache", key, value)
 	}
 }
@@ -231,10 +225,6 @@ func (k *QueryCacheKey) hashSize() int {
 	return length
 }
 
-func (k *QueryCacheKey) MemoryUsage() int64 {
-	return int64(len(k.Hash()))
-}
-
 func paramToBytes(arg param.BinaryParam) []byte {
 	flag := byte(0)
 	if arg.IsUnsigned {
@@ -262,20 +252,6 @@ type QueryCacheValue struct {
 	Chunks       []*chunk.Chunk
 
 	hit int64
-}
-
-func (v *QueryCacheValue) MemoryUsage() int64 {
-	size := int64(8)
-	for _, chk := range v.Chunks {
-		size += chk.MemoryUsage()
-	}
-	for _, field := range v.ResultFields {
-		size += int64(unsafe.Sizeof(*field)) + int64(cap(v.ResultFields)*8)
-	}
-	for _, field := range v.FieldTypes {
-		size += int64(unsafe.Sizeof(*field)) + int64(cap(v.FieldTypes)*8)
-	}
-	return size
 }
 
 func (v *QueryCacheValue) Clone() *QueryCacheValue {
