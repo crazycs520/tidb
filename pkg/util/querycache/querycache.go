@@ -20,7 +20,12 @@ import (
 	"github.com/pingcap/tidb/pkg/util/hack"
 )
 
-var GlobalQueryCache = NewQueryCache()
+var GlobalQueryCache *QueryCache
+var InactiveCacheTTL = int64(60)
+
+func init() {
+	GlobalQueryCache = NewQueryCache()
+}
 
 type QueryCache struct {
 	slots    []*ThreadSafeLRUCache
@@ -41,8 +46,9 @@ func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) bool {
 	if len(c.cache) >= c.capacity {
 		miss := atomic.AddInt64(&c.miss, 1)
 		if miss%10000 == 0 && !c.full && time.Now().Unix()-c.lastRemove > 60 {
-			c.lastRemove = time.Now().Unix()
-			deleted := c.removeUseless()
+			ts := time.Now().Unix()
+			c.lastRemove = ts
+			deleted := c.removeUseless(ts)
 			if deleted == 0 {
 				c.full = true
 				return false
@@ -61,12 +67,13 @@ func (c *ThreadSafeLRUCache) Add(k []byte, v *QueryCacheValue) bool {
 	return succ
 }
 
-func (c *ThreadSafeLRUCache) removeUseless() int {
+func (c *ThreadSafeLRUCache) removeUseless(ts int64) int {
 	deleted := 0
 	memoryUsage := int64(0)
+	ttl := atomic.LoadInt64(&InactiveCacheTTL)
 	c.Lock()
 	for k, v := range c.cache {
-		if v.hit == 0 {
+		if v.hit == 0 && (ts-v.ts) > ttl {
 			deleted++
 			memoryUsage += int64(len(k))
 			memoryUsage += v.MemoryUsage()
@@ -167,6 +174,7 @@ func (qc *QueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) 
 	hasher.Write(key.Hash())
 	idx := int(hasher.Sum64() % uint64(len(qc.slots)))
 
+	value.ts = time.Now().Unix()
 	defer func() {
 	}()
 	succ := qc.slots[idx].Add(key.Hash(), value)
@@ -262,10 +270,11 @@ type QueryCacheValue struct {
 	Chunks       []*chunk.Chunk
 
 	hit int64
+	ts  int64
 }
 
 func (v *QueryCacheValue) MemoryUsage() int64 {
-	size := int64(8)
+	size := int64(8 * 3)
 	for _, chk := range v.Chunks {
 		size += chk.MemoryUsage()
 	}
