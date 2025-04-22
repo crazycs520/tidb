@@ -23,7 +23,8 @@ import (
 var GlobalQueryCache *QueryCache
 
 func init() {
-	GlobalQueryCache = NewQueryCache()
+	capacity := config.GetGlobalConfig().Performance.QueryCache.Capacity
+	GlobalQueryCache = NewQueryCache(capacity)
 }
 
 type QueryCache struct {
@@ -125,10 +126,14 @@ func (c *ThreadSafeLRUCache) Size() int {
 	return size
 }
 
-func NewQueryCache() *QueryCache {
-	capacity := config.GetGlobalConfig().Performance.QueryCache.Capacity
-	slots := make([]*ThreadSafeLRUCache, 256)
-	size := (capacity / 256) + 1
+func NewQueryCache(capacity uint) *QueryCache {
+	slotNum := 100
+	slots := make([]*ThreadSafeLRUCache, slotNum)
+	size := (capacity / uint(slotNum))
+	if capacity%uint(slotNum) > 0 {
+		size++
+	}
+
 	for i := range slots {
 		slots[i] = &ThreadSafeLRUCache{
 			cache:    make(map[string]*QueryCacheValue, size),
