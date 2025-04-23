@@ -9,7 +9,6 @@ import (
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/chunk"
-	"hash/fnv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,13 +18,13 @@ import (
 var GlobalQueryCache *PreparedQueryCache
 
 func init() {
-	//capacity := config.GetGlobalConfig().Performance.QueryCache.Capacity
-	//GlobalQueryCache = NewQueryCache(capacity)
+	capacity := config.GetGlobalConfig().Performance.QueryCache.Capacity
+	GlobalQueryCache = NewPreparedQueryCache(capacity)
 }
 
 type PreparedQueryCache struct {
 	sync.Mutex
-	stmtCache sync.Map // map[StmtKey]*StmtCache
+	stmtCache sync.Map // map[StmtKey]*PreparedStmtCache
 	capacity  uint
 }
 
@@ -35,18 +34,22 @@ type StmtKey struct {
 	Vars       QueryVars
 }
 
-type StmtCache struct {
-	*PreparedStmtCache
-}
-
 type PreparedStmtCache struct {
 	sync.RWMutex
+	cache      map[string]*preparedStmtCacheValue
+	capacity   int
+	lastRemove int64
+
+	// result meta
 	ResultFields []*resolve.ResultField
 	FieldTypes   []*types.FieldType
+}
 
-	cache map[string]*preparedStmtCacheValue
-
-	lastRemove int64
+func NewPreparedStmtCache(capacity int) *PreparedStmtCache {
+	return &PreparedStmtCache{
+		cache:    make(map[string]*preparedStmtCacheValue, capacity),
+		capacity: capacity,
+	}
 }
 
 type preparedStmtCacheValue struct {
@@ -54,7 +57,7 @@ type preparedStmtCacheValue struct {
 	ts     int64
 }
 
-func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue, capacity int) bool {
+func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) bool {
 	succ := false
 	ts := time.Now().Unix()
 	c.Lock()
@@ -62,7 +65,7 @@ func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue, capacity int) bool
 		c.FieldTypes = v.FieldTypes
 		c.ResultFields = v.ResultFields
 	}
-	if len(c.cache) < capacity {
+	if len(c.cache) < c.capacity {
 		c.cache[string(k)] = &preparedStmtCacheValue{
 			Chunks: v.Chunks,
 			ts:     ts,
@@ -98,7 +101,11 @@ func (c *PreparedStmtCache) Get(k []byte) (*QueryCacheValue, bool) {
 	c.RUnlock()
 	if v != nil {
 		atomic.StoreInt64(&v.ts, time.Now().Unix())
-		return v, false
+		return &QueryCacheValue{
+			ResultFields: c.ResultFields,
+			FieldTypes:   c.FieldTypes,
+			Chunks:       v.Chunks,
+		}, false
 	}
 
 	// evict old entry if needed.
@@ -115,7 +122,7 @@ func (c *PreparedStmtCache) Get(k []byte) (*QueryCacheValue, bool) {
 }
 
 func (c *PreparedStmtCache) ReSize(capacity int) {
-	cache := make(map[string]*QueryCacheValue, capacity)
+	cache := make(map[string]*preparedStmtCacheValue, capacity)
 	ttl := int64(config.GetGlobalConfig().Performance.QueryCache.InactiveTTL)
 	ts := time.Now().Unix()
 	memSize := int64(0)
@@ -139,7 +146,6 @@ func (c *PreparedStmtCache) ReSize(capacity int) {
 	c.cache = cache
 	c.capacity = capacity
 	c.Unlock()
-	atomic.AddInt64()
 }
 
 func (c *PreparedStmtCache) Size() int {
@@ -158,21 +164,21 @@ func NewPreparedQueryCache(capacity uint) *PreparedQueryCache {
 
 func (qc *PreparedQueryCache) SetCapacity(capacity uint) {
 	qc.capacity = capacity
-	//size := (capacity / uint(len(qc.slots))) + 1
-	//for i := range qc.slots {
-	//	qc.slots[i].ReSize(int(size))
-	//}
+	qc.stmtCache.Range(func(k, v any) bool {
+		stmtCache := v.(*PreparedStmtCache)
+		stmtCache.ReSize(int(capacity))
+		return true
+	})
 }
 
 func (qc *PreparedQueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue, _ bool) {
-	v, ok := qc.stmtCache.Load(key.StmtKey)
+	cache, ok := qc.stmtCache.Load(key.StmtKey)
 	if !ok {
 		metrics.QueryCacheCounter.WithLabelValues("miss").Inc()
 		return nil, true
 	}
-	stmtCache := v.(*StmtCache)
-
-	v, canCached := stmtCache.cache.Get(key.ArgHash())
+	stmtCache := cache.(*PreparedStmtCache)
+	v, canCached := stmtCache.Get(key.ArgHash())
 	if v == nil {
 		metrics.QueryCacheCounter.WithLabelValues("miss").Inc()
 		return nil, canCached
@@ -182,25 +188,28 @@ func (qc *PreparedQueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCac
 	return value, canCached
 }
 
-func (qc *PreparedQueryCache) getOrCreateStmtCache(key *QueryCacheKey) *StmtCache {
+func (qc *PreparedQueryCache) getOrCreateStmtCache(key *QueryCacheKey) *PreparedStmtCache {
 	v, ok := qc.stmtCache.Load(key.StmtKey)
 	if ok {
-		return v.(*StmtCache)
+		return v.(*PreparedStmtCache)
 	}
+	qc.Lock()
+	defer qc.Unlock()
+	v, ok = qc.stmtCache.Load(key.StmtKey)
+	if ok {
+		return v.(*PreparedStmtCache)
+	}
+	cache := NewPreparedStmtCache(int(qc.capacity))
+	qc.stmtCache.Store(key.StmtKey, cache)
+	return cache
 }
 
 func (qc *PreparedQueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
 	if !strings.Contains(key.Sql, "sbtest") {
 		return
 	}
-	hasher := fnv.New64()
-	hasher.Write(key.Hash())
-	idx := int(hasher.Sum64() % uint64(len(qc.slots)))
-
-	value.ts = time.Now().Unix()
-	defer func() {
-	}()
-	succ := qc.slots[idx].Add(key.Hash(), value)
+	cache := qc.getOrCreateStmtCache(key)
+	succ := cache.Add(key.ArgHash(), value)
 	if succ {
 		metrics.QueryCacheCounter.WithLabelValues("add").Inc()
 		metrics.QueryCacheMemUsage.Add(float64(key.MemoryUsage() + value.MemoryUsage()))
@@ -208,15 +217,7 @@ func (qc *PreparedQueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCach
 	}
 }
 
-func (qc *QueryCache) Len() int {
-	size := 0
-	for i := range qc.slots {
-		size += qc.slots[i].Size()
-	}
-	return size
-}
-
-func (qc *QueryCache) DeleteQueryCache() {
+func (qc *PreparedQueryCache) DeleteQueryCache() {
 	return
 }
 
@@ -225,7 +226,7 @@ type QueryCacheKey struct {
 
 	Args []param.BinaryParam
 
-	hash []byte
+	argHash []byte
 }
 
 type QueryVars struct {
@@ -234,14 +235,14 @@ type QueryVars struct {
 }
 
 func (k *QueryCacheKey) ArgHash() []byte {
-	if len(k.hash) > 0 {
-		return k.hash
+	if len(k.argHash) > 0 {
+		return k.argHash
 	}
-	k.hash = make([]byte, 0, k.argHashSize())
+	k.argHash = make([]byte, 0, k.argHashSize())
 	for _, arg := range k.Args {
-		k.hash = append(k.hash, paramToBytes(arg)...)
+		k.argHash = append(k.argHash, paramToBytes(arg)...)
 	}
-	return k.hash
+	return k.argHash
 }
 
 func (k *QueryCacheKey) argHashSize() int {
@@ -295,4 +296,16 @@ func (v *preparedStmtCacheValue) MemoryUsage() int64 {
 		size += chk.MemoryUsage()
 	}
 	return size
+}
+
+func (v *QueryCacheValue) Clone() *QueryCacheValue {
+	result := &QueryCacheValue{
+		ResultFields: make([]*resolve.ResultField, 0, len(v.ResultFields)),
+		FieldTypes:   make([]*types.FieldType, 0, len(v.FieldTypes)),
+		Chunks:       make([]*chunk.Chunk, 0, len(v.Chunks)),
+	}
+	result.ResultFields = append(result.ResultFields, v.ResultFields...)
+	result.FieldTypes = append(result.FieldTypes, v.FieldTypes...)
+	result.Chunks = append(result.Chunks, v.Chunks...)
+	return result
 }
