@@ -51,7 +51,6 @@ func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) bool {
 	ts := time.Now().Unix()
 	c.Lock()
 	if len(c.FieldTypes) == 0 {
-		c.FieldTypes = v.FieldTypes
 		c.ResultFields = v.ResultFields
 	}
 	if len(c.cache) < c.capacity {
@@ -92,7 +91,6 @@ func (c *PreparedStmtCache) Get(k []byte) (*QueryCacheValue, bool) {
 		atomic.StoreInt64(&v.ts, time.Now().Unix())
 		return &QueryCacheValue{
 			ResultFields: c.ResultFields,
-			FieldTypes:   c.FieldTypes,
 			Chunks:       v.Chunks,
 		}, false
 	}
@@ -291,7 +289,6 @@ func paramSize(arg param.BinaryParam) int {
 
 type QueryCacheValue struct {
 	ResultFields []*resolve.ResultField
-	FieldTypes   []*types.FieldType
 	Chunks       []*chunk.Chunk
 }
 
@@ -306,11 +303,9 @@ func (v *QueryCacheValue) MemoryUsage() int64 {
 func (v *QueryCacheValue) Clone() *QueryCacheValue {
 	result := &QueryCacheValue{
 		ResultFields: make([]*resolve.ResultField, 0, len(v.ResultFields)),
-		FieldTypes:   make([]*types.FieldType, 0, len(v.FieldTypes)),
 		Chunks:       make([]*chunk.Chunk, 0, len(v.Chunks)),
 	}
 	result.ResultFields = append(result.ResultFields, v.ResultFields...)
-	result.FieldTypes = append(result.FieldTypes, v.FieldTypes...)
 	result.Chunks = append(result.Chunks, v.Chunks...)
 	return result
 }

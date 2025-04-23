@@ -197,7 +197,6 @@ func (a *recordSet) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 			if stmtCtx.QueryCacheHandler.Value == nil {
 				stmtCtx.QueryCacheHandler.Value = &querycache.QueryCacheValue{
 					ResultFields: a.Fields(),
-					FieldTypes:   a.executor.RetFieldTypes(),
 				}
 			}
 			chk := req.CopyConstructSel()
@@ -289,6 +288,7 @@ func (a *recordSet) GetExecutor4Test() any {
 
 type CachedRecordSet struct {
 	*querycache.QueryCacheValue
+	fts []*types.FieldType
 	idx int
 }
 
@@ -308,14 +308,24 @@ func (c *CachedRecordSet) Next(ctx context.Context, req *chunk.Chunk) error {
 
 func (c *CachedRecordSet) NewChunk(alloc chunk.Allocator) *chunk.Chunk {
 	capacity := 32
-	if len(c.Chunks) == 1 {
-		capacity = c.Chunks[0].NumRows()
+	if length := len(c.Chunks); length > 0 {
+		capacity = c.Chunks[length-1].NumRows()
 	}
 	if alloc == nil {
-		return chunk.New(c.FieldTypes, capacity, 1024)
+		return chunk.New(c.FieldTypes(), capacity, 1024)
 	}
+	return alloc.Alloc(c.FieldTypes(), capacity, 1024)
+}
 
-	return alloc.Alloc(c.FieldTypes, capacity, 1024)
+func (c *CachedRecordSet) FieldTypes() []*types.FieldType {
+	if len(c.fts) > 0 {
+		return c.fts
+	}
+	c.fts = make([]*types.FieldType, 0, len(c.ResultFields))
+	for _, field := range c.ResultFields {
+		c.fts = append(c.fts, &field.Column.FieldType)
+	}
+	return c.fts
 }
 
 func (c CachedRecordSet) Close() error {

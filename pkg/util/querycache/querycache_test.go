@@ -126,7 +126,6 @@ func genValue() *QueryCacheValue {
 	return &QueryCacheValue{
 		ReadTs:       uint64(ts),
 		ResultFields: resultFields,
-		FieldTypes:   fieldTypes,
 		Chunks:       chks,
 		ts:           ts,
 	}
