@@ -51,12 +51,12 @@ func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) bool {
 	ts := time.Now().Unix()
 	c.Lock()
 	if len(c.FieldTypes) == 0 {
-		c.ResultFields = make([]*resolve.ResultField, 0, len(v.ResultFields))
-		c.ResultFields = append(c.ResultFields, v.ResultFields...)
+		c.ResultFields = make([]*resolve.ResultField, len(v.ResultFields))
+		copy(c.ResultFields, v.ResultFields)
 	}
 	if len(c.cache) < c.capacity {
-		chks := make([]*chunk.Chunk, 0, len(v.Chunks))
-		chks = append(chks, v.Chunks...)
+		chks := make([]*chunk.Chunk, len(v.Chunks))
+		copy(chks, v.Chunks)
 		c.cache[string(k)] = &preparedStmtCacheValue{
 			Chunks: chks,
 			ts:     ts,
