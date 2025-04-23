@@ -109,9 +109,9 @@ func genValue() *QueryCacheValue {
 		}
 	}
 	chks := make([]*chunk.Chunk, 0)
-	chk := chunk.New(fieldTypes, 32, 1024)
+	chk := chunk.New(fieldTypes, 1, 1)
 	for i := range fieldTypes {
-		for j := 0; j < 32; j++ {
+		for j := 0; j < 1; j++ {
 			var d types.Datum
 			switch fieldTypes[i].GetType() {
 			case mysql.TypeVarchar:
