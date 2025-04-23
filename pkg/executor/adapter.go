@@ -196,7 +196,6 @@ func (a *recordSet) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 		} else {
 			if stmtCtx.QueryCacheHandler.Value == nil {
 				stmtCtx.QueryCacheHandler.Value = &querycache.QueryCacheValue{
-					ReadTs:       a.txnStartTS,
 					ResultFields: a.Fields(),
 					FieldTypes:   a.executor.RetFieldTypes(),
 				}

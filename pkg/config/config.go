@@ -1024,7 +1024,7 @@ var defaultConf = Config{
 		ConcurrentlyInitStats:             true,
 		QueryCache: QueryCache{
 			Enabled:      true,
-			Capacity:     2000000,
+			Capacity:     100000,
 			MaxQuerySize: 1024 * 1024,
 			InactiveTTL:  300,
 		},

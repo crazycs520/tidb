@@ -2184,13 +2184,15 @@ func (s *session) GetResultFromQueryCache(stmtNode ast.StmtNode) sqlexec.RecordS
 			if StmtQueryCacheable(s, execStmt) {
 				sessVars := s.sessionVars
 				qcKey := &querycache.QueryCacheKey{
-					SchemaName: sessVars.CurrentDB,
-					Sql:        sessVars.StmtCtx.OriginalSQL,
-					Args:       binParam,
-					Vars: querycache.QueryVars{
-						TimeZone: sessVars.TimeZone,
-						SQLMode:  sessVars.SQLMode,
+					StmtKey: querycache.StmtKey{
+						SchemaName: sessVars.CurrentDB,
+						Sql:        sessVars.StmtCtx.OriginalSQL,
+						Vars: querycache.QueryVars{
+							TimeZone: sessVars.TimeZone,
+							SQLMode:  sessVars.SQLMode,
+						},
 					},
+					Args: binParam,
 				}
 				result, canCached := querycache.GlobalQueryCache.GetQueryCache(qcKey)
 				if result != nil {
