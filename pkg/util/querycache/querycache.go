@@ -7,7 +7,6 @@ import (
 	"github.com/pingcap/tidb/pkg/param"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
-	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"strings"
 	"sync"
@@ -36,7 +35,6 @@ type PreparedStmtCache struct {
 
 	// result meta
 	ResultFields []*resolve.ResultField
-	FieldTypes   []*types.FieldType
 }
 
 func NewPreparedStmtCache(capacity int) *PreparedStmtCache {
@@ -50,15 +48,12 @@ func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) bool {
 	succ := false
 	ts := time.Now().Unix()
 	c.Lock()
-	if len(c.FieldTypes) == 0 {
-		c.ResultFields = make([]*resolve.ResultField, len(v.ResultFields))
-		copy(c.ResultFields, v.ResultFields)
+	if len(c.ResultFields) == 0 {
+		c.ResultFields = v.ResultFields
 	}
 	if len(c.cache) < c.capacity {
-		chks := make([]*chunk.Chunk, len(v.Chunks))
-		copy(chks, v.Chunks)
 		c.cache[string(k)] = &preparedStmtCacheValue{
-			Chunks: chks,
+			Chunks: v.Chunks,
 			ts:     ts,
 		}
 		succ = true

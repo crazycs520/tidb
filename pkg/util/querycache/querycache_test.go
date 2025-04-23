@@ -1,11 +1,6 @@
 package querycache
 
 import (
-	"github.com/stretchr/testify/require"
-	"log"
-	"net/http"
-	_ "net/http/pprof"
-
 	"encoding/binary"
 	"fmt"
 	"github.com/pingcap/tidb/pkg/meta/model"
@@ -13,12 +8,17 @@ import (
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/stretchr/testify/require"
+	"log"
 	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
 	"runtime"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/pingcap/tidb/pkg/param"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -160,6 +160,22 @@ func TestQueryCacheMemUsage(t *testing.T) {
 	}
 	require.Equal(t, count, cache.Len())
 	require.Equal(t, 1, cache.StmtCount())
+
+	size0 := int64(0)
+	size0 += int64(unsafe.Sizeof(cache))
+	cache.stmtCache.Range(func(key, value any) bool {
+		cache := value.(*PreparedStmtCache)
+		size0 += int64(unsafe.Sizeof(cache))
+		for _, tp := range cache.ResultFields {
+			size0 += int64(unsafe.Sizeof(*tp))
+			size0 += int64(unsafe.Sizeof(*tp.Column))
+			size0 += int64(unsafe.Sizeof(*tp.Table))
+		}
+		return true
+	})
+	memSize += size0
+
+	runtime.GC()
 
 	k := genKey(0)
 	k.Sql = "select * from sbtest1 where b = ?"
