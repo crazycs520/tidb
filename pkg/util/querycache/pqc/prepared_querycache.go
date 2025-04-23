@@ -28,12 +28,6 @@ type PreparedQueryCache struct {
 	capacity  uint
 }
 
-type StmtKey struct {
-	SchemaName string
-	Sql        string
-	Vars       QueryVars
-}
-
 type PreparedStmtCache struct {
 	sync.RWMutex
 	cache      map[string]*preparedStmtCacheValue
@@ -47,14 +41,9 @@ type PreparedStmtCache struct {
 
 func NewPreparedStmtCache(capacity int) *PreparedStmtCache {
 	return &PreparedStmtCache{
-		cache:    make(map[string]*preparedStmtCacheValue, capacity),
+		cache:    make(map[string]*preparedStmtCacheValue),
 		capacity: capacity,
 	}
-}
-
-type preparedStmtCacheValue struct {
-	Chunks []*chunk.Chunk
-	ts     int64
 }
 
 func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) bool {
@@ -122,21 +111,18 @@ func (c *PreparedStmtCache) Get(k []byte) (*QueryCacheValue, bool) {
 }
 
 func (c *PreparedStmtCache) ReSize(capacity int) {
-	cache := make(map[string]*preparedStmtCacheValue, capacity)
+	cache := make(map[string]*preparedStmtCacheValue)
 	ttl := int64(config.GetGlobalConfig().Performance.QueryCache.InactiveTTL)
 	ts := time.Now().Unix()
 	memSize := int64(0)
 	c.RLock()
 	for k, v := range c.cache {
-		if (ts - v.ts) > ttl {
+		if (ts-v.ts) > ttl || len(cache) >= capacity {
 			memSize += int64(len(k))
 			memSize += v.MemoryUsage()
 			continue
 		}
 		cache[k] = v
-		if len(cache) >= capacity {
-			break
-		}
 	}
 	c.RUnlock()
 
@@ -221,6 +207,33 @@ func (qc *PreparedQueryCache) DeleteQueryCache() {
 	return
 }
 
+func (qc *PreparedQueryCache) StmtCount() int {
+	cnt := 0
+	qc.stmtCache.Range(func(_, _ any) bool {
+		cnt++
+		return true
+	})
+	return cnt
+}
+
+func (qc *PreparedQueryCache) Len() int {
+	length := 0
+	qc.stmtCache.Range(func(_, v any) bool {
+		stmtCache := v.(*PreparedStmtCache)
+		stmtCache.RLock()
+		length += len(stmtCache.cache)
+		stmtCache.RUnlock()
+		return true
+	})
+	return length
+}
+
+type StmtKey struct {
+	SchemaName string
+	Sql        string
+	Vars       QueryVars
+}
+
 type QueryCacheKey struct {
 	StmtKey
 
@@ -230,7 +243,7 @@ type QueryCacheKey struct {
 }
 
 type QueryVars struct {
-	TimeZone string
+	TimeZone *time.Location
 	SQLMode  mysql.SQLMode
 }
 
@@ -290,14 +303,6 @@ func (v *QueryCacheValue) MemoryUsage() int64 {
 	return size
 }
 
-func (v *preparedStmtCacheValue) MemoryUsage() int64 {
-	size := int64(8 * 3)
-	for _, chk := range v.Chunks {
-		size += chk.MemoryUsage()
-	}
-	return size
-}
-
 func (v *QueryCacheValue) Clone() *QueryCacheValue {
 	result := &QueryCacheValue{
 		ResultFields: make([]*resolve.ResultField, 0, len(v.ResultFields)),
@@ -308,4 +313,17 @@ func (v *QueryCacheValue) Clone() *QueryCacheValue {
 	result.FieldTypes = append(result.FieldTypes, v.FieldTypes...)
 	result.Chunks = append(result.Chunks, v.Chunks...)
 	return result
+}
+
+type preparedStmtCacheValue struct {
+	Chunks []*chunk.Chunk
+	ts     int64
+}
+
+func (v *preparedStmtCacheValue) MemoryUsage() int64 {
+	size := int64(8 * 3)
+	for _, chk := range v.Chunks {
+		size += chk.MemoryUsage()
+	}
+	return size
 }

@@ -1,6 +1,7 @@
 package querycache
 
 import (
+	"github.com/stretchr/testify/require"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
@@ -30,7 +31,7 @@ func TestQueryCache(t *testing.T) {
 			SchemaName: "test1",
 			Sql:        "select * from sbtest1 where a = ?",
 			Vars: QueryVars{
-				TimeZone: time.Local.String(),
+				TimeZone: time.Local,
 				SQLMode:  mysql.SetSQLMode(mysql.SQLMode(0), mysql.ModeMsSQL),
 			},
 		},
@@ -69,7 +70,7 @@ func genKey(i int) *QueryCacheKey {
 			SchemaName: "test1",
 			Sql:        "select * from sbtest1 where a = ?",
 			Vars: QueryVars{
-				TimeZone: time.Local.String(),
+				TimeZone: time.Local,
 				SQLMode:  mysql.SetSQLMode(mysql.SQLMode(0), mysql.ModeMsSQL),
 			},
 		},
@@ -134,12 +135,12 @@ func genValue() *QueryCacheValue {
 
 func BenchmarkQueryCache(b *testing.B) {
 	cache := NewPreparedQueryCache(1000000)
-	//memSize := int64(0)
+	k := genKey(0)
+	v := genValue()
 	for i := 0; i < b.N; i++ {
-		k := genKey(i)
-		v := genValue()
-		//memSize += k.MemoryUsage()
-		//memSize += v.MemoryUsage()
+		buf := make([]byte, 8)
+		binary.BigEndian.PutUint64(buf, uint64(i))
+		k.Args[0].Val = buf
 		cache.GetQueryCache(k)
 		cache.AddQueryCache(k, v)
 	}
@@ -160,7 +161,15 @@ func TestQueryCacheMemUsage(t *testing.T) {
 		memSize += v.MemoryUsage()
 		cache.AddQueryCache(k, v)
 	}
-	//require.Equal(t, count, cache.Len())
+	require.Equal(t, count, cache.Len())
+	require.Equal(t, 1, cache.StmtCount())
+
+	k := genKey(0)
+	k.Sql = "select * from sbtest1 where b = ?"
+	v := genValue()
+	cache.AddQueryCache(k, v)
+	require.Equal(t, count+1, cache.Len())
+	require.Equal(t, 2, cache.StmtCount())
 
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
@@ -170,8 +179,6 @@ func TestQueryCacheMemUsage(t *testing.T) {
 	fmt.Printf("\tHeapInUse = %v MiB", m.HeapInuse/1024/1024)
 	fmt.Printf("\tSys = %v MiB", m.Sys/1024/1024)
 	fmt.Printf("\tNumGC = %v\n", m.NumGC)
-
-	time.Sleep(time.Second * 300)
 }
 
 func TestQueryCache2(t *testing.T) {
@@ -201,4 +208,6 @@ func TestQueryCache2(t *testing.T) {
 	}
 
 	wg.Wait()
+	require.Equal(t, 100000, GlobalQueryCache.Len())
+	require.Equal(t, 100000, GlobalQueryCache.StmtCount())
 }

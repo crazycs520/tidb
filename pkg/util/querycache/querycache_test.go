@@ -134,12 +134,12 @@ func genValue() *QueryCacheValue {
 
 func BenchmarkQueryCache(b *testing.B) {
 	cache := NewQueryCache(2000000)
-	//memSize := int64(0)
+	k := genKey(0)
+	v := genValue()
 	for i := 0; i < b.N; i++ {
-		k := genKey(i)
-		v := genValue()
-		//memSize += k.MemoryUsage()
-		//memSize += v.MemoryUsage()
+		buf := make([]byte, 8)
+		binary.BigEndian.PutUint64(buf, uint64(i))
+		k.Args[0].Val = buf
 		cache.GetQueryCache(k)
 		cache.AddQueryCache(k, v)
 	}
