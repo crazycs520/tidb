@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 )
 
 var GlobalQueryCache *PreparedQueryCache
@@ -24,22 +25,47 @@ func init() {
 type PreparedQueryCache struct {
 	sync.Mutex
 	stmtCache sync.Map // map[StmtKey]*PreparedStmtCache
-	capacity  uint
+	cm        *capacityManager
+	//lastRemove int64
+}
+
+type capacityManager struct {
+	sync.Mutex
+	allocated int
+	capacity  int // byte
+}
+
+func (m *capacityManager) alloc(size int) int {
+
+	return 0
+}
+
+func (m *capacityManager) release(size int) {
+
+}
+
+func (m *capacityManager) setCapacity(capacity int) {
+	m.Lock()
+	m.capacity = capacity
+	m.Unlock()
 }
 
 type PreparedStmtCache struct {
 	sync.RWMutex
 	cache      map[string]*preparedStmtCacheValue
-	capacity   int
+	size       int // used size
+	capacity   int // current capacity
+	cm         *capacityManager
 	lastRemove int64
 
 	// result meta
 	ResultFields []*resolve.ResultField
 }
 
-func NewPreparedStmtCache(capacity int) *PreparedStmtCache {
+func NewPreparedStmtCache(capacity int, cm *capacityManager) *PreparedStmtCache {
 	return &PreparedStmtCache{
 		cache:    make(map[string]*preparedStmtCacheValue),
+		cm:       cm,
 		capacity: capacity,
 	}
 }
@@ -50,7 +76,11 @@ func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) bool {
 	c.Lock()
 	if len(c.ResultFields) == 0 {
 		c.ResultFields = v.ResultFields
+		c.size += v.ResultFieldsSize()
 	}
+	chkSize := v.ChunksSize()
+	if v.
+
 	if len(c.cache) < c.capacity {
 		c.cache[string(k)] = &preparedStmtCacheValue{
 			Chunks: v.Chunks,
@@ -137,15 +167,17 @@ func (c *PreparedStmtCache) Size() int {
 	return size
 }
 
-func NewPreparedQueryCache(capacity uint) *PreparedQueryCache {
+func NewPreparedQueryCache(capacity int) *PreparedQueryCache {
 	return &PreparedQueryCache{
 		stmtCache: sync.Map{},
-		capacity:  capacity,
+		cm: &capacityManager{
+			capacity: capacity,
+		},
 	}
 }
 
 func (qc *PreparedQueryCache) SetCapacity(capacity uint) {
-	qc.capacity = capacity
+	qc.cm.setCapacity(int(capacity))
 	qc.stmtCache.Range(func(k, v any) bool {
 		stmtCache := v.(*PreparedStmtCache)
 		stmtCache.ReSize(int(capacity))
@@ -181,7 +213,7 @@ func (qc *PreparedQueryCache) getOrCreateStmtCache(key *QueryCacheKey) *Prepared
 	if ok {
 		return v.(*PreparedStmtCache)
 	}
-	cache := NewPreparedStmtCache(int(qc.capacity))
+	cache := NewPreparedStmtCache(4*1024, qc.cm)
 	qc.stmtCache.Store(key.StmtKey, cache)
 	return cache
 }
@@ -288,6 +320,24 @@ func paramSize(arg param.BinaryParam) int {
 type QueryCacheValue struct {
 	ResultFields []*resolve.ResultField
 	Chunks       []*chunk.Chunk
+}
+
+func (v *QueryCacheValue) ResultFieldsSize() int {
+	size := int(unsafe.Sizeof(v.ResultFields)) + len(v.ResultFields)
+	for _,field := range v.ResultFields {
+		size += int(unsafe.Sizeof(*field))
+		size += int(unsafe.Sizeof(*field.Table))
+		size += int(unsafe.Sizeof(*field.Column))
+	}
+	return size
+}
+
+func (v *QueryCacheValue) ChunksSize() int {
+	size := int64(unsafe.Sizeof(v.Chunks)) + int64(len(v.Chunks))
+	for _, chk := range v.Chunks {
+		size += chk.MemoryUsage()
+	}
+	return int(size)
 }
 
 func (v *QueryCacheValue) MemoryUsage() int64 {
