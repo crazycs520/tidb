@@ -179,6 +179,9 @@ func NewPreparedQueryCache(capacity int) *PreparedQueryCache {
 }
 
 func (qc *PreparedQueryCache) SetCapacity(capacity uint) {
+	if qc.cm.capacity == int(capacity) {
+		return
+	}
 	qc.Lock()
 	qc.stmtCache = sync.Map{}
 	qc.cm = &capacityManager{
