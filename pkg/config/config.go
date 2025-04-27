@@ -763,7 +763,7 @@ type Performance struct {
 
 type QueryCache struct {
 	Enabled      bool   `toml:"enabled" json:"enabled"`
-	Capacity     uint   `toml:"capacity" json:"capacity"`
+	MemSize      uint   `toml:"mem-size" json:"mem-size"`
 	MaxQuerySize uint64 `toml:"max-query-size" json:"max-query-size"`
 	InactiveTTL  uint64 `toml:"inactive-ttl" json:"inactive-ttl"`
 }
@@ -1024,7 +1024,7 @@ var defaultConf = Config{
 		ConcurrentlyInitStats:             true,
 		QueryCache: QueryCache{
 			Enabled:      true,
-			Capacity:     100000,
+			MemSize:      1024 * 1024 * 1024,
 			MaxQuerySize: 1024 * 1024,
 			InactiveTTL:  300,
 		},

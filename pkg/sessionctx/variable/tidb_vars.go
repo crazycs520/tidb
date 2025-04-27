@@ -286,7 +286,7 @@ const (
 	TiDBExplicitRequestSourceType = "tidb_request_source_type"
 
 	TiDBEnableQueryCache       = "tidb_enable_query_cache"
-	TiDBQueryCacheCount        = "tidb_query_cache_count"
+	TiDBQueryCacheMemSize      = "tidb_query_cache_mem_size"
 	TiDBQueryCacheMaxEntrySize = "tidb_query_cache_max_entry_size"
 	TiDBQueryCacheInactiveTTL  = "tidb_query_cache_inactive_ttl"
 )

@@ -17,7 +17,7 @@ import (
 var GlobalQueryCache *PreparedQueryCache
 
 func init() {
-	capacity := config.GetGlobalConfig().Performance.QueryCache.Capacity
+	capacity := config.GetGlobalConfig().Performance.QueryCache.MemSize
 	GlobalQueryCache = NewPreparedQueryCache(int(capacity))
 }
 

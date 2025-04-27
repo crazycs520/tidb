@@ -452,7 +452,7 @@ var defaultSysVars = []*SysVar{
 			newConfig := *oldConfig
 			newConfig.Performance.QueryCache.Enabled = TiDBOptOn(val)
 			if newConfig.Performance.QueryCache.Enabled {
-				querycache.GlobalQueryCache.SetCapacity(newConfig.Performance.QueryCache.Capacity)
+				querycache.GlobalQueryCache.SetCapacity(newConfig.Performance.QueryCache.MemSize)
 			} else {
 				querycache.GlobalQueryCache.SetCapacity(0)
 			}
@@ -462,7 +462,7 @@ var defaultSysVars = []*SysVar{
 		GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
 			return BoolToOnOff(config.GetGlobalConfig().Performance.QueryCache.Enabled), nil
 		}},
-	{Scope: ScopeGlobal, Name: TiDBQueryCacheCount, Value: strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.Capacity)),
+	{Scope: ScopeGlobal, Name: TiDBQueryCacheMemSize, Value: strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.MemSize)),
 		SetGlobal: func(ctx context.Context, vars *SessionVars, val string) error {
 			v, err := strconv.Atoi(val)
 			if err != nil {
@@ -470,13 +470,13 @@ var defaultSysVars = []*SysVar{
 			}
 			oldConfig := config.GetGlobalConfig()
 			newConfig := *oldConfig
-			newConfig.Performance.QueryCache.Capacity = uint(v)
+			newConfig.Performance.QueryCache.MemSize = uint(v)
 			config.StoreGlobalConfig(&newConfig)
 			querycache.GlobalQueryCache.SetCapacity(uint(v))
 			return nil
 		},
 		GetGlobal: func(_ context.Context, s *SessionVars) (string, error) {
-			return strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.Capacity)), nil
+			return strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.MemSize)), nil
 		}},
 
 	{Scope: ScopeGlobal, Name: TiDBQueryCacheMaxEntrySize, Value: strconv.Itoa(int(config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize)),
