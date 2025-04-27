@@ -54,6 +54,11 @@ func (m *capacityManager) remain() int {
 }
 
 func (m *capacityManager) release(size int) {
+	m.Lock()
+	if size < m.allocated {
+		m.allocated -= size
+	}
+	m.Unlock()
 
 }
 
@@ -78,6 +83,8 @@ func NewPreparedStmtCache(capacity int, cm *capacityManager) *PreparedStmtCache 
 	}
 }
 
+var maxAllocSize = 1024 * 1024 * 16
+
 func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) int {
 	ts := time.Now().Unix()
 	addedSize := 0
@@ -92,8 +99,11 @@ func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) int {
 
 	if (c.size + size) > c.capacity {
 		needSize := c.capacity
-		for needSize < size && needSize < 100*1024*1024 {
+		for needSize < size && needSize < maxAllocSize {
 			needSize = needSize * 2
+		}
+		if needSize > maxAllocSize {
+			needSize = maxAllocSize
 		}
 		if needSize > size {
 			c.capacity += c.cm.alloc(c.capacity)
