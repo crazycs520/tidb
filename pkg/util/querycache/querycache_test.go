@@ -3,6 +3,7 @@ package querycache
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
@@ -60,6 +61,74 @@ func TestQueryCache(t *testing.T) {
 	q1.argHash = nil
 	value, _ = GlobalQueryCache.GetQueryCache(q1)
 	assert.Nil(t, value)
+}
+
+func TestQueryCacheBasic(t *testing.T) {
+	cache := NewPreparedQueryCache(16 * 1024)
+	key := genKey(0)
+	value := genValue()
+	require.Equal(t, 10, len(key.ArgHash()))
+	require.Equal(t, 694, value.ChunksSize())
+	require.Equal(t, 4509, value.ResultFieldsSize())
+	succ := cache.AddQueryCache(key, value)
+	require.True(t, succ)
+	require.Equal(t, 0, cache.cm.remain())
+	require.Equal(t, len(key.ArgHash())+value.ChunksSize()+value.ResultFieldsSize(), cache.Size())
+
+	key = genKey(0)
+	key.SchemaName = "test2"
+	succ = cache.AddQueryCache(key, value)
+	require.False(t, succ)
+
+	key = genKey(1)
+	succ = cache.AddQueryCache(key, value)
+	require.True(t, succ)
+	require.Equal(t, len(key.ArgHash())*2+value.ChunksSize()*2+value.ResultFieldsSize(), cache.Size())
+
+	cnt := 0
+	for i := 2; i < 20; i++ {
+		key = genKey(i)
+		succ = cache.AddQueryCache(key, value)
+		cnt = i
+		if !succ {
+			require.Less(t, cache.cm.capacity, cache.Size()+len(key.ArgHash())+value.ChunksSize())
+			break
+		}
+		fmt.Printf("%v -> %v\n\n", i, cache.Size())
+	}
+
+	for i := 0; i <= cnt; i++ {
+		key = genKey(i)
+		value, canCache := cache.GetQueryCache(key)
+		if i < cnt {
+			require.NotNil(t, value)
+			require.False(t, canCache)
+		} else {
+			require.Nil(t, value)
+			require.False(t, canCache)
+		}
+	}
+
+	v, canCache := cache.GetQueryCache(genKey(cnt))
+	require.Nil(t, v)
+	require.False(t, canCache)
+	succ = cache.AddQueryCache(genKey(cnt), value)
+	require.False(t, succ)
+
+	config.GetGlobalConfig().Performance.QueryCache.InactiveTTL = 1
+	time.Sleep(time.Second * 2)
+	v, canCache = cache.GetQueryCache(genKey(0))
+	require.NotNil(t, v)
+	require.False(t, canCache)
+
+	v, canCache = cache.GetQueryCache(genKey(cnt))
+	require.Nil(t, v)
+	require.True(t, canCache)
+	require.Equal(t, 1, cache.Len())
+
+	succ = cache.AddQueryCache(genKey(cnt), value)
+	require.True(t, succ)
+	require.Equal(t, 2, cache.Len())
 }
 
 func genKey(i int) *QueryCacheKey {

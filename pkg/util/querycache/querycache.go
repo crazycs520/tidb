@@ -1,7 +1,6 @@
 package querycache
 
 import (
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/param"
@@ -19,7 +18,7 @@ var GlobalQueryCache *PreparedQueryCache
 
 func init() {
 	capacity := config.GetGlobalConfig().Performance.QueryCache.Capacity
-	GlobalQueryCache = NewPreparedQueryCache(capacity)
+	GlobalQueryCache = NewPreparedQueryCache(int(capacity))
 }
 
 type PreparedQueryCache struct {
@@ -36,8 +35,23 @@ type capacityManager struct {
 }
 
 func (m *capacityManager) alloc(size int) int {
+	if m.allocated >= m.capacity {
+		return 0
+	}
+	result := 0
+	m.Lock()
+	if (m.allocated + size) < m.capacity {
+		result = size
+	} else if m.allocated < m.capacity {
+		result = m.capacity - m.allocated
+	}
+	m.allocated += result
+	m.Unlock()
+	return result
+}
 
-	return 0
+func (m *capacityManager) remain() int {
+	return m.capacity - m.allocated
 }
 
 func (m *capacityManager) release(size int) {
@@ -56,6 +70,7 @@ type PreparedStmtCache struct {
 	size       int // used size
 	capacity   int // current capacity
 	cm         *capacityManager
+	full       bool
 	lastRemove int64
 
 	// result meta
@@ -70,41 +85,59 @@ func NewPreparedStmtCache(capacity int, cm *capacityManager) *PreparedStmtCache 
 	}
 }
 
-func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) bool {
-	succ := false
+func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) int {
 	ts := time.Now().Unix()
+	addedSize := 0
+	size := v.ChunksSize() + len(k)
 	c.Lock()
 	if len(c.ResultFields) == 0 {
 		c.ResultFields = v.ResultFields
-		c.size += v.ResultFieldsSize()
+		fieldSize := v.ResultFieldsSize()
+		c.size += fieldSize
+		addedSize += fieldSize
 	}
-	chkSize := v.ChunksSize()
-	if v.
 
-	if len(c.cache) < c.capacity {
+	if (c.size + size) > c.capacity {
+		needSize := c.capacity
+		for needSize < size && needSize < 100*1024*1024 {
+			needSize = needSize * 2
+		}
+		if needSize > size {
+			c.capacity += c.cm.alloc(c.capacity)
+		}
+	}
+
+	if (c.size + size) <= c.capacity {
 		c.cache[string(k)] = &preparedStmtCacheValue{
 			Chunks: v.Chunks,
 			ts:     ts,
 		}
-		succ = true
+		c.size += size
+		addedSize += size
+	} else {
+		c.full = true
 	}
 	c.Unlock()
-	return succ
+	return addedSize
 }
 
 func (c *PreparedStmtCache) removeUseless(ts int64) int {
 	deleted := 0
-	memoryUsage := int64(0)
+	memoryUsage := 0
 	ttl := int64(config.GetGlobalConfig().Performance.QueryCache.InactiveTTL)
 	c.Lock()
 	for k, v := range c.cache {
 		if (ts - v.ts) > ttl {
 			deleted++
-			memoryUsage += int64(len(k))
+			memoryUsage += len(k)
 			memoryUsage += v.MemoryUsage()
 			delete(c.cache, k)
 		}
 	}
+	if deleted > 0 {
+		c.full = false
+	}
+	c.size = c.size - memoryUsage
 	c.Unlock()
 	metrics.QueryCacheCounter.WithLabelValues("delete").Add(float64(deleted))
 	metrics.QueryCacheMemUsage.Add(-float64(memoryUsage))
@@ -124,8 +157,8 @@ func (c *PreparedStmtCache) Get(k []byte) (*QueryCacheValue, bool) {
 	}
 
 	// evict old entry if needed.
-	if len(c.cache) >= c.capacity {
-		if time.Now().Unix()-c.lastRemove > 60 {
+	if c.full {
+		if time.Now().Unix()-c.lastRemove > int64(config.GetGlobalConfig().Performance.QueryCache.InactiveTTL) {
 			ts := time.Now().Unix()
 			c.lastRemove = ts
 			deleted := c.removeUseless(ts)
@@ -133,31 +166,7 @@ func (c *PreparedStmtCache) Get(k []byte) (*QueryCacheValue, bool) {
 		}
 		return nil, false
 	}
-	return nil, true
-}
-
-func (c *PreparedStmtCache) ReSize(capacity int) {
-	cache := make(map[string]*preparedStmtCacheValue)
-	ttl := int64(config.GetGlobalConfig().Performance.QueryCache.InactiveTTL)
-	ts := time.Now().Unix()
-	memSize := int64(0)
-	c.RLock()
-	for k, v := range c.cache {
-		if (ts-v.ts) > ttl || len(cache) >= capacity {
-			memSize += int64(len(k))
-			memSize += v.MemoryUsage()
-			continue
-		}
-		cache[k] = v
-	}
-	c.RUnlock()
-
-	metrics.QueryCacheMemUsage.Add(-float64(memSize))
-
-	c.Lock()
-	c.cache = cache
-	c.capacity = capacity
-	c.Unlock()
+	return nil, !c.full
 }
 
 func (c *PreparedStmtCache) Size() int {
@@ -178,18 +187,20 @@ func NewPreparedQueryCache(capacity int) *PreparedQueryCache {
 
 func (qc *PreparedQueryCache) SetCapacity(capacity uint) {
 	qc.cm.setCapacity(int(capacity))
-	qc.stmtCache.Range(func(k, v any) bool {
-		stmtCache := v.(*PreparedStmtCache)
-		stmtCache.ReSize(int(capacity))
-		return true
-	})
+	if capacity == 0 {
+		qc.stmtCache.Range(func(k, v any) bool {
+			qc.stmtCache.Delete(k)
+			return true
+		})
+		qc.cm.allocated = 0
+	}
 }
 
 func (qc *PreparedQueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue, _ bool) {
 	cache, ok := qc.stmtCache.Load(key.StmtKey)
 	if !ok {
 		metrics.QueryCacheCounter.WithLabelValues("miss").Inc()
-		return nil, true
+		return nil, qc.cm.remain() > 0
 	}
 	stmtCache := cache.(*PreparedStmtCache)
 	v, canCached := stmtCache.Get(key.ArgHash())
@@ -213,22 +224,30 @@ func (qc *PreparedQueryCache) getOrCreateStmtCache(key *QueryCacheKey) *Prepared
 	if ok {
 		return v.(*PreparedStmtCache)
 	}
-	cache := NewPreparedStmtCache(4*1024, qc.cm)
+	size := qc.cm.alloc(16 * 1024)
+	if size == 0 {
+		return nil
+	}
+	cache := NewPreparedStmtCache(size, qc.cm)
 	qc.stmtCache.Store(key.StmtKey, cache)
 	return cache
 }
 
-func (qc *PreparedQueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) {
+func (qc *PreparedQueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) bool {
 	if !strings.Contains(key.Sql, "sbtest") {
-		return
+		return false
 	}
 	cache := qc.getOrCreateStmtCache(key)
-	succ := cache.Add(key.ArgHash(), value)
-	if succ {
-		metrics.QueryCacheCounter.WithLabelValues("add").Inc()
-		metrics.QueryCacheMemUsage.Add(float64(key.MemoryUsage() + value.MemoryUsage()))
-		failpoint.InjectCall("AfterAddQueryCache", key, value)
+	if cache == nil {
+		return false
 	}
+	size := cache.Add(key.ArgHash(), value)
+	if size > 0 {
+		metrics.QueryCacheCounter.WithLabelValues("add").Inc()
+		metrics.QueryCacheMemUsage.Add(float64(size))
+		return true
+	}
+	return false
 }
 
 func (qc *PreparedQueryCache) DeleteQueryCache() {
@@ -254,6 +273,18 @@ func (qc *PreparedQueryCache) Len() int {
 		return true
 	})
 	return length
+}
+
+func (qc *PreparedQueryCache) Size() int {
+	size := 0
+	qc.stmtCache.Range(func(_, v any) bool {
+		stmtCache := v.(*PreparedStmtCache)
+		stmtCache.RLock()
+		size += stmtCache.size
+		stmtCache.RUnlock()
+		return true
+	})
+	return size
 }
 
 type StmtKey struct {
@@ -324,7 +355,7 @@ type QueryCacheValue struct {
 
 func (v *QueryCacheValue) ResultFieldsSize() int {
 	size := int(unsafe.Sizeof(v.ResultFields)) + len(v.ResultFields)
-	for _,field := range v.ResultFields {
+	for _, field := range v.ResultFields {
 		size += int(unsafe.Sizeof(*field))
 		size += int(unsafe.Sizeof(*field.Table))
 		size += int(unsafe.Sizeof(*field.Column))
@@ -341,11 +372,19 @@ func (v *QueryCacheValue) ChunksSize() int {
 }
 
 func (v *QueryCacheValue) MemoryUsage() int64 {
-	size := int64(8 * 3)
+	size := int64(unsafe.Sizeof(v.Chunks)) + int64(len(v.Chunks))
 	for _, chk := range v.Chunks {
 		size += chk.MemoryUsage()
 	}
 	return size
+}
+
+func (v *preparedStmtCacheValue) MemoryUsage() int {
+	size := int64(unsafe.Sizeof(v.Chunks)) + int64(len(v.Chunks))
+	for _, chk := range v.Chunks {
+		size += chk.MemoryUsage()
+	}
+	return int(size)
 }
 
 func (v *QueryCacheValue) Clone() *QueryCacheValue {
@@ -361,12 +400,4 @@ func (v *QueryCacheValue) Clone() *QueryCacheValue {
 type preparedStmtCacheValue struct {
 	Chunks []*chunk.Chunk
 	ts     int64
-}
-
-func (v *preparedStmtCacheValue) MemoryUsage() int64 {
-	size := int64(8 * 3)
-	for _, chk := range v.Chunks {
-		size += chk.MemoryUsage()
-	}
-	return size
 }
