@@ -57,12 +57,6 @@ func (m *capacityManager) release(size int) {
 
 }
 
-func (m *capacityManager) setCapacity(capacity int) {
-	m.Lock()
-	m.capacity = capacity
-	m.Unlock()
-}
-
 type PreparedStmtCache struct {
 	sync.RWMutex
 	cache      map[string]*preparedStmtCacheValue
@@ -185,14 +179,13 @@ func NewPreparedQueryCache(capacity int) *PreparedQueryCache {
 }
 
 func (qc *PreparedQueryCache) SetCapacity(capacity uint) {
-	qc.cm.setCapacity(int(capacity))
-	if capacity == 0 {
-		qc.stmtCache.Range(func(k, v any) bool {
-			qc.stmtCache.Delete(k)
-			return true
-		})
-		qc.cm.allocated = 0
+	qc.Lock()
+	qc.stmtCache = sync.Map{}
+	qc.cm = &capacityManager{
+		capacity: int(capacity),
 	}
+	qc.Unlock()
+	metrics.QueryCacheMemUsage.Set(float64(0))
 }
 
 func (qc *PreparedQueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue, _ bool) {
