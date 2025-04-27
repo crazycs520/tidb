@@ -187,8 +187,8 @@ func (qc *PreparedQueryCache) SetCapacity(capacity uint) {
 	qc.cm = &capacityManager{
 		capacity: int(capacity),
 	}
-	qc.Unlock()
 	metrics.QueryCacheMemUsage.Set(float64(0))
+	qc.Unlock()
 }
 
 func (qc *PreparedQueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCacheValue, _ bool) {
