@@ -7,7 +7,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/util/chunk"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -234,9 +233,9 @@ func (qc *PreparedQueryCache) getOrCreateStmtCache(key *QueryCacheKey) *Prepared
 }
 
 func (qc *PreparedQueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) bool {
-	if !strings.Contains(key.Sql, "sbtest") {
-		return false
-	}
+	//if !strings.Contains(key.Sql, "sbtest") {
+	//	return false
+	//}
 	cache := qc.getOrCreateStmtCache(key)
 	if cache == nil {
 		return false

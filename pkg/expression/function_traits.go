@@ -45,6 +45,55 @@ var UnCacheableFunctions = map[string]struct{}{
 	ast.AesDecrypt:       {},
 }
 
+// UnCacheableFunctions stores functions which can not be cached to plan cache.
+var QueryUnCacheableFunctions = map[string]struct{}{
+	ast.Database:             {},
+	ast.CurrentUser:          {},
+	ast.CurrentRole:          {},
+	ast.CurrentResourceGroup: {},
+	ast.User:                 {},
+	ast.ConnectionID:         {},
+	ast.LastInsertId:         {},
+	ast.RowCount:             {},
+	ast.Version:              {},
+	ast.Like:                 {},
+
+	// functions below are incompatible with (non-prep) plan cache, we'll fix them one by one later.
+	ast.Coalesce:         {},
+	ast.TimeLiteral:      {},
+	ast.DateLiteral:      {},
+	ast.TimestampLiteral: {},
+	ast.AesEncrypt:       {}, // affected by @@block_encryption_mode
+	ast.AesDecrypt:       {},
+
+	// see https://dev.mysql.com/doc/refman/5.7/en/query-cache-operation.html
+	ast.Benchmark:        {},
+	ast.ConvertTz:        {},
+	ast.Curdate:          {},
+	ast.CurrentDate:      {},
+	ast.CurrentTime:      {},
+	ast.CurrentTimestamp: {},
+	ast.Curtime:          {},
+	ast.Encrypt:          {},
+	ast.FoundRows:        {},
+	ast.GetLock:          {},
+	ast.IsFreeLock:       {},
+	ast.IsUsedLock:       {},
+	ast.LoadFile:         {},
+	ast.MasterPosWait:    {},
+	ast.Now:              {},
+	ast.PasswordFunc:     {},
+	ast.Rand:             {},
+	ast.RandomBytes:      {},
+	ast.ReleaseAllLocks:  {},
+	ast.ReleaseLock:      {},
+	ast.Sleep:            {},
+	ast.Sysdate:          {},
+	ast.UnixTimestamp:    {}, // todo: fix me, check it with no parameters
+	ast.UUID:             {},
+	ast.UUIDShort:        {},
+}
+
 // unFoldableFunctions stores functions which can not be folded duration constant folding stage.
 var unFoldableFunctions = map[string]struct{}{
 	ast.Sysdate:   {},

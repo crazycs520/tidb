@@ -2181,7 +2181,9 @@ func (s *session) ExecuteStmt(ctx context.Context, stmtNode ast.StmtNode) (sqlex
 func (s *session) GetResultFromQueryCache(stmtNode ast.StmtNode) sqlexec.RecordSet {
 	if execStmt, ok := stmtNode.(*ast.ExecuteStmt); ok {
 		if binParam, ok := execStmt.BinaryArgs.([]param.BinaryParam); ok {
-			if StmtQueryCacheable(s, execStmt) {
+			cacheable := StmtQueryCacheable(s, execStmt)
+			//fmt.Printf("stmt: %v, cacheable: %v -----------cs--\n\n", s.sessionVars.StmtCtx.OriginalSQL, cacheable)
+			if cacheable {
 				sessVars := s.sessionVars
 				qcKey := &querycache.QueryCacheKey{
 					StmtKey: querycache.StmtKey{
@@ -2238,7 +2240,7 @@ func StmtQueryCacheable(ctx sessionctx.Context, stmt ast.StmtNode) bool {
 	if !ast.IsReadOnlySelect(stmt) {
 		return false
 	}
-	return true
+	return plannercore.IsStmtQueryCacheable(ctx, stmt, nil)
 }
 
 func (s *session) GetSQLExecutor() sqlexec.SQLExecutor {

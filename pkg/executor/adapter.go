@@ -262,8 +262,8 @@ func (a *recordSet) AddQueryCache() {
 	stmtCtx := a.stmt.Ctx.GetSessionVars().StmtCtx
 	if stmtCtx.QueryCacheHandler.Key != nil && stmtCtx.QueryCacheHandler.Value != nil {
 		querycache.GlobalQueryCache.AddQueryCache(stmtCtx.QueryCacheHandler.Key, stmtCtx.QueryCacheHandler.Value)
-		stmtCtx.QueryCacheHandler.Key = nil
-		stmtCtx.QueryCacheHandler.Value = nil
+		//stmtCtx.QueryCacheHandler.Key = nil
+		//stmtCtx.QueryCacheHandler.Value = nil
 	}
 }
 

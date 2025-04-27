@@ -658,3 +658,25 @@ func TestPreparedIssue17419(t *testing.T) {
 	// _, ok := tk1.Session().ShowProcess().Plan.(*plannercore.Execute)
 	// require.True(t, ok)
 }
+
+func TestPreparedStmtQueryCache(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	//tk.MustExec(fmt.Sprintf(`set @@tidb_enable_prepared_plan_cache=%v`, flag))
+	tk.MustExec("use test")
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (a int key, b int)")
+	tk.MustExec("insert into t (a, b) values (1,3), (2,2), (3,1)")
+
+	tk.MustExec(`prepare stmt from 'select * from t where a = ?'`)
+	tk.MustExec(`set @param = 1`)
+	r := tk.MustQuery(`execute stmt using @param;`)
+	r.Check(testkit.Rows("1 3"))
+
+	r = tk.MustQuery(`execute stmt using @param;`)
+	r.Check(testkit.Rows("1 3"))
+
+	tk.MustExec(`set @param = 2`)
+	r = tk.MustQuery(`execute stmt using @param;`)
+	r.Check(testkit.Rows("2 2"))
+}
