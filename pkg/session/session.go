@@ -2240,7 +2240,7 @@ func StmtQueryCacheable(ctx sessionctx.Context, stmt ast.StmtNode) bool {
 	if !ast.IsReadOnlySelect(stmt) {
 		return false
 	}
-	return plannercore.IsStmtQueryCacheable(ctx, stmt, nil)
+	return plannercore.IsStmtQueryCacheable(ctx, stmt)
 }
 
 func (s *session) GetSQLExecutor() sqlexec.SQLExecutor {

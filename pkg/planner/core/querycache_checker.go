@@ -7,6 +7,7 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessiontxn"
 	driver "github.com/pingcap/tidb/pkg/types/parser_driver"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"strings"
@@ -18,7 +19,8 @@ type queryCacheableChecker struct {
 	is        infoschema.InfoSchema
 }
 
-func IsStmtQueryCacheable(ctx sessionctx.Context, stmt ast.StmtNode, is infoschema.InfoSchema) bool {
+func IsStmtQueryCacheable(ctx sessionctx.Context, stmt ast.StmtNode) bool {
+	is := sessiontxn.GetTxnManager(ctx).GetTxnInfoSchema()
 	checker := &queryCacheableChecker{
 		sctx:      ctx,
 		cacheable: true,
@@ -81,6 +83,5 @@ func checkTableQueryCacheable(sctx sessionctx.Context, schema infoschema.InfoSch
 	if !tb.Type().IsNormalTable() {
 		return false
 	}
-
 	return true
 }
