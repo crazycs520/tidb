@@ -104,8 +104,6 @@ type recordSet struct {
 	lastErrs   []error
 	txnStartTS uint64
 	once       sync.Once
-
-	cacheSize uint64
 }
 
 func (a *recordSet) Fields() []*resolve.ResultField {
@@ -187,22 +185,8 @@ func (a *recordSet) Next(ctx context.Context, req *chunk.Chunk) (err error) {
 	}
 	stmtCtx.AddFoundRows(uint64(numRows))
 
-	if stmtCtx.QueryCacheHandler.Key != nil {
-		size := uint64(req.MemoryUsage())
-		if a.cacheSize+size > config.GetGlobalConfig().Performance.QueryCache.MaxQuerySize {
-			stmtCtx.QueryCacheHandler.Key = nil
-			stmtCtx.QueryCacheHandler.Value = nil
-			metrics.QueryCacheCounter.WithLabelValues("big-result-add-fail").Inc()
-		} else {
-			if stmtCtx.QueryCacheHandler.Value == nil {
-				stmtCtx.QueryCacheHandler.Value = &querycache.QueryCacheValue{
-					ResultFields: a.Fields(),
-				}
-			}
-			chk := req.CopyConstructSel()
-			stmtCtx.QueryCacheHandler.Value.Chunks = append(stmtCtx.QueryCacheHandler.Value.Chunks, chk)
-			a.cacheSize += size
-		}
+	if stmtCtx.QueryCacheHandler.NeedCache() {
+		stmtCtx.QueryCacheHandler.AddQueryResult(a.Fields(), req)
 	}
 
 	return nil
@@ -246,7 +230,7 @@ func (a *recordSet) Finish() error {
 func (a *recordSet) Close() error {
 	lastErr := errors.Join(a.lastErrs...)
 	if lastErr == nil && config.GetGlobalConfig().Performance.QueryCache.Enabled {
-		a.AddQueryCache()
+		a.stmt.Ctx.GetSessionVars().StmtCtx.QueryCacheHandler.AddQueryCache()
 	}
 
 	err := a.Finish()
@@ -256,15 +240,6 @@ func (a *recordSet) Close() error {
 	a.stmt.CloseRecordSet(a.txnStartTS, lastErr)
 
 	return err
-}
-
-func (a *recordSet) AddQueryCache() {
-	stmtCtx := a.stmt.Ctx.GetSessionVars().StmtCtx
-	if stmtCtx.QueryCacheHandler.Key != nil && stmtCtx.QueryCacheHandler.Value != nil {
-		querycache.GlobalQueryCache.AddQueryCache(stmtCtx.QueryCacheHandler.Key, stmtCtx.QueryCacheHandler.Value)
-		//stmtCtx.QueryCacheHandler.Key = nil
-		//stmtCtx.QueryCacheHandler.Value = nil
-	}
 }
 
 // OnFetchReturned implements commandLifeCycle#OnFetchReturned

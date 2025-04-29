@@ -417,6 +417,9 @@ func (e *TableReaderExecutor) buildResp(ctx context.Context, ranges []*ranger.Ra
 		return bytes.Compare(i.StartKey, j.StartKey)
 	})
 	e.kvRanges = kvReq.KeyRanges.AppendSelfTo(e.kvRanges)
+	if e.table.Meta().GetPartitionInfo() == nil && e.dctx.QueryCacheHandler.NeedCache() {
+		e.dctx.QueryCacheHandler.AddReadRange(getPhysicalTableID(e.table), kvReq.KeyRanges)
+	}
 
 	result, err := e.SelectResult(ctx, e.dctx, kvReq, exec.RetTypes(e), getPhysicalPlanIDs(e.plans), e.ID())
 	if err != nil {

@@ -17,6 +17,7 @@ package stmtctx
 import (
 	"bytes"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/util/querycache"
 	"io"
 	"slices"
 	"strconv"
@@ -45,7 +46,6 @@ import (
 	"github.com/pingcap/tidb/pkg/util/linter/constructor"
 	"github.com/pingcap/tidb/pkg/util/memory"
 	"github.com/pingcap/tidb/pkg/util/nocopy"
-	"github.com/pingcap/tidb/pkg/util/querycache"
 	"github.com/pingcap/tidb/pkg/util/topsql/stmtstats"
 	"github.com/pingcap/tidb/pkg/util/tracing"
 	atomic2 "go.uber.org/atomic"
@@ -436,12 +436,7 @@ type StatementContext struct {
 	// acquired in this case.
 	ForShareLockEnabledByNoop bool
 
-	QueryCacheHandler QueryCacheHandler
-}
-
-type QueryCacheHandler struct {
-	Key   *querycache.QueryCacheKey
-	Value *querycache.QueryCacheValue
+	QueryCacheHandler querycache.QueryCacheHandler
 }
 
 // DefaultStmtErrLevels is the default error levels for statement
@@ -497,8 +492,7 @@ func (sc *StatementContext) Reset() {
 	} else {
 		sc.ExtraWarnHandler = contextutil.NewStaticWarnHandler(0)
 	}
-	sc.QueryCacheHandler.Key = nil
-	sc.QueryCacheHandler.Value = nil
+	sc.QueryCacheHandler.Reset()
 }
 
 // CtxID returns the context id of the statement

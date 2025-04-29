@@ -385,6 +385,9 @@ func (e *PointGetExecutor) Next(ctx context.Context, req *chunk.Chunk) error {
 	}
 
 	key := tablecodec.EncodeRowKeyWithHandle(tblID, e.handle)
+	if e.Ctx().GetSessionVars().StmtCtx.QueryCacheHandler.NeedCache() {
+		e.Ctx().GetSessionVars().StmtCtx.QueryCacheHandler.AddPointGetRange(tblID, key)
+	}
 	val, err := e.getAndLock(ctx, key)
 	if err != nil {
 		return err

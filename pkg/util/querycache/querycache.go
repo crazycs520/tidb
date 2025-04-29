@@ -1,7 +1,9 @@
 package querycache
 
 import (
+	"container/list"
 	"github.com/pingcap/tidb/pkg/config"
+	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/metrics"
 	"github.com/pingcap/tidb/pkg/param"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -22,8 +24,9 @@ func init() {
 
 type PreparedQueryCache struct {
 	sync.Mutex
-	stmtCache sync.Map // map[StmtKey]*PreparedStmtCache
-	cm        *capacityManager
+	stmtCache  sync.Map // map[StmtKey]*PreparedStmtCache
+	table2Stmt sync.Map // map[tid]*List, List is a linked list of StmtKey
+	cm         *capacityManager
 	//lastRemove int64
 }
 
@@ -88,7 +91,7 @@ var maxAllocSize = 1024 * 1024 * 16
 func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) int {
 	ts := time.Now().Unix()
 	addedSize := 0
-	size := v.ChunksSize() + len(k)
+	size := v.ChunksSize() + v.RangeSize() + len(k)
 	c.Lock()
 	if len(c.ResultFields) == 0 {
 		c.ResultFields = v.ResultFields
@@ -113,6 +116,7 @@ func (c *PreparedStmtCache) Add(k []byte, v *QueryCacheValue) int {
 	if (c.size + size) <= c.capacity {
 		c.cache[string(k)] = &preparedStmtCacheValue{
 			Chunks: v.Chunks,
+			Ranges: v.Ranges,
 			ts:     ts,
 		}
 		c.size += size
@@ -218,7 +222,7 @@ func (qc *PreparedQueryCache) GetQueryCache(key *QueryCacheKey) (value *QueryCac
 	return value, canCached
 }
 
-func (qc *PreparedQueryCache) getOrCreateStmtCache(key *QueryCacheKey) *PreparedStmtCache {
+func (qc *PreparedQueryCache) getOrCreateStmtCache(key *QueryCacheKey, value *QueryCacheValue) *PreparedStmtCache {
 	v, ok := qc.stmtCache.Load(key.StmtKey)
 	if ok {
 		return v.(*PreparedStmtCache)
@@ -233,16 +237,28 @@ func (qc *PreparedQueryCache) getOrCreateStmtCache(key *QueryCacheKey) *Prepared
 	if size == 0 {
 		return nil
 	}
+	for _, tr := range value.Ranges {
+		qc.addTable2Stmt(tr.tid, &key.StmtKey)
+	}
+
 	cache := NewPreparedStmtCache(size, qc.cm)
 	qc.stmtCache.Store(key.StmtKey, cache)
 	return cache
 }
 
+func (qc *PreparedQueryCache) addTable2Stmt(tid int64, stmtKey *StmtKey) {
+	var stmtList *list.List
+	v, ok := qc.table2Stmt.Load(tid)
+	if !ok {
+		stmtList = list.New()
+	} else {
+		stmtList = v.(*list.List)
+	}
+	stmtList.PushFront(stmtKey)
+}
+
 func (qc *PreparedQueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCacheValue) bool {
-	//if !strings.Contains(key.Sql, "sbtest") {
-	//	return false
-	//}
-	cache := qc.getOrCreateStmtCache(key)
+	cache := qc.getOrCreateStmtCache(key, value)
 	if cache == nil {
 		return false
 	}
@@ -253,6 +269,10 @@ func (qc *PreparedQueryCache) AddQueryCache(key *QueryCacheKey, value *QueryCach
 		return true
 	}
 	return false
+}
+
+func (qc *PreparedQueryCache) InvalidQueryCache(tid int64, key kv.Key) {
+	return
 }
 
 func (qc *PreparedQueryCache) DeleteQueryCache() {
@@ -356,6 +376,7 @@ func paramSize(arg param.BinaryParam) int {
 type QueryCacheValue struct {
 	ResultFields []*resolve.ResultField
 	Chunks       []*chunk.Chunk
+	Ranges       []TableRange
 }
 
 func (v *QueryCacheValue) ResultFieldsSize() int {
@@ -376,20 +397,24 @@ func (v *QueryCacheValue) ChunksSize() int {
 	return int(size)
 }
 
+func (v *QueryCacheValue) RangeSize() int {
+	size := int64(unsafe.Sizeof(v.Ranges)) + int64(len(v.Ranges))
+	for _, tr := range v.Ranges {
+		size += int64(unsafe.Sizeof(tr))
+		for _, r := range tr.ranges {
+			size += int64(unsafe.Sizeof(r))
+			size += int64(len(r.StartKey)) + int64(len(r.EndKey))
+		}
+	}
+	return int(size)
+}
+
 func (v *QueryCacheValue) MemoryUsage() int64 {
 	size := int64(unsafe.Sizeof(v.Chunks)) + int64(len(v.Chunks))
 	for _, chk := range v.Chunks {
 		size += chk.MemoryUsage()
 	}
 	return size
-}
-
-func (v *preparedStmtCacheValue) MemoryUsage() int {
-	size := int64(unsafe.Sizeof(v.Chunks)) + int64(len(v.Chunks))
-	for _, chk := range v.Chunks {
-		size += chk.MemoryUsage()
-	}
-	return int(size)
 }
 
 func (v *QueryCacheValue) Clone() *QueryCacheValue {
@@ -404,5 +429,14 @@ func (v *QueryCacheValue) Clone() *QueryCacheValue {
 
 type preparedStmtCacheValue struct {
 	Chunks []*chunk.Chunk
+	Ranges []TableRange
 	ts     int64
+}
+
+func (v *preparedStmtCacheValue) MemoryUsage() int {
+	size := int64(unsafe.Sizeof(v.Chunks)) + int64(len(v.Chunks))
+	for _, chk := range v.Chunks {
+		size += chk.MemoryUsage()
+	}
+	return int(size)
 }

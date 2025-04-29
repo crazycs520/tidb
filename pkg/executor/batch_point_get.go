@@ -414,6 +414,9 @@ func (e *BatchPointGetExec) initialize(ctx context.Context) error {
 			return err
 		}
 	}
+	if e.Ctx().GetSessionVars().StmtCtx.QueryCacheHandler.NeedCache() && e.tblInfo.GetPartitionInfo() == nil {
+		e.Ctx().GetSessionVars().StmtCtx.QueryCacheHandler.AddBatchPointGetRange(e.tblInfo.ID, keys)
+	}
 	// Fetch all values.
 	values, err = batchGetter.BatchGet(ctx, keys)
 	if err != nil {

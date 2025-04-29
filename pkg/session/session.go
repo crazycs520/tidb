@@ -2684,6 +2684,7 @@ func (s *session) GetDistSQLCtx() *distsqlctx.DistSQLContext {
 			KVVars:                 vars.KVVars,
 			KvExecCounter:          sc.KvExecCounter,
 			SessionMemTracker:      vars.MemTracker,
+			QueryCacheHandler:      &sc.QueryCacheHandler,
 
 			Location:         sc.TimeZone(),
 			RuntimeStatsColl: sc.RuntimeStatsColl,

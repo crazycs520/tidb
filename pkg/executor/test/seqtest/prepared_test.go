@@ -680,3 +680,15 @@ func TestPreparedStmtQueryCache(t *testing.T) {
 	r = tk.MustQuery(`execute stmt using @param;`)
 	r.Check(testkit.Rows("2 2"))
 }
+
+func TestPreparedStmtQueryCacheDev(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (a int key, b int)")
+	tk.MustExec("insert into t (a, b) values (1,3), (2,2), (3,1)")
+
+	r := tk.MustQuery(`select * from t where a > 1 and a < 3`)
+	r.Check(testkit.Rows("2 2"))
+}

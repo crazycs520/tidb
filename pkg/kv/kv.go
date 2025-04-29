@@ -439,6 +439,14 @@ func (rr *KeyRanges) AppendSelfTo(ranges []KeyRange) []KeyRange {
 	return ranges
 }
 
+func (rr *KeyRanges) Len() int {
+	l := 0
+	for _, rs := range rr.ranges {
+		l += len(rs)
+	}
+	return l
+}
+
 // SortByFunc sorts each partition's ranges.
 // Since the ranges are sorted in most cases, we check it first.
 func (rr *KeyRanges) SortByFunc(sortFunc func(i, j KeyRange) int) {

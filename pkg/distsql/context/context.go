@@ -15,6 +15,7 @@
 package context
 
 import (
+	"github.com/pingcap/tidb/pkg/util/querycache"
 	"time"
 
 	"github.com/pingcap/tidb/pkg/errctx"
@@ -44,6 +45,7 @@ type DistSQLContext struct {
 	KVVars                 *tikvstore.Variables
 	KvExecCounter          *stmtstats.KvExecCounter
 	SessionMemTracker      *memory.Tracker
+	QueryCacheHandler      *querycache.QueryCacheHandler
 
 	Location         *time.Location
 	RuntimeStatsColl *execdetails.RuntimeStatsColl
