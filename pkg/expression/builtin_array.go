@@ -3,6 +3,7 @@ package expression
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/chunk"
@@ -54,18 +55,25 @@ func (b *builtinArrayElementSig) evalJSON(ctx EvalContext, row chunk.Row) (res t
 	if isNull || err != nil {
 		return
 	}
-	v, isNull, err := b.args[1].EvalString(ctx, row)
-	if isNull || err != nil {
-		return res, isNull, err
+	idxStr := strings.Builder{}
+	idxStr.WriteString("$")
+	for _, arg := range b.args[1:] {
+		v, isNull, err := arg.EvalString(ctx, row)
+		if isNull || err != nil {
+			return res, isNull, err
+		}
+		idx, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return res, true, fmt.Errorf("invalid array index: %v", v)
+		}
+		if idx < 0 {
+			return res, true, nil
+		}
+		idxStr.WriteByte('[')
+		idxStr.WriteString(v)
+		idxStr.WriteByte(']')
 	}
-	idx, err := strconv.ParseInt(v, 10, 64)
-	if err != nil {
-		return res, true, fmt.Errorf("invalid array index: %v", v)
-	}
-	if idx < 0 {
-		return res, true, nil
-	}
-	pathExpr, err := types.ParseJSONPathExpr(fmt.Sprintf("$[%d]", idx))
+	pathExpr, err := types.ParseJSONPathExpr(idxStr.String())
 	if err != nil {
 		return res, true, err
 	}
