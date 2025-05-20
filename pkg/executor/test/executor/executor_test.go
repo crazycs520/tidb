@@ -3086,9 +3086,16 @@ func TestArrayType(t *testing.T) {
 	store := testkit.CreateMockStore(t)
 	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("use test")
+	tk.MustExec("create table t (a array, b json);")
+	tk.MustQuery("show create table t").Check(testkit.Rows("t CREATE TABLE `t` (\n" +
+		"  `a` array DEFAULT NULL,\n" +
+		"  `b` json DEFAULT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
+	tk.MustQuery("desc t").Check(testkit.Rows("a array YES  <nil> ", "b json YES  <nil> "))
+
+	// Test for 1D array.
+	tk.MustExec("drop table t;")
 	tk.MustExec("create table t (v array);")
-	// todo: support show create table.
-	//tk.MustQuery("show create table t")
 	tk.MustExec("insert into t values ('[10, 20, 30]');")
 	tk.MustQuery("select array_element(v, 0) from t;").Check(testkit.Rows("10"))
 	tk.MustQuery("select array_element(v, 5) from t;").Check(testkit.Rows("<nil>"))

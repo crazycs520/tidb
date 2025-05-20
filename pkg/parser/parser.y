@@ -13171,6 +13171,7 @@ StringType:
 		tp.SetDecimal(0)
 		tp.SetCharset(charset.CharsetBin)
 		tp.SetCollate(charset.CollationBin)
+		tp.SetArray(true)
 		$$ = tp
 	}
 |	"LONG" Varchar OptCharsetWithOptBinary

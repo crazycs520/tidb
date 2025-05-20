@@ -22700,6 +22700,7 @@ yynewstate:
 			tp.SetDecimal(0)
 			tp.SetCharset(charset.CharsetBin)
 			tp.SetCollate(charset.CollationBin)
+			tp.SetArray(true)
 			parser.yyVAL.item = tp
 		}
 	case 2409:

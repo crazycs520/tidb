@@ -459,6 +459,10 @@ func (ft *FieldType) CompactStr() string {
 	}
 
 	switch ft.GetType() {
+	case mysql.TypeJSON:
+		if ft.array {
+			ts = "array"
+		}
 	case mysql.TypeEnum, mysql.TypeSet:
 		// Format is ENUM ('e1', 'e2') or SET ('e1', 'e2')
 		es := make([]string, 0, len(ft.elems))
