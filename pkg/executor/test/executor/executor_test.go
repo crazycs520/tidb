@@ -3081,3 +3081,21 @@ func TestQueryWithKill(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+func TestArrayType(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec("create table t (v array);")
+	// todo: support show create table.
+	//tk.MustQuery("show create table t")
+	tk.MustExec("insert into t values ('[10, 20, 30]');")
+	tk.MustQuery("select json_extract(v,'$[0]') from t;").Check(testkit.Rows("10"))
+	tk.MustQuery("select array_element(v, 0) from t;").Check(testkit.Rows("10"))
+	tk.MustQuery("select array_element(v, 5) from t;").Check(testkit.Rows("<nil>"))
+	tk.MustQuery("select array_element(v, -1) from t;").Check(testkit.Rows("<nil>"))
+	err := tk.QueryToErr("select array_element(v, 'a') from t;")
+	require.Equal(t, "invalid array index: a", err.Error())
+	err = tk.ExecToErr("select array_element(v, 0, 1) from t;")
+	require.Equal(t, "[expression:1582]Incorrect parameter count in the call to native function 'array_element'", err.Error())
+}
