@@ -46,6 +46,7 @@ var (
 	ClassSession    = ErrClass{terror.ClassSession}
 	ClassPlugin     = ErrClass{terror.ClassPlugin}
 	ClassUtil       = ErrClass{terror.ClassUtil}
+	ClassArray      = ErrClass{terror.ClassArray}
 )
 
 // NewStd calls New using the standard message for the error code

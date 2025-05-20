@@ -1050,7 +1050,11 @@ func (d *Datum) ConvertTo(ctx Context, target *FieldType) (Datum, error) {
 	case mysql.TypeSet:
 		return d.convertToMysqlSet(ctx, target)
 	case mysql.TypeJSON:
-		return d.convertToMysqlJSON(target)
+		if target.IsArray() {
+			return d.convertToArray()
+		} else {
+			return d.convertToMysqlJSON(target)
+		}
 	case mysql.TypeTiDBVectorFloat32:
 		return d.convertToVectorFloat32(ctx, target)
 	case mysql.TypeNull:
@@ -1841,6 +1845,27 @@ func (d *Datum) convertToMysqlJSON(_ *FieldType) (ret Datum, err error) {
 			// But now we can only return "2011-11-11 11:11:11".
 			ret.SetMysqlJSON(CreateBinaryJSON(s))
 		}
+	}
+	return ret, errors.Trace(err)
+}
+
+func (d *Datum) convertToArray() (ret Datum, err error) {
+	switch d.k {
+	case KindString, KindBytes:
+		var j BinaryJSON
+		j, err = ParseBinaryJSONFromString(d.GetString())
+		if err != nil {
+			if ErrInvalidJSONText.Equal(err) {
+				err = ErrInvalidArrayText
+			}
+			return ret, errors.Trace(err)
+		}
+		if j.TypeCode != JSONTypeCodeArray {
+			return ret, errors.Trace(ErrInvalidArrayText)
+		}
+		ret.SetMysqlJSON(j)
+	default:
+		err = ErrInvalidArrayText
 	}
 	return ret, errors.Trace(err)
 }

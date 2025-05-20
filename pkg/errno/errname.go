@@ -1080,6 +1080,8 @@ var MySQLErrName = map[uint16]*mysql.ErrMessage{
 	ErrDeleteNotFoundColumn:             mysql.Message("Delete can not find column %s for table %s", nil),
 	ErrKeyTooLarge:                      mysql.Message("key is too large, the size of given key is %d", nil),
 
+	ErrInvalidArrayValue: mysql.Message("Invalid ARRAY value", nil),
+
 	ErrHTTPServiceError: mysql.Message("HTTP request failed with status %s", nil),
 
 	ErrWarnOptimizerHintInvalidInteger:  mysql.Message("integer value is out of range in '%s'", nil),

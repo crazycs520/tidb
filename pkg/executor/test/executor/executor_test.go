@@ -3110,4 +3110,17 @@ func TestArrayType(t *testing.T) {
 	tk.MustQuery("select array_element(v, 0) from t;").Check(testkit.Rows("[1, 2]"))
 	tk.MustQuery("select array_element(v, 0, 0) from t;").Check(testkit.Rows("1"))
 	tk.MustQuery("select array_element(v, 1, 0) from t;").Check(testkit.Rows("3"))
+
+	// Test valid array value when inserting.
+	sqls := []string{
+		"insert into t values ('1:2');",
+		"insert into t values ('a');",
+		"insert into t values ('1');",
+		`insert into t values ('{"name": "a", "age": 10}');`, // valid json, but not array
+	}
+	for _, sql := range sqls {
+		err := tk.ExecToErr(sql)
+		require.Error(t, err, sql)
+		require.Equal(t, "[array:8179]Invalid ARRAY value", err.Error(), sql)
+	}
 }
