@@ -34,10 +34,12 @@ import (
 	"github.com/pingcap/tidb/pkg/util/execdetails"
 	"github.com/pingcap/tidb/pkg/util/hack"
 	"github.com/pingcap/tidb/pkg/util/kvcache"
+	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/plancodec"
 	"github.com/pingcap/tidb/pkg/util/ppcpuusage"
 	"github.com/tikv/client-go/v2/util"
 	atomic2 "go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // stmtSummaryByDigestKey defines key for stmtSummaryByDigestMap.summaryMap.
@@ -298,6 +300,11 @@ func newStmtSummaryByDigestMap() *stmtSummaryByDigestMap {
 
 // AddStatement adds a statement to StmtSummaryByDigestMap.
 func (ssMap *stmtSummaryByDigestMap) AddStatement(sei *StmtExecInfo) {
+	defer func() {
+		if r := recover(); r != nil {
+			logutil.BgLogger().Error("AddStatement panic", zap.Any("recover", r), zap.Stack("stack"))
+		}
+	}()
 	// All times are counted in seconds.
 	now := time.Now().Unix()
 

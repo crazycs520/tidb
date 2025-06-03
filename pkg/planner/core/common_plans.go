@@ -1539,6 +1539,11 @@ type DropProcedure struct {
 	Procedure *ast.DropProcedureStmt
 }
 
+type DropFunction struct {
+	baseSchemaProducer
+	Function *ast.DropFunctionStmt
+}
+
 // CallStmt call plan
 type CallStmt struct {
 	baseSchemaProducer

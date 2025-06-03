@@ -227,6 +227,13 @@ func newFunctionImpl(ctx BuildContext, fold int, funcName string, retType *types
 			ok = true
 		}
 	}
+	if !ok {
+		k := [2]string{ctx.GetEvalCtx().CurrentDB(), funcName}
+		if f, exist := StoredFunc.Load(k); exist {
+			fc = f.(*StoredFuncClass)
+			ok = true
+		}
+	}
 
 	if !ok {
 		db := ctx.GetEvalCtx().CurrentDB()

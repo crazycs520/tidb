@@ -697,6 +697,8 @@ var tokenMap = map[string]int{
 	"RESTORES":                 restores,
 	"RESTORED_TS":              restoredTS,
 	"RESTRICT":                 restrict,
+	"RETURN":                   returnKwd,
+	"RETURNS":                  returns,
 	"RETURNED_SQLSTATE":        returned_sqlstate,
 	"REVERSE":                  reverse,
 	"REVOKE":                   revoke,

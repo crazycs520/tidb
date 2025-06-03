@@ -330,6 +330,8 @@ func (b *executorBuilder) build(p base.Plan) exec.Executor {
 		return b.buildCreateProcedure(v)
 	case *plannercore.DropProcedure:
 		return b.buildDropProcedure(v)
+	case *plannercore.DropFunction:
+		return b.buildDropFunction(v)
 	case *plannercore.CallStmt:
 		if !variable.TiDBEnableProcedureValue.Load() {
 			b.err = errors.New("if enterprise edition, please set global tidb_enable_procedure = ON")

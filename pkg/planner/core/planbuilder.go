@@ -318,6 +318,8 @@ type PlanBuilder struct {
 
 	// procedureGoSet indicates waiting for the completed labels.
 	procedureGoSet []*variable.ProcedureLabel
+
+	storedFuncRetType *types.FieldType
 }
 
 type handleColHelper struct {
@@ -599,8 +601,10 @@ func (b *PlanBuilder) Build(ctx context.Context, node *resolve.NodeW) (base.Plan
 		return b.buildCreateProcedure(ctx, x)
 	case *ast.DropProcedureStmt:
 		return b.buildDropProcedure(ctx, x)
+	case *ast.DropFunctionStmt:
+		return b.buildDropFunction(ctx, x)
 	case *ast.CallStmt:
-		return b.buildCallProcedure(ctx, x)
+		return b.buildCallProcedure(ctx, x, false)
 	case *ast.AlterProcedureStmt:
 		return b.buildAlterProcedure(ctx, x)
 	case *ast.Signal:

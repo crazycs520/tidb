@@ -251,6 +251,7 @@ import (
 	replace           "REPLACE"
 	require           "REQUIRE"
 	restrict          "RESTRICT"
+	returnKwd         "RETURN"
 	revoke            "REVOKE"
 	right             "RIGHT"
 	rlike             "RLIKE"
@@ -597,6 +598,7 @@ import (
 	restore               "RESTORE"
 	restores              "RESTORES"
 	resume                "RESUME"
+	returns               "RETURNS"
 	returned_sqlstate     "RETURNED_SQLSTATE"
 	reuse                 "REUSE"
 	reverse               "REVERSE"
@@ -1004,12 +1006,14 @@ import (
 	CreateBindingStmt          "CREATE BINDING statement"
 	CreatePolicyStmt           "CREATE PLACEMENT POLICY statement"
 	CreateProcedureStmt        "CREATE PROCEDURE statement"
+	CreateStoredFunctionStmt   "CREATE FUNCTION statement for stored function"
 	AddQueryWatchStmt          "ADD QUERY WATCH statement"
 	CreateResourceGroupStmt    "CREATE RESOURCE GROUP statement"
 	CreateSequenceStmt         "CREATE SEQUENCE statement"
 	CreateStatisticsStmt       "CREATE STATISTICS statement"
 	DoStmt                     "Do statement"
 	DropDatabaseStmt           "DROP DATABASE statement"
+	DropFunctionStmt           "DROP FUNCTION statement"
 	DropIndexStmt              "DROP INDEX statement"
 	DropProcedureStmt          "DROP PROCEDURE statement"
 	DropQueryWatchStmt         "DROP QUERY WATCH statement"
@@ -1095,6 +1099,7 @@ import (
 	ProcedureBlockContent      "The statement block in procedure expressed with 'Begin ... End'"
 	SimpleWhenThen             "Procedure case when then"
 	SearchWhenThen             "Procedure search when then"
+	ProcedureReturnStmt        "The return statement in stored function, expressed by return expr"
 	ProcedureIfstmt            "The if statement in procedure, expressed by if ... elseif .. else ... end if"
 	procedurceElseIfs          "The else block in procedure, expressed by elseif or else or nil"
 	ProcedureIf                "The if block in procedure, expressed by expr then statement procedurceElseIfs"
@@ -1542,8 +1547,11 @@ import (
 	OptionalShardColumn                    "Optional shard column"
 	SpOptInout                             "Optional procedure param type"
 	OptSpPdparams                          "Optional procedure param list"
+	OptStoredFunctionParams                "Optional stored function param list"
 	SpPdparams                             "Procedure params"
+	StoredFunctionParams                   "Stored function params"
 	SpPdparam                              "Procedure param"
+	StoredFunctionParam                    "Stored function param"
 	ProcedureOptDefault                    "Optional procedure variable default value"
 	ProcedureProcStmts                     "Procedure statement list"
 	ProcedureProcStmt1s                    "One more procedure statement"
@@ -6879,6 +6887,8 @@ UnReservedKeyword:
 |	"REORGANIZE"
 |	"RESOURCE"
 |	"RESTART"
+|	"RETURN"
+|	"RETURNS"
 |	"ROLE"
 |	"ROLLBACK"
 |	"ROLLUP"
@@ -12382,6 +12392,7 @@ Statement:
 |	CreateBindingStmt
 |	CreatePolicyStmt
 |	CreateProcedureStmt
+|	CreateStoredFunctionStmt
 |	CreateResourceGroupStmt
 |	AddQueryWatchStmt
 |	CreateSequenceStmt
@@ -12391,6 +12402,7 @@ Statement:
 |	DropIndexStmt
 |	DropTableStmt
 |	DropProcedureStmt
+|	DropFunctionStmt
 |	DropPolicyStmt
 |	DropSequenceStmt
 |	DropViewStmt
@@ -13534,6 +13546,7 @@ FieldLen:
 	}
 
 OptFieldLen:
+	/* empty */ %prec lowerThanParenthese
 	{
 		$$ = types.UnspecifiedLength
 	}
@@ -13563,6 +13576,7 @@ FieldOpts:
 	}
 
 FloatOpt:
+	/* empty */ %prec lowerThanParenthese
 	{
 		$$ = &ast.FloatOpt{Flen: types.UnspecifiedLength, Decimal: types.UnspecifiedLength}
 	}
@@ -13607,6 +13621,7 @@ OptVectorElementType:
 	}
 
 OptBinary:
+	/* empty */ %prec lowerThanParenthese
 	{
 		$$ = &ast.OptBinary{
 			IsBinary: false,
@@ -16274,6 +16289,14 @@ ProcedureBlockContent:
 		$$ = x
 	}
 
+ProcedureReturnStmt:
+	"RETURN" Expression
+	{
+		$$ = &ast.ProcedureReturnStmt{
+			ReturnExpr: $2.(ast.ExprNode),
+		}
+	}
+
 ProcedureIfstmt:
 	"IF" ProcedureIf "END" "IF"
 	{
@@ -16495,6 +16518,7 @@ ProcedureProcStmt:
 		$$ = $1
 	}
 |	ProcedureUnlabeledBlock
+|	ProcedureReturnStmt
 |	ProcedureIfstmt
 |	ProcedureCaseStmt
 |	ProcedureUnlabelLoopBlock
@@ -16618,6 +16642,75 @@ CreateProcedureStmt:
 		$$ = x
 	}
 
+/* Stored FUNCTION parameter declaration list */
+OptStoredFunctionParams:
+	/* Empty */
+	{
+		$$ = []*ast.StoreParameter{}
+	}
+|	StoredFunctionParams
+	{
+		$$ = $1
+	}
+
+StoredFunctionParams:
+	StoredFunctionParams ',' StoredFunctionParam
+	{
+		l := $1.([]*ast.StoreParameter)
+		l = append(l, $3.(*ast.StoreParameter))
+		$$ = l
+	}
+|	StoredFunctionParam
+	{
+		$$ = []*ast.StoreParameter{$1.(*ast.StoreParameter)}
+	}
+
+StoredFunctionParam:
+	Identifier Type OptCollate
+	{
+		x := &ast.StoreParameter{
+			Paramstatus: ast.MODE_IN,
+			ParamType:   $2.(*types.FieldType),
+			ParamName:   $1,
+		}
+		x.ParamType.SetCollate($3)
+		$$ = x
+	}
+
+CreateStoredFunctionStmt:
+	"CREATE" OrReplace ViewAlgorithm RoutineDefiner "FUNCTION" IfNotExists TableName '(' OptStoredFunctionParams ')' "RETURNS" Type ProcedureCreateChistics ProcedureProcStmt
+	{
+		if $2.(bool) {
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("OrReplace (Should be empty)", "OR REPLACE"))
+			return 1
+		}
+		if $3.(model.ViewAlgorithm) != model.AlgorithmUndefined {
+			v := $3.(model.ViewAlgorithm)
+			yylex.AppendError(ErrWrongValue.GenWithStackByArgs("ViewAlgorithm (Should be empty)", (&v).String()))
+			return 1
+		}
+		x := &ast.CreateProcedureInfo{
+			IfNotExists:     $6.(bool),
+			Definer:         $4.(*auth.UserIdentity),
+			ProcedureName:   $7.(*ast.TableName),
+			ProcedureParam:  $9.([]*ast.StoreParameter),
+			Characteristics: $13.([]ast.ProcedureCharacteristic),
+			ProcedureBody:   $14,
+		}
+		parser.inProcedure = false
+		startOffset := parser.startOffset(&yyS[yypt])
+		originStmt := $14
+		originStmt.SetText(parser.lexer.client, strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
+		startOffset = parser.startOffset(&yyS[yypt-6])
+		if parser.src[startOffset] == '(' {
+			startOffset++
+		}
+		endOffset := parser.startOffset(&yyS[yypt-4])
+		x.ProcedureParamStr = strings.TrimSpace(parser.src[startOffset:endOffset])
+		x.FunctionInfo.RetType = $12.(*types.FieldType)
+		$$ = x
+	}
+
 /********************************************************************************************
 *  ALTER PROCEDURE sp_name [characteristic ...]
 ********************************************************************************************/
@@ -16639,6 +16732,18 @@ DropProcedureStmt:
 		$$ = &ast.DropProcedureStmt{
 			IfExists:      $3.(bool),
 			ProcedureName: $4.(*ast.TableName),
+		}
+	}
+
+/********************************************************************
+ * DROP FUNCTION [IF EXISTS] function_name
+ *******************************************************************/
+DropFunctionStmt:
+	"DROP" "FUNCTION" IfExists TableName
+	{
+		$$ = &ast.DropFunctionStmt{
+			IfExists: $3.(bool),
+			Name:     $4.(*ast.TableName),
 		}
 	}
 

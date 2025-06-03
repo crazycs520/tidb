@@ -3,10 +3,10 @@
 cur_path=`pwd`
 tidb_security_advanced_dir="tidb-security-advanced"
 tidb_enterprise_utilities_dir="tidb-enterprise-utilities"
-tidb_security_advanced_member="pingcap_enterprise"
-tidb_enterprise_utilities_member="pingcap_enterprise"
-tidb_security_advanced_branch="master"
-tidb_enterprise_utilities_branch="master"
+tidb_security_advanced_member="pingkai"
+tidb_enterprise_utilities_member="pingkai"
+tidb_security_advanced_branch="release-7.1.8-5"
+tidb_enterprise_utilities_branch="v7.1.8-5.1-yd-poc"
 
 # get tidb_security_advanced_branch and tidb_enterprise_utilities_branch value from version.txt.
 function get_code_branches(){
@@ -41,7 +41,7 @@ function get_code_branches(){
 function get_tidb_security_advanced_code(){
    echo "begin get tidb_security_advanced code."
    if [ ! -d "$tidb_security_advanced_dir" ]; then
-      git clone -b $tidb_security_advanced_branch git@gitee.com:$tidb_security_advanced_member/tidb-security-advanced.git
+      git clone -b $tidb_security_advanced_branch git@git.pingcap.net:$tidb_security_advanced_member/tidb-security-advanced.git
       if [ $? -ne 0 ];then
          echo "checkout ${tidb_security_advanced_member}/tidb_security_advanced_branch version ${tidb_security_advanced_branch} failure."
          return 1
@@ -53,9 +53,9 @@ function get_tidb_security_advanced_code(){
       if [[ -n $security_pr ]]; then
         git config --global user.email "you@example.com"
         cd $tidb_security_advanced_dir
-        git fetch git@gitee.com:$tidb_security_advanced_member/tidb-security-advanced.git pull/$security_pr/head:pr_$security_pr
+        git fetch git@git.pingcap.net:$tidb_security_advanced_member/tidb-security-advanced.git pull/$security_pr/head:pr_$security_pr
         git checkout pr_$security_pr
-        git pull --rebase git@gitee.com:$tidb_security_advanced_member/tidb-security-advanced.git $tidb_security_advanced_branch
+        git pull --rebase git@git.pingcap.net:$tidb_security_advanced_member/tidb-security-advanced.git $tidb_security_advanced_branch
         cd ..
       fi
    fi
@@ -67,7 +67,7 @@ function get_tidb_security_advanced_code(){
 function get_tidb_enterprise_utilities_code(){
    echo "begin get tidb_enterprise_utilities code."
    if [ ! -d "$tidb_enterprise_utilities_dir" ]; then
-      git clone  -b $tidb_enterprise_utilities_branch git@gitee.com:$tidb_enterprise_utilities_member/tidb-enterprise-utilities.git
+      git clone  -b $tidb_enterprise_utilities_branch git@git.pingcap.net:$tidb_enterprise_utilities_member/tidb-enterprise-utilities.git
       if [ $? -ne 0 ];then
          echo "checkout tidb_enterprise_utilities ${tidb_enterprise_utilities_branch} failure."
          return 1
@@ -79,9 +79,9 @@ function get_tidb_enterprise_utilities_code(){
       if [[ -n $utilities_pr ]]; then
 	git config --global user.email "you@example.com"
 	cd $tidb_enterprise_utilities_dir 
-	git fetch git@gitee.com:$tidb_enterprise_utilities_member/tidb-enterprise-utilities.git pull/$utilities_pr/head:pr_$utilities_pr
+	git fetch git@git.pingcap.net:$tidb_enterprise_utilities_member/tidb-enterprise-utilities.git pull/$utilities_pr/head:pr_$utilities_pr
 	git checkout pr_$utilities_pr  
-	git pull --rebase git@gitee.com:$tidb_enterprise_utilities_member/tidb-enterprise-utilities.git $tidb_enterprise_utilities_branch
+	git pull --rebase git@git.pingcap.net:$tidb_enterprise_utilities_member/tidb-enterprise-utilities.git $tidb_enterprise_utilities_branch
 	cd ..
       fi 
    fi
@@ -186,11 +186,11 @@ function copy_utilities_files(){
 
 
 # main 
-get_code_branches
-if [ $? -ne 0 ];then 
-   echo "get branch fail."
-   exit 1
-fi
+#get_code_branches
+#if [ $? -ne 0 ];then
+#   echo "get branch fail."
+#   exit 1
+#fi
 echo "security: "$tidb_security_advanced_member/$tidb_security_advanced_branch
 echo "enterprise: "$tidb_enterprise_utilities_member/$tidb_enterprise_utilities_branch
 echo "NEED_CLONE: "$NEED_CLONE
