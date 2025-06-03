@@ -86,7 +86,7 @@ func (e *DDLExec) getLocalTemporaryTable(schema pmodel.CIStr, table pmodel.CIStr
 		return nil, false
 	}
 
-	if tbl.Meta().TempTableType != model.TempTableLocal {
+	if !tbl.Meta().HasLocalData() {
 		return nil, false
 	}
 

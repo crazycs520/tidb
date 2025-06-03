@@ -3127,4 +3127,7 @@ func TestGlobalSessionTemporaryTable(t *testing.T) {
 	tk.MustExec("insert into t1 values (11, 'n11', 11), (12, 'n12', 12)")
 	tk.MustQuery("select * from t1 order by id").Check(testkit.Rows("11 n11 11", "12 n12 12"))
 	tk.MustQuery("select * from t order by id").Check(testkit.Rows("1 n1 11", "2 n2 12"))
+
+	tk.MustExec("truncate table t1")
+	tk.MustQuery("select * from t1 order by id").Check(testkit.Rows())
 }
