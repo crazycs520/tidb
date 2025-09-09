@@ -16,7 +16,12 @@ package sessiontest
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/config"
@@ -130,6 +135,58 @@ func TestClusterTableSendError(t *testing.T) {
 	tk.MustQuery("select * from information_schema.cluster_slow_query")
 	require.Equal(t, tk.Session().GetSessionVars().StmtCtx.WarningCount(), uint16(1))
 	require.Regexp(t, ".*TiDB server timeout, address is.*", tk.Session().GetSessionVars().StmtCtx.GetWarnings()[0].Err.Error())
+}
+
+func TestIngestMVIndexOnPartitionTable(t *testing.T) {
+	store := realtikvtest.CreateMockStoreAndSetup(t)
+	tk := testkit.NewTestKit(t, store)
+	cases := []string{
+		//"alter table t add index idx((cast(a as signed array)));",
+		//"alter table t add unique index idx(pk, (cast(a as signed array)));",
+		"alter table t add column d bigint generated always as (pk + 1);",
+	}
+	for _, c := range cases {
+		tk.MustExec("drop database if exists addindexlit;")
+		tk.MustExec("create database addindexlit;")
+		tk.MustExec("use addindexlit;")
+		tk.MustExec(`set global tidb_ddl_enable_fast_reorg=on;`)
+
+		var sb strings.Builder
+
+		tk.MustExec("drop table if exists t")
+		//tk.MustExec("create table t (pk int primary key, a json)")
+		tk.MustExec("create table t (pk int primary key, a json) partition by hash(pk) partitions 4;")
+		tk.MustExec(sb.String())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		var addIndexDone atomic.Bool
+		go func() {
+			defer wg.Done()
+			n := 10240
+			internalTK := testkit.NewTestKit(t, store)
+			internalTK.MustExec("use addindexlit;")
+
+			for i := 0; i < 1024; i++ {
+				internalTK.MustExec(fmt.Sprintf("insert into t (pk, a) values (%d, '[%d, %d, %d]')", n, n, n+1, n+2))
+				internalTK.MustQuery(fmt.Sprintf("select * from t where pk = %d", n-10)).Rows()
+				internalTK.MustExec(fmt.Sprintf("delete from t where pk = %d", n-10))
+				internalTK.MustExec(fmt.Sprintf("update t set a = '[%d, %d, %d]' where pk = %d", n-3, n-2, n+1000, n-5))
+				n++
+				if i > 256 && addIndexDone.Load() {
+					break
+				}
+			}
+		}()
+		time.Sleep(time.Millisecond * 100)
+		tk.MustExec(c)
+		rows := tk.MustQuery("admin show ddl jobs 1;").Rows()
+		require.Len(t, rows, 1)
+		//jobTp := rows[0][12].(string)
+		//require.True(t, strings.Contains(jobTp, "ingest"), jobTp)
+		//addIndexDone.Store(true)
+		wg.Wait()
+		tk.MustExec("admin check table t")
+	}
 }
 
 func TestAutoCommitNeedNotLinearizability(t *testing.T) {

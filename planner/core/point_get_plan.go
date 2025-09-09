@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/pingcap/errors"
@@ -1028,6 +1029,9 @@ func tryPointGetPlan(ctx sessionctx.Context, selStmt *ast.SelectStmt, check bool
 	if tbl == nil {
 		return nil
 	}
+	if tbl.Name.L == "t" {
+		logutil.BgLogger().Info("-----tryPointGetPlan", zap.Int("cols", len(tbl.Columns)))
+	}
 	pi := tbl.GetPartitionInfo()
 
 	for _, col := range tbl.Columns {
@@ -1580,6 +1584,7 @@ func tryUpdatePointPlan(ctx sessionctx.Context, updateStmt *ast.UpdateStmt) Plan
 		if ctx.GetSessionVars().TxnCtx.IsPessimistic {
 			pointGet.Lock, pointGet.LockWaitTime = getLockWaitTime(ctx, &ast.SelectLockInfo{LockType: ast.SelectLockForUpdate})
 		}
+		time.Sleep(100 * time.Millisecond)
 		return buildPointUpdatePlan(ctx, pointGet, pointGet.dbName, pointGet.TblInfo, updateStmt)
 	}
 	batchPointGet := tryWhereIn2BatchPointGet(ctx, selStmt)
@@ -1618,6 +1623,9 @@ func buildPointUpdatePlan(ctx sessionctx.Context, pointPlan PhysicalPlan, dbName
 	updatePlan.names = pointPlan.OutputNames()
 	is := sessiontxn.GetTxnManager(ctx).GetTxnInfoSchema()
 	t, _ := is.TableByID(tbl.ID)
+	if t.Meta().Name.L == "t" {
+		logutil.BgLogger().Info("-----buildPointUpdatePlan", zap.Int("cols", len(tbl.Columns)), zap.Int("t_by_id_cols", len(t.Meta().Columns)))
+	}
 	updatePlan.tblID2Table = map[int64]table.Table{
 		tbl.ID: t,
 	}
