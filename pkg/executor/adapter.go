@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"runtime/trace"
 	"strconv"
 	"strings"
@@ -360,11 +359,9 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 	a.Ctx.GetSessionVars().StmtCtx.Priority = kv.PriorityHigh
 
 	var executor exec.Executor
-	useMaxTS := startTs == math.MaxUint64
-
 	// try to reuse point get executor
 	// We should only use the cached the executor when the startTS is MaxUint64
-	if a.PsStmt.PointGet.Executor != nil && useMaxTS {
+	if a.PsStmt.PointGet.Executor != nil {
 		exec, ok := a.PsStmt.PointGet.Executor.(*PointGetExecutor)
 		if !ok {
 			logutil.Logger(ctx).Error("invalid executor type, not PointGetExecutor for point get path")
@@ -387,7 +384,7 @@ func (a *ExecStmt) PointGet(ctx context.Context) (*recordSet, error) {
 		pointExecutor, ok := executor.(*PointGetExecutor)
 
 		// Don't cache the executor for non point-get (table dual) or partitioned tables
-		if ok && useMaxTS && pointExecutor.partitionDefIdx == nil {
+		if ok && pointExecutor.partitionDefIdx == nil {
 			a.PsStmt.PointGet.Executor = pointExecutor
 		}
 	}
